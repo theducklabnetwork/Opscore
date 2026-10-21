@@ -12,7 +12,6 @@ from ducklab.ops_daily_state import (
 )
 from ducklab.ops_shell import shell
 
-STATUS_COLOR = {"complete": "green", "partial": "amber", "unreported": "gray"}
 
 
 def _kpi_summary() -> rx.Component:

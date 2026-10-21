@@ -1,5 +1,5 @@
 """Expenses Management page: KPI cards, budget monitor, transaction
-register with filters, Add/Edit expense drawer, budget editor."""
+register with filters, Add/Edit expense dialog, budget editor."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ import reflex as rx
 from ducklab import design as ds
 from ducklab import ops_charts
 from ducklab.ops_expenses_state import (
-    BUDGET_COLOR, ExpensesState, PAYMENT_SOURCES, PAYMENT_STATUSES,
-    VALIDATION_COLOR, VERIFICATIONS,
+    ExpensesState, PAYMENT_SOURCES, PAYMENT_STATUSES, VERIFICATIONS,
 )
 from ducklab.ops_shell import shell
 
@@ -347,7 +346,7 @@ def _register() -> rx.Component:
 
 
 # ---------------------------------------------------------------------------
-# Expense drawer form
+# Expense dialog form (centered; same pattern as Daily Operations)
 # ---------------------------------------------------------------------------
 
 def _field(label: str, comp: rx.Component, hint: str = "") -> rx.Component:
@@ -359,11 +358,10 @@ def _field(label: str, comp: rx.Component, hint: str = "") -> rx.Component:
     )
 
 
-def _expense_drawer() -> rx.Component:
+def _expense_dialog() -> rx.Component:
     ro = ~ExpensesState.can_write_expenses
-    return rx.drawer.root(
-        rx.drawer.portal(
-            rx.drawer.content(
+    return rx.dialog.root(
+            rx.dialog.content(
                 rx.vstack(
                     rx.hstack(
                         rx.vstack(
@@ -378,11 +376,11 @@ def _expense_drawer() -> rx.Component:
                                 size="1", color=ds.TEXT_MUTED),
                             spacing="0", align="start"),
                         rx.spacer(),
-                        rx.drawer.close(
+                        rx.dialog.close(
                             rx.icon_button(rx.icon("x", size=16),
                                            variant="ghost",
                                            id="exp-close")),
-                        width="100%", align="center"),
+                        width="100%", align="center", flex_shrink="0"),
                     rx.cond(
                         ro,
                         rx.callout(
@@ -477,11 +475,11 @@ def _expense_drawer() -> rx.Component:
                                        placeholder="Optional notes",
                                        id="e-remarks", disabled=ro)),
                             spacing="4", width="100%"),
-                        style={"maxHeight": "64vh", "minWidth": "620px"},
-                        type="auto"),
+                        flex_grow="1", min_height="0", type="auto",
+                        width="100%"),
                     rx.hstack(
                         rx.spacer(),
-                        rx.drawer.close(
+                        rx.dialog.close(
                             rx.button("Cancel", variant="soft",
                                       color_scheme="gray", id="exp-cancel")),
                         rx.cond(
@@ -494,18 +492,23 @@ def _expense_drawer() -> rx.Component:
                                 on_click=ExpensesState.save_expense,
                                 disabled=ExpensesState.exp_saving,
                                 id="exp-save")),
-                        width="100%", align="center"),
-                    spacing="4", width="100%",
+                        width="100%", align="center", flex_shrink="0",
+                        border_top=f"1px solid {ds.BORDER}",
+                        padding_top="0.75em"),
+                    spacing="4", width="100%", height="100%",
+                    min_height="0",
                 ),
-                width="720px",
-                style={"maxWidth": "100vw"},
+                width="min(720px, 92vw)",
+                style={
+                    "maxWidth": "min(720px, 92vw)",
+                    "maxHeight": "85vh",
+                    "display": "flex",
+                    "flexDirection": "column",
+                },
                 background=ds.BG, padding="1.5em",
             ),
-        ),
         open=ExpensesState.exp_form_open,
-        direction="right",
         on_open_change=lambda v: ExpensesState.close_expense_form(),
-        modal=False,
     )
 
 
@@ -535,7 +538,7 @@ def expenses_page() -> rx.Component:
                     spacing="5", width="100%",
                 ),
             ),
-            _expense_drawer(),
+            _expense_dialog(),
             spacing="4", width="100%",
         ),
         on_store=ExpensesState.select_store,

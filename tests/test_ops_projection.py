@@ -169,3 +169,52 @@ class Fixture(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class StatusColorMapTests(unittest.TestCase):
+    def test_pages_define_no_local_status_maps(self):
+        """No ops page/state module defines its own status->color map;
+        everything goes through design.STATUS_COLOR / ds.status_color."""
+        import re
+        from pathlib import Path
+        offenders = []
+        for f in Path("ducklab").glob("ops_*_state.py"):
+            src = f.read_text()
+            for m in re.finditer(r"^(\w*COLOR\w*)\s*=\s*\{", src, re.M):
+                offenders.append(f"{f.name}:{m.group(1)}")
+        for f in Path("ducklab").glob("ops_*_pages.py"):
+            src = f.read_text()
+            for m in re.finditer(r"^(\w*COLOR\w*)\s*=\s*\{", src, re.M):
+                offenders.append(f"{f.name}:{m.group(1)}")
+        self.assertEqual(offenders, [])
+
+    def test_every_kpi_status_has_a_color(self):
+        from ducklab import design as ds
+        statuses = {
+            # sales
+            "Achieved", "Below target", "Awaiting data", "No target",
+            "Growth", "Decline", "No reference",
+            # expenses
+            "Within budget", "Over budget", "OVER BUDGET", "Watch",
+            "No budget", "No payments yet",
+            # expense lines / transactions
+            "OK", "Incomplete", "Unknown category", "Missing paid date",
+            "Check paid date", "Missing paid by", "Missing recorder",
+            "Disputed", "Unverified", "Verified",
+            "Paid", "Pending", "Cancelled",
+            # manpower
+            "Within target", "Failure: over target", "Over target",
+            "Awaiting payroll", "Awaiting HC", "Normal", "HIGH TURNOVER",
+            "Vacancy", "On budget", "Over budget (+1)", "Under budget",
+            # actions + priorities
+            "Open", "In progress", "Blocked", "Done",
+            "Low", "Medium", "High", "Critical",
+            # stock / day display strings
+            "Within Target", "Above Target", "No Target", "Awaiting Data",
+            "No Sales Recorded", "Not reported", "Zero", "Loss",
+            "Net negative", "No sales",
+            "complete", "partial", "unreported",
+            # misc
+            "Restricted",
+        }
+        missing = [st for st in statuses if st not in ds.STATUS_COLOR]
+        self.assertEqual(missing, [])

@@ -28,10 +28,7 @@ from ducklab.ops_state import OpsState
 
 OPEN_STATUSES = ("Open", "In progress", "Blocked")
 
-PRIORITY_COLOR = {"Low": "gray", "Medium": "blue", "High": "amber",
-                  "Critical": "red"}
-STATUS_COLOR = {"Open": "blue", "In progress": "amber", "Blocked": "red",
-                "Done": "green", "Cancelled": "gray"}
+# Priority/status colors: ds.status_color (design.py shared map)
 
 FILTER_STATUSES = ["All statuses", *ACTION_STATUSES]
 FILTER_PILLARS = ["All pillars", *PILLARS]
@@ -163,9 +160,9 @@ class ActionsState(StoresState):
                 "pillar": a.input.pillar or "—",
                 "issue": a.issue or "—",
                 "priority": a.priority or "—",
-                "priority_color": PRIORITY_COLOR.get(a.priority, "gray"),
+                "priority_color": ds.status_color(a.priority or ""),
                 "status": st,
-                "status_color": STATUS_COLOR.get(st, "gray"),
+                "status_color": ds.status_color(st),
                 "pic": a.pic or "—",
                 "due": due.strftime("%d %b %Y") if due else "—",
                 "due_iso": due.isoformat() if due else "9999-12-31",

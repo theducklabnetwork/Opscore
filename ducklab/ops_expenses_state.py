@@ -41,23 +41,7 @@ PERIOD_OPTIONS = [
 
 MAX_ROWS = 100
 
-STATUS_COLOR = {"Paid": "green", "Pending": "amber", "Cancelled": "gray",
-                "": "gray"}
-VERIFICATION_COLOR = {"Verified": "green", "Unverified": "amber",
-                      "Disputed": "red", "": "gray"}
-VALIDATION_COLOR = {
-    "OK": "green",
-    "Incomplete": "gray",
-    "Unknown category": "red",
-    "Missing paid date": "orange",
-    "Check paid date": "orange",
-    "Missing paid by": "orange",
-    "Missing recorder": "orange",
-    "Disputed": "red",
-    "Unverified": "amber",
-}
-BUDGET_COLOR = {"Within budget": "green", "Watch": "amber",
-                "OVER BUDGET": "red", "No budget": "gray"}
+# All status colors: ds.status_color (design.py shared map)
 
 
 class ExpensesState(DailyState):
@@ -275,11 +259,21 @@ class ExpensesState(DailyState):
             variance = None
             if e.total_budget_cents is not None:
                 variance = e.total_budget_cents - e.paid_cents
+            no_payments = e.total_expenses_status == "No payments yet"
             self.exp_kpis = {
-                "paid": ds.fmt_rm(e.paid_cents),
-                "incurred": ds.fmt_rm(e.incurred_cents),
-                "open": ds.fmt_rm(e.open_cents),
-                "budget": ds.fmt_rm(e.total_budget_cents),
+                # Empty-state rule: when the engine says "No payments yet"
+                # there is nothing recorded — show the status, not RM 0.00
+                # (a genuine recorded zero still shows RM 0.00).
+                "paid": (e.total_expenses_status if no_payments
+                         else ds.fmt_rm(e.paid_cents)),
+                "incurred": ("Not reported yet"
+                             if e.incurred_cents == 0 and no_payments
+                             else ds.fmt_rm(e.incurred_cents)),
+                "open": (e.total_expenses_status if no_payments
+                         else ds.fmt_rm(e.open_cents)),
+                # Total budget None -> "—" (NULL), never RM 0.00
+                "budget": ("—" if e.total_budget_cents is None
+                           else ds.fmt_rm(e.total_budget_cents)),
                 "utilization": util or "—",
                 "variance": ds.fmt_rm(variance),
                 # Expense Monitor total row H25, labelled to distinguish
@@ -289,7 +283,7 @@ class ExpensesState(DailyState):
                 "status_tip": ("Expense Monitor!H25: No budget / OVER "
                                "BUDGET / Watch (paid ≥ 80% of budget) / "
                                "Within budget"),
-                "status_color": BUDGET_COLOR[e.budget_control_status],
+                "status_color": ds.status_color(e.budget_control_status),
             }
             non_ok = {k: v for k, v in e.validation_counts.items()
                       if k != "OK" and v}
@@ -314,7 +308,7 @@ class ExpensesState(DailyState):
                     "bar": (f"{min(util_pct, 100):.0f}"
                             if util_pct is not None else "0"),
                     "status": c.budget_status,
-                    "color": BUDGET_COLOR[c.budget_status],
+                    "color": ds.status_color(c.budget_status),
                 })
             # Plotly budget-vs-actual figures (same data as the table)
             names = [c.name for c in e.categories]
@@ -350,14 +344,14 @@ class ExpensesState(DailyState):
                              if e.amount_cents is not None else ""),
             "paid_by": e.paid_by or "—",
             "status": e.status or "",
-            "status_color": STATUS_COLOR[e.status or ""],
+            "status_color": ds.status_color(e.status or ""),
             "receipt": rec.receipt_ref or "",
             "verification": e.verification or "",
-            "ver_color": VERIFICATION_COLOR[e.verification or ""],
+            "ver_color": ds.status_color(e.verification or ""),
             "recorded_by": e.recorded_by or "—",
             "remarks": rec.remarks or "",
             "validation": validation,
-            "vcolor": VALIDATION_COLOR[validation],
+            "vcolor": ds.status_color(validation),
         }
 
     # ------------------------------------------------------------------

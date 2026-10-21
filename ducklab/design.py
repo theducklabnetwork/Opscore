@@ -142,12 +142,23 @@ STATUS_COLOR: dict[str, str] = {
     "OK": "green", "Incomplete": "amber", "Unknown category": "red",
     "Missing paid date": "amber", "Check paid date": "amber",
     "Missing paid by": "amber", "Missing recorder": "amber",
-    "Disputed": "red", "Unverified": "amber",
+    "Disputed": "red", "Unverified": "amber", "Verified": "green",
     # expense transaction status
     "Paid": "green", "Pending": "amber", "Cancelled": "gray",
     # actions
     "Open": "blue", "In progress": "amber", "Blocked": "red",
     "Done": "green",
+    # headcount variance (Summary!D51/E51)
+    "Vacancy": "amber", "On budget": "green",
+    # stock page (display strings)
+    "Within Target": "green", "Above Target": "red", "No Target": "gray",
+    "Awaiting Data": "gray", "No Sales Recorded": "amber",
+    # day-row display statuses
+    "complete": "green", "partial": "amber", "unreported": "gray",
+    "Not reported": "gray", "Zero": "green", "Loss": "red",
+    "Net negative": "blue", "No sales": "amber",
+    # action priorities (display strings)
+    "Low": "gray", "Medium": "blue", "High": "amber", "Critical": "red",
     # growth (Summary rows 21-22)
     "Growth": "green", "Decline": "red", "No reference": "gray",
     # misc engine strings

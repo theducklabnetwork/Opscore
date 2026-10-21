@@ -38,19 +38,7 @@ from ducklab.ops_daily_state import _parse_count, _parse_money
 from ducklab.ops_expenses_state import ExpensesState
 from ducklab.ops_state import OpsState, month_label
 
-HC_STATUS_COLOR = {
-    "Vacancy": "amber", "Over budget": "red", "On budget": "green",
-    "Awaiting HC": "gray", "No target": "gray",
-}
-RATIO_STATUS_COLOR = {
-    "Within target": "green", "Failure: over target": "red",
-    "Awaiting payroll": "gray", "Awaiting data": "gray",
-}
-TURNOVER_COLOR = {
-    "Normal": "green", "HIGH TURNOVER": "red", "Awaiting HC": "gray",
-}
-DAY_STATUS_COLOR = {"complete": "green", "partial": "amber",
-                    "unreported": "gray"}
+# All status colors: ds.status_color (design.py shared map)
 
 
 def _parse_decimal(raw: str, label: str, lo: Decimal, hi: Decimal) -> Decimal:
@@ -227,7 +215,7 @@ class ManpowerState(ExpensesState):
             "variance": ("—" if m.headcount_variance is None
                          else f"{m.headcount_variance:+,}"),
             "status": m.headcount_status,
-            "status_color": HC_STATUS_COLOR.get(m.headcount_status, "gray"),
+            "status_color": ds.status_color(m.headcount_status),
         }
         self.eff_kpis = {
             "avg_effective": ds.fmt_num(
@@ -238,7 +226,7 @@ class ManpowerState(ExpensesState):
                 if m.sales_per_staff is not None else None),
             "turnover": ds.fmt_pct(m.turnover_pct),
             "turnover_status": m.turnover_status,
-            "turnover_color": TURNOVER_COLOR.get(m.turnover_status, "gray"),
+            "turnover_color": ds.status_color(m.turnover_status),
             "threshold": ds.fmt_pct(cfg.turnover_threshold),
         }
         # Payroll block: restricted values are never populated for
@@ -267,8 +255,7 @@ class ManpowerState(ExpensesState):
                                      if budget is not None else None),
                 "variance": ds.fmt_rm0(variance),
                 "status": m.salary_ratio_status,
-                "status_color": RATIO_STATUS_COLOR.get(
-                    m.salary_ratio_status, "gray"),
+                "status_color": ds.status_color(m.salary_ratio_status),
                 "ratio_bar": (f"{ratio_used_pct:.0f}"
                               if ratio_used_pct is not None else "0"),
                 "sales": ds.fmt_rm(s.sales_mtd_cents),
@@ -328,7 +315,7 @@ class ManpowerState(ExpensesState):
                     "hires": "—", "resigned": "—", "leave": "—",
                     "sales": "—", "sales_per_staff": "—",
                     "status": "unreported",
-                    "status_color": DAY_STATUS_COLOR["unreported"]}
+                    "status_color": ds.status_color("unreported")}
         eff = kpi.effective_staff(rec.ft_working, rec.pt_working, factor)
         leave = sum(v or 0 for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
@@ -355,7 +342,7 @@ class ManpowerState(ExpensesState):
             "sales_per_staff": (f"RM {sps / 100:,.2f}"
                                 if sps is not None else "—"),
             "status": status,
-            "status_color": DAY_STATUS_COLOR[status],
+            "status_color": ds.status_color(status),
         }
 
     # ------------------------------------------------------------------

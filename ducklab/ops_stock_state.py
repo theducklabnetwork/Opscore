@@ -32,14 +32,7 @@ from ducklab.operations_repository import (
 from ducklab.ops_manpower_state import ManpowerState
 from ducklab.ops_state import OpsState, month_label
 
-STATUS_COLOR = {
-    "Within Target": "green", "Above Target": "red", "No Target": "gray",
-    "Awaiting Data": "gray", "No Sales Recorded": "amber",
-}
-DAY_STATUS_COLOR = {
-    "Not reported": "gray", "Zero": "green", "Loss": "red",
-    "Net negative": "blue", "No sales": "amber",
-}
+# All status colors: ds.status_color (design.py shared map)
 TREATMENT = {1: "Included", -1: "Offset", 0: "Info only"}
 
 
@@ -252,7 +245,7 @@ class StockState(ManpowerState):
             self.st_status = "Within Target"
         else:
             self.st_status = "Above Target"
-        self.st_status_color = STATUS_COLOR[self.st_status]
+        self.st_status_color = ds.status_color(self.st_status)
         if target is None:
             self.kpi_target = "No target set"
             self.kpi_variance = "—"
@@ -307,7 +300,7 @@ class StockState(ManpowerState):
                     "weekday": d.strftime("%a"), "sales": "—", "loss": "—",
                     "ratio": "—", "missing": "—", "extra": "—",
                     "status": "Not reported",
-                    "status_color": DAY_STATUS_COLOR["Not reported"],
+                    "status_color": ds.status_color("Not reported"),
                 })
                 trend_vals.append(None)
                 continue
@@ -334,7 +327,7 @@ class StockState(ManpowerState):
                 "extra": ds.fmt_rm(rec.stock_losses.get("EXTRA"))
                 if "EXTRA" in rec.stock_losses else "—",
                 "status": status,
-                "status_color": DAY_STATUS_COLOR[status],
+                "status_color": ds.status_color(status),
             })
             if rec.stock_losses:  # gaps for unreported days; no interpolation
                 crows.append({"date": d.strftime("%d %b"),

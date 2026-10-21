@@ -137,7 +137,8 @@ class SalesState(StoresState):
         s = rep.sales
         entered, dim = s.days_entered, s.days_in_month
         pstate = s.projection_state
-        self.sp_sales_mtd = ds.fmt_rm0(s.sales_mtd_cents)
+        self.sp_sales_mtd = (ds.fmt_rm0(s.sales_mtd_cents)
+                             if entered else "Not reported yet")
         complete = pstate == "actual"
         self.sp_month_end_label = ("Month-End Sales (Actual)" if complete
                                    else "Month-End Sales (Projected)")
