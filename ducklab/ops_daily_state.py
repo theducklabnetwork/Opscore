@@ -287,7 +287,7 @@ class DailyState(OpsState):
         asp = kpi.asp_cents(sales, rec.units) \
             if sales is not None and rec.units else None
         eff = kpi.effective_staff(rec.ft_working, rec.pt_working, factor)
-        sps = (Decimal(sales) / eff) if (sales is not None and eff) else None
+        sps = kpi.daily_sales_per_staff_cents(rec, factor)
         filled = sum(v is not None for v in (
             rec.sales_cents, rec.transactions, rec.units, rec.ft_working,
             rec.pt_working, rec.new_hires_ft, rec.resigned_ft,

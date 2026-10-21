@@ -130,8 +130,25 @@ def _hero_card(icon, title, pill, href, spark=None,
         bar = _plain_bar(pill)
     reported = pill["reported"] != ""
     body_reported = rx.vstack(
-        rx.badge(pill["status"], color_scheme=pill["status_color"],
-                 variant="soft", size="1"),
+        rx.hstack(
+            rx.cond(
+                pill["status_label"] != "",
+                rx.tooltip(
+                    rx.badge(pill["status"], color_scheme=pill["status_color"],
+                             variant="soft", size="1"),
+                    content=pill["tooltip"]),
+                rx.badge(pill["status"], color_scheme=pill["status_color"],
+                         variant="soft", size="1"),
+            ),
+            rx.cond(
+                pill["early_tag"] != "",
+                rx.tooltip(
+                    rx.badge(pill["early_tag"], color_scheme="blue",
+                             variant="outline", size="1"),
+                    content=pill["early_tip"]),
+            ),
+            spacing="1",
+        ),
         rx.heading(pill["value"], size="7", weight="bold",
                    title=pill["title"], white_space="nowrap"),
         bar,
@@ -384,6 +401,16 @@ def _sales_section() -> rx.Component:
                 "Sales Performance", "trending-up",
                 extra=rx.hstack(
                     ds.status_badge(OpsState.sales["status_l1"]),
+                    rx.cond(
+                        OpsState.sales["projection_state"] != "actual",
+                        rx.cond(
+                            OpsState.sales["projection_state"] == "early_estimate",
+                            rx.tooltip(
+                                rx.badge("Early estimate", color_scheme="blue",
+                                         variant="outline", size="1"),
+                                content=OpsState.sales["early_estimate_tag"]),
+                        ),
+                    ),
                     rx.text(OpsState.sales["completeness"],
                             size="1", color=ds.TEXT_FAINT),
                     spacing="2",
@@ -393,9 +420,12 @@ def _sales_section() -> rx.Component:
                 ds.kpi_card("Monthly Sales (MTD)",
                             OpsState.sales["mtd"],
                             icon="banknote"),
-                ds.kpi_card("Projected Month-End",
-                            OpsState.sales["projected"],
-                            icon="chart-line"),
+                ds.kpi_card(
+                    rx.cond(OpsState.sales["projection_state"] == "actual",
+                            "Month-End Sales (Actual)",
+                            "Projected Month-End"),
+                    OpsState.sales["projected"],
+                    icon="chart-line"),
                 ds.kpi_card("Level 1 Target",
                             OpsState.sales["target_l1"],
                             icon="target"),

@@ -336,9 +336,7 @@ class ManpowerState(ExpensesState):
         leave_reported = any(v is not None for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
             rec.leave_unpaid))
-        sps = None
-        if rec.sales_cents is not None and eff is not None and eff > 0:
-            sps = Decimal(rec.sales_cents) / eff
+        sps = kpi.daily_sales_per_staff_cents(rec, factor)
         filled = sum(v is not None for v in (
             rec.ft_working, rec.pt_working, rec.new_hires_ft,
             rec.resigned_ft, rec.leave_annual, rec.leave_mc,

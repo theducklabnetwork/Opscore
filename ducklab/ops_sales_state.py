@@ -17,12 +17,7 @@ from ducklab.auth_service import AuthenticationError, AuthorizationError
 from ducklab.auth_pages import app_service
 from ducklab.ops_stores_state import StoresState
 
-_STATUS_COLOR = {
-    "Achieved": "green", "Below target": "red",
-    "No target": "gray", "Awaiting data": "gray",
-    "Growth": "green", "Decline": "red",
-    "No reference": "gray",
-}
+# Status colors come from the shared map in design.py (ds.status_color).
 
 
 def _fmt_dec_rm(value) -> str:
@@ -141,8 +136,9 @@ class SalesState(StoresState):
 
         s = rep.sales
         entered, dim = s.days_entered, s.days_in_month
+        pstate = s.projection_state
         self.sp_sales_mtd = ds.fmt_rm0(s.sales_mtd_cents)
-        complete = entered >= dim and dim > 0
+        complete = pstate == "actual"
         self.sp_month_end_label = ("Month-End Sales (Actual)" if complete
                                    else "Month-End Sales (Projected)")
         self.sp_month_end = _fmt_rm0(s.month_end_sales_cents)
@@ -153,30 +149,39 @@ class SalesState(StoresState):
                               + (_fmt_rm0(run_rate) if run_rate is not None
                                  else "No target"))
         self.sp_days = f"{entered} / {dim}"
-        avg = (Decimal(s.sales_mtd_cents) / entered) if entered else None
-        self.sp_avg_day = _fmt_rm0(avg)
+        self.sp_avg_day = _fmt_rm0(s.average_per_day)
 
         self.sp_ladder = [
-            {"level": f"Level {n}", "target": ds.fmt_rm(s.targets.get(name)),
+            (lambda lbl, color, tag: {
+             "level": f"Level {n}", "target": ds.fmt_rm(s.targets.get(name)),
              "achievement": ds.fmt_pct(s.achievement_by_level.get(name)),
-             "status": s.status_by_level.get(name, "Awaiting data"),
-             "color": _STATUS_COLOR.get(
-                 s.status_by_level.get(name, ""), "gray"),
-             "gap": self._gap(s, name)}
+             "status": lbl, "color": color, "early_tag": tag,
+             "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
+                           if tag else ""),
+             "gap": self._gap(s, name)})(
+                *ds.projection_style(
+                    pstate, s.status_by_level.get(name, "Awaiting data")))
             for n, name in enumerate(
                 ("level1", "level2", "level3", "level4"), start=1)
         ]
+        # growth comparison statuses are projected figures too while the
+        # month is incomplete
+        g_ly, g_lyc, gtag = ds.projection_style(
+            pstate, s.growth_status_last_year)
+        g_lm, g_lmc, _ = ds.projection_style(pstate, s.growth_status_last_month)
         self.sp_comparisons = [
             {"label": "vs Same Month Last Year",
              "growth": ds.fmt_pct(s.growth_last_year),
-             "status": self._growth_status(s.growth_last_year, entered),
-             "color": _STATUS_COLOR.get(
-                 self._growth_status(s.growth_last_year, entered), "gray")},
+             "status": g_ly, "color": g_lyc,
+             "early_tag": gtag,
+             "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
+                           if gtag else "")},
             {"label": "vs Last Month",
              "growth": ds.fmt_pct(s.growth_last_month),
-             "status": self._growth_status(s.growth_last_month, entered),
-             "color": _STATUS_COLOR.get(
-                 self._growth_status(s.growth_last_month, entered), "gray")},
+             "status": g_lm, "color": g_lmc,
+             "early_tag": gtag,
+             "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
+                           if gtag else "")},
         ]
 
         self.sp_spr = (ds.fmt_rm(s.spr) if s.spr is not None
@@ -197,21 +202,15 @@ class SalesState(StoresState):
         self.sp_fig_light = ops_charts.pace_chart(p_days, p_actual, p_budget,
                                                   dark=False)
 
-    def _gap(self, sales, name) -> str:
-        target = sales.targets.get(name)
-        if target is None or sales.month_end_sales_cents is None:
+    @staticmethod
+    def _gap(sales, name) -> str:
+        """Display the engine's gap (kpi.target_gap_cents via
+        assemble_month); no local arithmetic beyond sign formatting."""
+        gap = sales.gap_by_level.get(name)
+        if gap is None:
             return "—"
-        gap = Decimal(sales.month_end_sales_cents) - Decimal(int(target))
         sign = "" if gap >= 0 else "−"
         return f"{sign}{ds.fmt_rm(abs(int(gap)))}"
-
-    @staticmethod
-    def _growth_status(growth, entered: int) -> str:
-        if entered == 0:
-            return "Awaiting data"
-        if growth is None:
-            return "No reference"
-        return "Growth" if growth >= 0 else "Decline"
 
     def _daily_rows(self, days, dim: int, level1) -> list[dict[str, str]]:
         from datetime import date as _date, timedelta

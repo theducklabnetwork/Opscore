@@ -33,8 +33,14 @@ def _ladder_row(row) -> rx.Component:
         rx.table.cell(row["target"]),
         rx.table.cell(row["achievement"]),
         rx.table.cell(row["gap"]),
-        rx.table.cell(rx.badge(row["status"], color_scheme=row["color"],
-                               variant="soft", size="1")),
+        rx.table.cell(rx.hstack(rx.badge(row["status"], color_scheme=row["color"],
+                               variant="soft", size="1"),
+                      rx.cond(row["early_tag"] != "",
+                              rx.tooltip(
+                                  rx.badge(row["early_tag"], color_scheme="blue",
+                                           variant="outline", size="1"),
+                                  content=row["early_tip"])),
+                      spacing="1")),
     )
 
 
@@ -44,8 +50,14 @@ def _comparison_row(row) -> rx.Component:
         rx.table.cell("—"),
         rx.table.cell(row["growth"]),
         rx.table.cell("—"),
-        rx.table.cell(rx.badge(row["status"], color_scheme=row["color"],
-                               variant="soft", size="1")),
+        rx.table.cell(rx.hstack(rx.badge(row["status"], color_scheme=row["color"],
+                               variant="soft", size="1"),
+                      rx.cond(row["early_tag"] != "",
+                              rx.tooltip(
+                                  rx.badge(row["early_tag"], color_scheme="blue",
+                                           variant="outline", size="1"),
+                                  content=row["early_tip"])),
+                      spacing="1")),
     )
 
 

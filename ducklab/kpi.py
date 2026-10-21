@@ -229,6 +229,48 @@ def month_end_sales_cents(days: list[DailyInput], days_in_month: int) -> Optiona
     return Decimal(mtd) / entered * days_in_month
 
 
+def projection_state(days_entered: int, days_in_month: int) -> str:
+    """Display rule (the workbook projection itself is unchanged):
+    "actual" (month complete), "projected", or "early_estimate"
+    (projected AND fewer than 7 days entered)."""
+    if days_in_month <= 0:
+        return "projected"
+    if days_entered >= days_in_month:
+        return "actual"
+    return "projected" if days_entered >= 7 else "early_estimate"
+
+
+def growth_status(growth: Optional[Decimal], days_entered: int) -> str:
+    """Summary rows 21-22 status: Awaiting data (nothing entered),
+    No reference (reference month figure missing), else Growth/Decline."""
+    if days_entered == 0:
+        return "Awaiting data"
+    if growth is None:
+        return "No reference"
+    return "Growth" if growth >= 0 else "Decline"
+
+
+def target_gap_cents(actual_cents, target_cents) -> Optional[Decimal]:
+    """RM gap vs a target level (actual minus target); None when either
+    side is missing. Exact Decimal — presentation rounds."""
+    if actual_cents is None or target_cents is None:
+        return None
+    return to_decimal(actual_cents) - to_decimal(target_cents)
+
+
+def average_per_reported_day(total_cents: int, days_entered: int) -> Optional[Decimal]:
+    """MTD total / days with sales entered. None when none entered."""
+    if not days_entered:
+        return None
+    return Decimal(total_cents) / Decimal(days_entered)
+
+
+def budget_control_status(paid_cents: int, total_budget_cents: Optional[int]) -> str:
+    """Expense Monitor total row H25: No budget / OVER BUDGET /
+    Watch (paid >= 80% of budget) / Within budget."""
+    return budget_status(paid_cents, total_budget_cents)
+
+
 def achievement(actual_cents: Optional[int], target_cents) -> Optional[Decimal]:
     """Summary!D17-D20: actual / target. None when target missing/zero."""
     if actual_cents is None or target_cents is None:
@@ -243,9 +285,12 @@ def sales_status(actual_cents: Optional[int], target_cents) -> str:
     """Summary!E17-E20: Awaiting data / No target / Achieved / Below target."""
     if actual_cents is None:
         return "Awaiting data"
-    if target_cents is None or Decimal(int(target_cents)) == 0:
+    if target_cents is None or to_decimal(target_cents) == 0:
         return "No target"
-    return "Achieved" if Decimal(actual_cents) >= Decimal(int(target_cents)) else "Below target"
+    # Compare as Decimal — no int() truncation: 1051 vs 1051.05 is
+    # "Below target" (workbook float semantics, kept exact).
+    return ("Achieved" if to_decimal(actual_cents) >= to_decimal(target_cents)
+            else "Below target")
 
 
 def growth(actual_cents: Optional[int], reference_cents: Optional[int]) -> Optional[Decimal]:
@@ -578,6 +623,14 @@ def average_effective_staff(days: list[DailyInput], pt_factor) -> Optional[Decim
     if not reported:
         return None
     return sum(reported) / len(reported)
+
+
+def daily_sales_per_staff_cents(d: DailyInput, pt_factor) -> Optional[Decimal]:
+    """One day's sales per effective working staff (Daily!AQ per row)."""
+    e = effective_staff(d.ft_working, d.pt_working, pt_factor)
+    if d.sales_cents is None or e is None or e == 0:
+        return None
+    return Decimal(d.sales_cents) / e
 
 
 def sales_per_staff_cents(days: list[DailyInput], pt_factor) -> Optional[Decimal]:

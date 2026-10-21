@@ -282,10 +282,14 @@ class ExpensesState(DailyState):
                 "budget": ds.fmt_rm(e.total_budget_cents),
                 "utilization": util or "—",
                 "variance": ds.fmt_rm(variance),
-                "status": kpi.budget_status(e.paid_cents,
-                                            e.total_budget_cents),
-                "status_color": BUDGET_COLOR[
-                    kpi.budget_status(e.paid_cents, e.total_budget_cents)],
+                # Expense Monitor total row H25, labelled to distinguish
+                # it from the Overview's HQ status (Summary!E40).
+                "status": e.budget_control_status,
+                "status_label": "Budget control (vs category budgets)",
+                "status_tip": ("Expense Monitor!H25: No budget / OVER "
+                               "BUDGET / Watch (paid ≥ 80% of budget) / "
+                               "Within budget"),
+                "status_color": BUDGET_COLOR[e.budget_control_status],
             }
             non_ok = {k: v for k, v in e.validation_counts.items()
                       if k != "OK" and v}

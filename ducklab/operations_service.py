@@ -45,6 +45,11 @@ class SalesSection:
     required_daily_run_rate: Optional[Decimal]
     needed_per_remaining_day: Optional[Decimal]
     mtd_achievement_l1: Optional[Decimal]
+    average_per_day: Optional[Decimal]          # MTD / days entered
+    gap_by_level: dict[str, Optional[Decimal]]  # RM gap per Level 1-4
+    growth_status_last_year: str
+    growth_status_last_month: str
+    projection_state: str  # "actual" | "projected" | "early_estimate"
 
 
 @dataclass
@@ -64,6 +69,7 @@ class ExpensesSection:
     total_budget_cents: Optional[int]
     expense_share_of_sales: Optional[Decimal]
     total_expenses_status: str
+    budget_control_status: str  # Expense Monitor total row H25
     validation_counts: dict[str, int]
     categories: list[ExpenseCategoryRow] = field(default_factory=list)
 
@@ -175,6 +181,18 @@ def assemble_month(
         growth_last_month=kpi.growth(
             int(month_end_sales) if month_end_sales is not None else None,
             cfg.sales_last_month_cents),
+        average_per_day=kpi.average_per_reported_day(mtd, entered),
+        gap_by_level={
+            k: kpi.target_gap_cents(month_end_sales, t)
+            for k, t in targets.items()
+        },
+        growth_status_last_year=kpi.growth_status(
+            kpi.growth(int(month_end_sales) if month_end_sales is not None
+                       else None, cfg.sales_last_year_cents), entered),
+        growth_status_last_month=kpi.growth_status(
+            kpi.growth(int(month_end_sales) if month_end_sales is not None
+                       else None, cfg.sales_last_month_cents), entered),
+        projection_state=kpi.projection_state(entered, days_in_month),
         transactions=transactions,
         units=units,
         spr=kpi.spr_cents(mtd, transactions),
@@ -218,6 +236,8 @@ def assemble_month(
         expense_share_of_sales=kpi.expense_share_of_sales(totals["paid"], mtd),
         total_expenses_status=kpi.total_expenses_status(
             exp_inputs, month, store_id, totals["paid"], total_budget),
+        budget_control_status=kpi.budget_control_status(
+            totals["paid"], total_budget),
         validation_counts=validation_counts,
         categories=cat_rows,
     )

@@ -1,0 +1,171 @@
+"""Task 19a tests: engine-owned growth/gap/average/budget-control logic,
+sales_status Decimal precision, projection_state boundaries, pages read
+engine values. Disposable temp DBs only.
+
+Run: python -m pytest tests/test_ops_projection.py -v
+"""
+
+import tempfile
+import unittest
+from datetime import date
+from decimal import Decimal
+from pathlib import Path
+
+from ducklab import kpi
+from ducklab.app_service import AppService
+
+
+def rm(v):
+    return int(Decimal(str(v)) * 100)
+
+
+class Fixture(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.app = AppService(Path(self._tmp.name) / "p.db")
+        self.admin = self.app.auth.bootstrap_first_admin(
+            "admin@ducklab.com", "Root", "Sup3rSecure!x")
+        self.sid = self.app.register_store(self.admin, "A01", "Alpha")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _config(self, month, **kw):
+        base = dict(level1_base_cents=rm(200000), opening_headcount_ft=9,
+                    stock_loss_target=0.015, salary_ratio_target=0.06818,
+                    part_timer_factor=0.5, turnover_threshold=0.05)
+        base.update(kw)
+        self.app.configure_month(self.admin, self.sid, month, **base)
+
+    def _days(self, month, n, sales=1000):
+        y, m = (int(x) for x in month.split("-"))
+        for d in range(1, n + 1):
+            self.app.record_daily(self.admin, self.sid, date(y, m, d),
+                                  sales_cents=rm(sales), ft_working=4,
+                                  pt_working=2)
+
+    # growth status ------------------------------------------------------
+    def test_growth_status_variants(self):
+        self._config("2026-10", sales_last_year_cents=rm(180000))
+        # no reference for last month
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.sales.growth_status_last_year, "Awaiting data")
+        self._days("2026-10", 10, sales=7000)   # 70,000 MTD -> proj 217,000
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        # projected 217,000 vs 180,000 -> Growth; vs last month None -> No ref
+        self.assertEqual(rep.sales.growth_status_last_year, "Growth")
+        self.assertEqual(rep.sales.growth_status_last_month, "No reference")
+        self._config("2026-10", sales_last_month_cents=rm(300000))
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.sales.growth_status_last_month, "Decline")
+
+    # gap per level --------------------------------------------------------
+    def test_gap_per_level(self):
+        self._config("2026-10", level2_pct=0.10)
+        self._days("2026-10", 31, sales=7000)  # complete: actual = 217,000
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 31))
+        gaps = rep.sales.gap_by_level
+        self.assertEqual(gaps["level1"], rm(217000) - rm(200000))
+        self.assertEqual(gaps["level2"], rm(217000) - rm(220000))
+        self.assertEqual(rep.sales.projection_state, "actual")
+
+    # average per reported day --------------------------------------------
+    def test_average_per_reported_day(self):
+        self._config("2026-10")
+        self._days("2026-10", 10, sales=700)
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.sales.average_per_day, rm(700))
+        # no days -> None
+        self._config("2026-11")
+        rep2 = self.app.preview_month(self.admin, self.sid, "2026-11",
+                                      as_of=date(2026, 11, 1))
+        self.assertIsNone(rep2.sales.average_per_day)
+
+    # budget-control status (Expense Monitor H25) --------------------------
+    def test_budget_control_status_boundaries(self):
+        self._config("2026-10")
+        cat = self.app.add_expense_category(self.admin, self.sid, "Elec",
+                                            sort_order=1)
+        # None budget -> "No budget"
+        self.app.record_expense(self.admin, self.sid,
+                                incurred_date=date(2026, 10, 2),
+                                paid_date=date(2026, 10, 3), category_id=cat,
+                                description="p", amount_cents=rm(80),
+                                paid_by="Petty Cash", status="Paid",
+                                verification="Verified", recorded_by="DEV",
+                                receipt_ref="R")
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.expenses.budget_control_status, "No budget")
+        # exactly 80% -> Watch
+        self.app.set_expense_budget(self.admin, self.sid, "2026-10", cat,
+                                    rm(100))
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.expenses.budget_control_status, "Watch")
+        # over -> OVER BUDGET
+        self.app.set_expense_budget(self.admin, self.sid, "2026-10", cat,
+                                    rm(79))
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.expenses.budget_control_status, "OVER BUDGET")
+        # under 80% -> Within budget
+        self.app.set_expense_budget(self.admin, self.sid, "2026-10", cat,
+                                    rm(200))
+        rep = self.app.preview_month(self.admin, self.sid, "2026-10",
+                                     as_of=date(2026, 10, 21))
+        self.assertEqual(rep.expenses.budget_control_status, "Within budget")
+
+    # sales_status Decimal precision ----------------------------------------
+    def test_sales_status_decimal_precision(self):
+        # 1051 vs 1051.05 must be "Below target" (no int() truncation)
+        self.assertEqual(kpi.sales_status(1051, Decimal("1051.05")),
+                         "Below target")
+        self.assertEqual(kpi.sales_status(1051, Decimal("1051.00")),
+                         "Achieved")
+        # September parity case: 350,819 vs 350,819.30 -> "Below target"
+        self.assertEqual(kpi.sales_status(rm(350819), rm(350819.30)),
+                         "Below target")
+
+    # projection_state boundaries ------------------------------------------
+    def test_projection_state_boundaries(self):
+        self.assertEqual(kpi.projection_state(6, 31), "early_estimate")
+        self.assertEqual(kpi.projection_state(7, 31), "projected")
+        self.assertEqual(kpi.projection_state(31, 31), "actual")
+        self.assertEqual(kpi.projection_state(5, 30), "early_estimate")
+        self.assertEqual(kpi.projection_state(30, 30), "actual")
+
+    # pages read engine values ----------------------------------------------
+    def test_no_local_formulas_left(self):
+        """Sales/Report/Manpower pages contain no leftover growth/gap/
+        average arithmetic — engine values only."""
+        import inspect
+        import ducklab.ops_sales_state as sales_mod
+        import ducklab.ops_manpower_state as mp_mod
+        src_s = inspect.getsource(sales_mod)
+        src_m = inspect.getsource(mp_mod)
+        self.assertNotIn("_growth_status", src_s)
+        self.assertNotIn("sales_mtd_cents / entered", src_s)
+        self.assertNotIn("rec.sales_cents) / eff", src_m)
+
+    # projection label helper -------------------------------------------------
+    def test_projection_style_labels(self):
+        from ducklab import design as ds
+        lbl, color, tag = ds.projection_style("projected", "Achieved")
+        self.assertEqual((lbl, color, tag), ("Projected: Achieved", "amber", ""))
+        lbl, color, tag = ds.projection_style("early_estimate", "Below target")
+        self.assertEqual((lbl, color, tag),
+                         ("Projected: Below target", "amber", "Early estimate"))
+        lbl, color, tag = ds.projection_style("actual", "Achieved")
+        self.assertEqual((lbl, color, tag), ("Achieved", "green", ""))
+        lbl, color, tag = ds.projection_style("projected", "Awaiting data")
+        self.assertEqual((lbl, color, tag), ("Awaiting data", "gray", ""))
+
+
+if __name__ == "__main__":
+    unittest.main()

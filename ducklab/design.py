@@ -148,6 +148,8 @@ STATUS_COLOR: dict[str, str] = {
     # actions
     "Open": "blue", "In progress": "amber", "Blocked": "red",
     "Done": "green",
+    # growth (Summary rows 21-22)
+    "Growth": "green", "Decline": "red", "No reference": "gray",
     # misc engine strings
     "Restricted": "gray",
 }
@@ -156,3 +158,25 @@ STATUS_COLOR: dict[str, str] = {
 def status_color(status: str, default: str = "gray") -> str:
     """The single status -> color lookup keyed by kpi.py's exact strings."""
     return STATUS_COLOR.get(status, default)
+
+
+# ---------------------------------------------------------------------------
+# Projection display rules (kpi.projection_state) — one helper for all pages.
+# ---------------------------------------------------------------------------
+def projection_style(state: str, status: str) -> tuple[str, str, str]:
+    """-> (label, color, tag) for a month-end-derived status.
+
+    actual        -> (status, semantic color, "")
+    projected     -> ("Projected: <status>", neutral/amber, "")
+    early_estimate-> additionally an "Early estimate" tag.
+    """
+    tag = "Early estimate" if state == "early_estimate" else ""
+    if state == "actual":
+        return status, status_color(status), ""
+    if status in ("Awaiting data", "No target"):
+        return status, "gray", tag
+    return f"Projected: {status}", "amber", tag
+
+
+EARLY_ESTIMATE_TIP = ("Based on only {n} of {m} days; projections "
+                      "stabilise after a full week")

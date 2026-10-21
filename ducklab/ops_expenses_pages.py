@@ -47,11 +47,13 @@ def _kpi_cards() -> rx.Component:
                             icon="scale"),
                 rx.card(
                     rx.vstack(
-                        rx.text("Warning Status", size="1",
-                                color=ds.TEXT_MUTED),
-                        rx.badge(ExpensesState.exp_kpis["status"],
+                        rx.text(ExpensesState.exp_kpis["status_label"],
+                                size="1", color=ds.TEXT_MUTED),
+                        rx.tooltip(
+                            rx.badge(ExpensesState.exp_kpis["status"],
                                  color_scheme=ExpensesState.exp_kpis["status_color"],
                                  size="2", variant="soft"),
+                            content=ExpensesState.exp_kpis["status_tip"]),
                         spacing="1", align="start"),
                     id="kpi-warning"),
                 columns=rx.breakpoints(initial="1", sm="2", lg="4", xl="7"),

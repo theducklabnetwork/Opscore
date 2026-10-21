@@ -299,9 +299,19 @@ def _serialize_live(rep, user=None) -> dict:
                                     else None),
             "target_l1": ds.fmt_rm(s.targets.get("level1")),
             "achievement_l1": ds.fmt_pct(s.achievement_by_level.get("level1")),
-            "status_l1": s.status_by_level.get("level1", "no target"),
+            "status_l1": ds.projection_style(
+                s.projection_state,
+                s.status_by_level.get("level1", "no target"))[0],
+            "projection_state": s.projection_state,
+            "early_estimate_tag": (
+                f"Early estimate: {s.days_entered} of {s.days_in_month} days"
+                if s.projection_state == "early_estimate" else ""),
             "growth_year": ds.fmt_pct(s.growth_last_year),
+            "growth_year_status": ds.projection_style(
+                s.projection_state, s.growth_status_last_year)[0],
             "growth_month": ds.fmt_pct(s.growth_last_month),
+            "growth_month_status": ds.projection_style(
+                s.projection_state, s.growth_status_last_month)[0],
             "spr": ds.fmt_rm(int(s.spr) if s.spr is not None else None),
             "upt": ds.fmt_num(float(s.upt) if s.upt is not None else None),
             "asp": ds.fmt_rm(int(s.asp) if s.asp is not None else None),
@@ -314,6 +324,8 @@ def _serialize_live(rep, user=None) -> dict:
             "pending": ds.fmt_rm(e.open_cents),
             "budget": ds.fmt_rm(e.total_budget_cents),
             "share": ds.fmt_pct(e.expense_share_of_sales),
+            "budget_control_status": e.budget_control_status,
+            "hq_status": e.total_expenses_status,
             "validation": dict(e.validation_counts),
             "categories": [
                 {"name": c.name, "paid": ds.fmt_rm(c.paid_mtd_cents),

@@ -188,7 +188,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
 
     # --- four pillars ---------------------------------------------------
     l1_status = s.status_by_level.get("level1", "Awaiting data")
-    complete = entered == dim
+    pstate = s.projection_state
+    complete = pstate == "actual"
     y, mnum = (int(x) for x in month.split("-"))
     month_end = date(y, mnum, dim)
     in_progress = today <= month_end
@@ -214,11 +215,12 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     mtd_pct = float(s.sales_mtd_cents / l1) if l1 and sales_reported else 0.0
     proj_pct = float(proj_cents / l1) if l1 and proj_cents else 0.0
     over = proj_pct > 1.0
-    # projected statuses are not results: neutral (amber) until complete
-    sales_chip_color = (ds.status_color(l1_status)
-                        if complete else
-                        ("gray" if l1_status in ("Awaiting data", "No target")
-                         else "amber"))
+    # projected statuses are not results: neutral (amber) until complete;
+    # an "Early estimate" tag appears when fewer than 7 days are entered.
+    sales_status_label, sales_chip_color, early_tag = ds.projection_style(
+        pstate, l1_status)
+    early_tip = (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
+                 if early_tag else "")
     out["pill_sales"] = {
         "reported": "1" if sales_reported else "",
         "value": ops_charts.fmt_money_compact(s.sales_mtd_cents),
@@ -229,9 +231,11 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "over_label": (f"+{round((proj_pct - 1.0) * 100)}%" if over else ""),
         "progress_color": ("green" if complete and l1_status == "Achieved"
                            else "indigo"),
-        "status": (l1_status if complete
-                   else f"Projected: {l1_status}"),
+        "status": sales_status_label,
         "status_color": sales_chip_color,
+        "early_tag": early_tag,
+        "early_tip": early_tip,
+        "status_label": "", "status_tip": "", "tooltip": "",
         "context": ("Projected "
                     + ops_charts.fmt_money_compact(proj_cents)
                     + " · " + ops_charts.fmt_pct1(proj_ach_of(proj_cents, l1))
@@ -255,6 +259,13 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                            else "green"),
         "status": exp_status,
         "status_color": exp_color,
+        "status_label": "HQ status (paid vs total budget)",
+        "status_tip": ("Summary!E40: paid month-to-date vs the total "
+                       "category budget, count-based"),
+        "tooltip": ("HQ status (paid vs total budget) — Summary!E40: paid "
+                    "month-to-date vs the total category budget, "
+                    "count-based"),
+        "early_tag": "", "early_tip": "",
         "context": ("Budget "
                     + ops_charts.fmt_money_compact(e.total_budget_cents)
                     + " · " + ops_charts.fmt_pct1(e.expense_share_of_sales)
@@ -274,6 +285,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                                == "Above target" else "green"),
             "status": m.salary_ratio_status,
             "status_color": ds.status_color(m.salary_ratio_status),
+            "early_tag": "", "early_tip": "",
+            "status_label": "", "status_tip": "", "tooltip": "",
             "context": ("Target " + ops_charts.fmt_pct1(target)
                         + " · turnover " + ops_charts.fmt_pct1(m.turnover_pct)
                         + " (" + m.turnover_status + ")"),
@@ -290,6 +303,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
             "progress_color": "indigo",
             "status": "Restricted",
             "status_color": "gray",
+            "early_tag": "", "early_tip": "",
+            "status_label": "", "status_tip": "", "tooltip": "",
             "context": ("Turnover " + ops_charts.fmt_pct1(m.turnover_pct)
                         + " (" + m.turnover_status + ")"),
         }
@@ -307,6 +322,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                            else "green"),
         "status": st.status,
         "status_color": ds.status_color(st.status),
+        "early_tag": "", "early_tip": "",
+        "status_label": "", "status_tip": "", "tooltip": "",
         "context": ("Target " + ops_charts.fmt_pct1(cfg.stock_loss_target)
                     + " · loss "
                     + ops_charts.fmt_money_compact(st.total_loss_cents)),
@@ -358,7 +375,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     actions = app_service.get_actions(user, store_id)
     visible = kpi.actions_in_month_scope(actions, month)
     acounts = kpi.action_counts([a.input for a in visible], as_of=today)
-    avg = int(s.sales_mtd_cents / entered) if entered else None
+    avg = int(s.average_per_day) if s.average_per_day is not None else None
     glance_pairs = [
         ("Average per reported day",
          ops_charts.fmt_money_compact(avg), ds.fmt_rm0(avg), "/ops/sales"),
