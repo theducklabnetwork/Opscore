@@ -373,6 +373,20 @@ def verify(db_path: Path, wb_path: Path) -> int:
         sum(v for k, v in e.validation_counts.items() if k != "OK"))
     add("Total budget (RM)", ws_mon["B9"].value,
         (e.total_budget_cents / 100) if e.total_budget_cents else None)
+    wb_te_status = ws_sum["E40"].value
+    rows.append(("Total expenses status (Summary!E40)", wb_te_status,
+                 e.total_expenses_status,
+                 wb_te_status == e.total_expenses_status))
+    # Daily Dashboard!H5: MTD / Level 1 (vs projected month-end / Level 1)
+    l1 = s.targets.get("level1")
+    add("Budget achievement MTD (Daily Dashboard!H5)",
+        (ws_sum["B15"].value / ws_sum["C17"].value)
+        if ws_sum["B15"].value and ws_sum["C17"].value else None,
+        s.mtd_achievement_l1)
+    add("Projected achievement (month-end / Level 1)",
+        (ws_sum["B16"].value / ws_sum["C17"].value)
+        if ws_sum["B16"].value and ws_sum["C17"].value else None,
+        s.achievement_by_level.get("level1"))
 
     # per-category paid vs budget (Expense Monitor rows 15-25)
     cat_rows = {c.name: c for c in e.categories}

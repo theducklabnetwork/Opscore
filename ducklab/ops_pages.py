@@ -5,7 +5,9 @@ from __future__ import annotations
 import reflex as rx
 
 from ducklab import design as ds
+from ducklab import ops_charts
 from ducklab.auth_pages import AuthState
+from ducklab.ops_overview_state import OverviewState
 from ducklab.ops_shell import shell
 from ducklab.ops_state import OpsState
 
@@ -14,26 +16,206 @@ def dashboard_page() -> rx.Component:
     return shell(
         "Dashboard",
         rx.vstack(
-            rx.card(
-                rx.vstack(
-                    rx.heading("Welcome to DuckLab Operations", size="5"),
-                    rx.text(
-                        "Use the Monthly Report to review live and finalized "
-                        "store performance. Daily data entry, analytics, and "
-                        "administration modules are being rolled out next.",
-                        size="2", color=ds.TEXT_MUTED,
+            rx.cond(
+                ~OpsState.has_stores,
+                rx.card(
+                    rx.vstack(
+                        rx.heading("Welcome to DuckLab Operations", size="5"),
+                        rx.text(
+                            "No stores are assigned to your account. Ask an "
+                            "administrator to assign you a store to see the "
+                            "overview.",
+                            size="2", color=ds.TEXT_MUTED,
+                        ),
+                        rx.link(
+                            rx.button(rx.icon("file-chart-column", size=16),
+                                      "Open Monthly Report",
+                                      color_scheme="indigo"),
+                            href="/ops/report",
+                        ),
+                        spacing="3", align="start",
                     ),
-                    rx.link(
-                        rx.button(rx.icon("file-chart-column", size=16),
-                                  "Open Monthly Report", color_scheme="indigo"),
-                        href="/ops/report",
-                    ),
-                    spacing="3", align="start",
+                    width="100%",
                 ),
-                width="100%",
+            ),
+            rx.cond(
+                OpsState.has_stores,
+                rx.vstack(
+                    rx.cond(
+                        OverviewState.error != "",
+                        ds.error_callout(OverviewState.error),
+                    ),
+                    rx.cond(
+                        OverviewState.finalized_notice != "",
+                        rx.callout(OverviewState.finalized_notice,
+                                   icon="lock", color_scheme="violet",
+                                   variant="soft", width="100%"),
+                    ),
+                    rx.cond(
+                        OverviewState.loaded,
+                        rx.vstack(
+                            _pillar_strip(),
+                            _command_center(),
+                            _attention_panel(),
+                            _pace_chart(),
+                            rx.link(
+                                rx.button(
+                                    rx.icon("file-chart-column", size=16),
+                                    "Open Monthly Report",
+                                    color_scheme="indigo", variant="soft"),
+                                href="/ops/report"),
+                            spacing="5", width="100%",
+                        ),
+                    ),
+                    spacing="4", width="100%",
+                ),
             ),
             width="100%",
         ),
+        on_store=OverviewState.select_store,
+        on_month=OverviewState.select_month,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Overview sections (values pre-formatted by OverviewState)
+# ---------------------------------------------------------------------------
+
+def _pillar(icon, title, pill, href) -> rx.Component:
+    return rx.link(
+        rx.card(
+            rx.vstack(
+                rx.hstack(rx.icon(icon, size=18, color=ds.ACCENT_TEXT),
+                          rx.text(title, size="2", color=ds.TEXT_MUTED,
+                                  weight="medium"),
+                          spacing="2", align="center"),
+                rx.heading(pill["value"], size="6", weight="bold"),
+                rx.text(pill["reference"], size="1", color=ds.TEXT_FAINT),
+                rx.badge(pill["status"],
+                         color_scheme=pill["status_color"],
+                         variant="soft", size="1"),
+                spacing="2", align="start",
+            ),
+            width="100%",
+        ),
+        href=href, width="100%",
+    )
+
+
+def _pillar_strip() -> rx.Component:
+    return rx.grid(
+        _pillar("trending-up", "Sales (month-end vs Level 1)",
+                OverviewState.pill_sales, "/ops/sales"),
+        _pillar("receipt", "Expenses (paid share of sales)",
+                OverviewState.pill_expenses, "/ops/expenses"),
+        _pillar("users", "Manpower (salary ratio · turnover)",
+                OverviewState.pill_manpower, "/ops/manpower"),
+        _pillar("boxes", "Stock (loss % vs target)",
+                OverviewState.pill_stock, "/ops/stock"),
+        columns=rx.breakpoints(initial="1", sm="2", lg="4"),
+        spacing="3", width="100%", id="pillar-strip",
+    )
+
+
+def _cc_card(label, value, href, icon="chevron-right") -> rx.Component:
+    return rx.link(
+        rx.card(
+            rx.vstack(
+                rx.text(label, size="1", color=ds.TEXT_MUTED),
+                rx.heading(value, size="4", weight="bold", wrap="nowrap"),
+                spacing="1", align="start"),
+            width="100%"),
+        href=href, width="100%")
+
+
+def _command_center() -> rx.Component:
+    cc = OverviewState.cc
+    return rx.card(
+        rx.vstack(
+            ds.section_heading("Command Center", "gauge"),
+            rx.grid(
+                _cc_card("Sales MTD", cc["sales_mtd"], "/ops/sales"),
+                _cc_card("Level 1 budget", cc["budget_l1"], "/ops/sales"),
+                _cc_card("Budget achievement", cc["achievement"],
+                         "/ops/sales"),
+                _cc_card("Projected achievement", cc["proj_achievement"],
+                         "/ops/sales"),
+                _cc_card("Days entered", cc["days"], "/ops/daily"),
+                _cc_card("Required daily run-rate", cc["run_rate"],
+                         "/ops/sales"),
+                _cc_card("Needed per remaining day", cc["needed"],
+                         "/ops/sales"),
+                _cc_card("Average per reported day", cc["avg_day"],
+                         "/ops/sales"),
+                _cc_card("Paid expenses", cc["paid"], "/ops/expenses"),
+                _cc_card("Incurred expenses", cc["incurred"],
+                         "/ops/expenses"),
+                _cc_card("Open expenses", cc["open_exp"], "/ops/expenses"),
+                _cc_card("Expense lines to review", cc["review"],
+                         "/ops/expenses"),
+                _cc_card("Stock loss MTD", cc["stock_loss"], "/ops/stock"),
+                _cc_card("Stock loss % of sales", cc["stock_pct"],
+                         "/ops/stock"),
+                _cc_card("Sales completion", cc["completion"], "/ops/daily"),
+                _cc_card("Open actions", cc["actions_open"], "/ops/actions"),
+                _cc_card("Overdue actions", cc["actions_overdue"],
+                         "/ops/actions"),
+                columns=rx.breakpoints(initial="2", sm="3", lg="4", xl="6"),
+                spacing="3", width="100%",
+            ),
+            spacing="3", width="100%",
+        ),
+        width="100%", id="command-center",
+    )
+
+
+def _attention_panel() -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            ds.section_heading("Needs Attention", "flag"),
+            rx.cond(
+                OverviewState.attention.length() > 0,
+                rx.vstack(
+                    rx.foreach(
+                        OverviewState.attention,
+                        lambda item: rx.link(
+                            rx.hstack(
+                                rx.icon(item["icon"], size=16,
+                                        color=ds.ERROR),
+                                rx.text(item["text"], size="2"),
+                                spacing="2", align="center"),
+                            href=item["href"],
+                        )),
+                    spacing="2", align="start", width="100%"),
+                rx.hstack(
+                    rx.icon("circle-check", size=16, color=ds.SUCCESS),
+                    rx.text("Nothing needs attention", size="2",
+                            color=ds.TEXT_MUTED),
+                    spacing="2", align="center"),
+            ),
+            spacing="3", width="100%",
+        ),
+        width="100%", id="attention-panel",
+    )
+
+
+def _pace_chart() -> rx.Component:
+    return rx.card(
+        rx.vstack(
+            ds.section_heading("Pace vs Level 1 Budget", "chart-line"),
+            rx.cond(
+                OverviewState.pace_has_data,
+                rx.cond(OverviewState.is_dark,
+                        ops_charts.chart(OverviewState.pace_fig_dark),
+                        ops_charts.chart(OverviewState.pace_fig_light)),
+                ds.empty_state("Awaiting data",
+                               "Cumulative actuals stop at the last reported "
+                               "day; unreported days are never interpolated.",
+                               icon="chart-line"),
+            ),
+            spacing="3", width="100%",
+        ),
+        width="100%", id="overview-pace",
     )
 
 

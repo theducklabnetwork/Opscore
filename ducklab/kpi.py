@@ -307,6 +307,46 @@ def incurred_value_cents(e: ExpenseInput) -> int:
     return 0
 
 
+def paid_count_in_month(
+    expenses: list[ExpenseInput], month: str, store_id: int
+) -> int:
+    """COUNT of Paid transactions with a paid date inside the month.
+
+    Count-based (not sum-based): signed amounts can net to RM 0 even when
+    payments exist. Used by Summary!E40.
+    """
+    count = 0
+    for e in expenses:
+        if e.store_id != store_id:
+            continue
+        if paid_value_cents(e) and _in_month(e.paid_date, month):
+            count += 1
+    return count
+
+
+def total_expenses_status(
+    expenses: list[ExpenseInput], month: str, store_id: int,
+    paid_cents: int, total_budget_cents: Optional[int],
+) -> str:
+    """Summary!E40: No payments yet / No budget / Within budget / Over budget.
+
+    "No payments yet" is decided by the COUNT of Paid transactions with a
+    paid date in the month (not the paid total).
+    """
+    if paid_count_in_month(expenses, month, store_id) == 0:
+        return "No payments yet"
+    if total_budget_cents is None:
+        return "No budget"
+    if paid_cents <= total_budget_cents:
+        return "Within budget"
+    return "Over budget"
+
+
+def mtd_achievement(sales_mtd_cents: int, target_cents) -> Optional[Decimal]:
+    """Daily Dashboard!H5: MTD sales / Level 1 target."""
+    return achievement(sales_mtd_cents, target_cents)
+
+
 def expense_totals_cents(
     expenses: list[ExpenseInput], month: str, store_id: int
 ) -> dict[str, int]:

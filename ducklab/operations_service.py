@@ -44,6 +44,7 @@ class SalesSection:
     asp: Optional[Decimal]
     required_daily_run_rate: Optional[Decimal]
     needed_per_remaining_day: Optional[Decimal]
+    mtd_achievement_l1: Optional[Decimal]
 
 
 @dataclass
@@ -62,6 +63,7 @@ class ExpensesSection:
     open_cents: int
     total_budget_cents: Optional[int]
     expense_share_of_sales: Optional[Decimal]
+    total_expenses_status: str
     validation_counts: dict[str, int]
     categories: list[ExpenseCategoryRow] = field(default_factory=list)
 
@@ -179,6 +181,7 @@ def assemble_month(
             targets["level1"], days_in_month),
         needed_per_remaining_day=kpi.sales_needed_per_remaining_day(
             targets["level1"], mtd, entered, days_in_month),
+        mtd_achievement_l1=kpi.mtd_achievement(mtd, targets["level1"]),
     )
 
     # --- Expenses ---
@@ -210,6 +213,8 @@ def assemble_month(
         open_cents=totals["open"],
         total_budget_cents=total_budget,
         expense_share_of_sales=kpi.expense_share_of_sales(totals["paid"], mtd),
+        total_expenses_status=kpi.total_expenses_status(
+            exp_inputs, month, store_id, totals["paid"], total_budget),
         validation_counts=validation_counts,
         categories=cat_rows,
     )

@@ -389,6 +389,7 @@ from ducklab.ops_expenses_state import ExpensesState  # noqa: E402
 from ducklab.ops_manpower_pages import manpower_page  # noqa: E402
 from ducklab.ops_manpower_state import ManpowerState  # noqa: E402
 from ducklab.ops_state import OpsState  # noqa: E402
+from ducklab.ops_overview_state import OverviewState  # noqa: E402
 from ducklab.ops_stock_pages import stock_page  # noqa: E402
 from ducklab.ops_stock_state import StockState  # noqa: E402
 from ducklab.ops_stores_pages import stores_page  # noqa: E402
@@ -407,7 +408,7 @@ app.add_page(
     ops_pages.dashboard_page,
     route="/ops",
     title="Dashboard — DuckLab Operations",
-    on_load=OpsState.load_ops,
+    on_load=OverviewState.load_overview,
 )
 app.add_page(
     ops_pages.report_page,
