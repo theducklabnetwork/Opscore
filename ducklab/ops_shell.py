@@ -19,7 +19,7 @@ NAV = [
         ("Stock Management", "/ops/stock", "boxes", True),
     ]),
     ("Management", [
-        ("Action Tracker", "", "list-checks", False),
+        ("Action Tracker", "/ops/actions", "list-checks", True),
         ("Store Management", "/ops/stores", "store", True),
     ]),
     ("System", [("Settings", "", "settings", False)]),

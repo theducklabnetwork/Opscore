@@ -2,7 +2,14 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **1** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **2** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+
+## Version history
+
+- **v1** — initial schema (stores, daily, expenses, actions, snapshots).
+- **v2** — additive: `actions` gains `created_by`, `created_at`,
+  `updated_by`, `updated_at` audit columns for the Action Tracker page.
+  Existing rows keep NULL audit data; no KPI-relevant columns change.
 
 ## Rules
 

@@ -117,19 +117,59 @@ class OperationsWriteService:
     def raise_action(self, store_id: int, raised_date: date, pillar: str,
                      issue: str, priority: str, pic: Optional[str] = None,
                      due_date: Optional[date] = None,
-                     corrective_action: Optional[str] = None) -> int:
+                     corrective_action: Optional[str] = None,
+                     actor_id: Optional[int] = None) -> int:
         return self.repo.create_action(
-            store_id, raised_date=raised_date, pillar=pillar, issue=issue,
-            priority=priority, pic=pic, due_date=due_date,
+            store_id, actor_id, raised_date=raised_date, pillar=pillar,
+            issue=issue, priority=priority, pic=pic, due_date=due_date,
             corrective_action=corrective_action, status="Open")
+
+    def save_action(self, store_id: int, actor_id: int,
+                    action_id: Optional[int], today: date,
+                    raised_date: Optional[date], pillar: Optional[str],
+                    issue: Optional[str], priority: Optional[str],
+                    status: Optional[str], pic: Optional[str],
+                    due_date: Optional[date], corrective_action: Optional[str],
+                    completion_date: Optional[date],
+                    remarks: Optional[str]) -> int:
+        """Create or fully update an action, enforcing the workbook rules:
+        owner and due date required; Done requires a completion date
+        (defaults to today); non-Done clears completion; completion cannot
+        precede raised. `today` is injected (Asia/Kuala_Lumpur at caller)."""
+        if not issue or not issue.strip():
+            raise ValidationError("Issue / observation is required")
+        if not pic or not pic.strip():
+            raise ValidationError("Person in charge is required")
+        if due_date is None:
+            raise ValidationError("Due date is required")
+        status = status or "Open"
+        if status == "Done":
+            if completion_date is None:
+                completion_date = today
+        else:
+            completion_date = None  # non-Done never keeps a completion date
+        if completion_date is not None and raised_date is not None \
+                and completion_date < raised_date:
+            raise ValidationError(
+                "Completion date cannot be earlier than the raised date")
+        fields = dict(raised_date=raised_date or today, pillar=pillar,
+                      issue=issue.strip(), priority=priority, status=status,
+                      pic=pic.strip(), due_date=due_date,
+                      corrective_action=corrective_action,
+                      completion_date=completion_date, remarks=remarks)
+        if action_id is None:
+            return self.repo.create_action(store_id, actor_id, **fields)
+        self.repo.update_action(store_id, action_id, actor_id, **fields)
+        return action_id
 
     def update_action_status(self, store_id: int, action_id: int,
                              status: str,
-                             completion_date: Optional[date] = None) -> None:
+                             completion_date: Optional[date] = None,
+                             actor_id: Optional[int] = None) -> None:
         fields: dict = {"status": status}
         if completion_date is not None:
             fields["completion_date"] = completion_date
-        self.repo.update_action(store_id, action_id, **fields)
+        self.repo.update_action(store_id, action_id, actor_id, **fields)
 
     def update_action(self, store_id: int, action_id: int, **fields) -> None:
-        self.repo.update_action(store_id, action_id, **fields)
+        self.repo.update_action(store_id, action_id, None, **fields)

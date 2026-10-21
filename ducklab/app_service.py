@@ -152,7 +152,19 @@ class AppService:
                      **fields):
         authz.require_store_write(user, store_id)
         return self.write.raise_action(store_id, raised_date, pillar,
-                                       description, priority, **fields)
+                                       description, priority,
+                                       actor_id=user.id, **fields)
+
+    def save_action(self, user: User, store_id: int, action_id,
+                    today: date, **fields):
+        """Create/update with workbook validation; store-scoped write."""
+        authz.require_store_write(user, store_id)
+        return self.write.save_action(store_id, user.id, action_id, today,
+                                      **fields)
+
+    def get_actions(self, user: User, store_id: int, month=None):
+        authz.require_store_access(user, store_id)
+        return self.read_repo.get_actions(store_id, month)
 
     # -- configuration ----------------------------------------------------------
     def configure_month(self, user: User, store_id: int, month: str, **fields):

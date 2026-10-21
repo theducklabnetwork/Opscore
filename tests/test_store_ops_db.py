@@ -78,21 +78,25 @@ class TestCreation(StoreOpsDbTestCase):
         self.assertTrue(expected.issubset(tables), expected - tables)
 
     def test_schema_version_recorded(self):
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0],
+                         store_ops_db.SCHEMA_VERSION)
         self.assertEqual(
-            self.conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 1
+            self.conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
+            store_ops_db.SCHEMA_VERSION,
         )
 
     def test_idempotent_initialization(self):
         store_ops_db.init_db(self.db_path)
         store_ops_db.init_db(self.db_path)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0],
+                         store_ops_db.SCHEMA_VERSION)
         # Reference data not duplicated.
         self.assertEqual(
             self.conn.execute("SELECT COUNT(*) FROM stock_loss_codes").fetchone()[0], 13
         )
         self.assertEqual(
-            self.conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0], 1
+            self.conn.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
+            store_ops_db.SCHEMA_VERSION,
         )
 
     def test_foreign_keys_enabled(self):

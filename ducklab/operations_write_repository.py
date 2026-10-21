@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -545,13 +545,16 @@ class OperationsWriteRepository:
                 and fields["status"] not in ACTION_STATUSES:
             raise ValidationError(f"Invalid status: {fields['status']}")
 
-    def create_action(self, store_id: int, **fields) -> int:
+    def create_action(self, store_id: int, actor_id: Optional[int] = None,
+                      **fields) -> int:
         self._validate_action_fields(fields)
         conn = self._connect()
         try:
             self._require_store(conn, store_id)
             values = {k: _iso(v) if k.endswith("_date") else v
                       for k, v in fields.items()}
+            values["created_by"] = actor_id
+            values["created_at"] = datetime.now().isoformat(timespec="seconds")
             cols = ["store_id", *values]
             cur = conn.execute(
                 f"INSERT INTO actions ({','.join(cols)}) "
@@ -566,7 +569,8 @@ class OperationsWriteRepository:
         finally:
             conn.close()
 
-    def update_action(self, store_id: int, action_id: int, **fields) -> None:
+    def update_action(self, store_id: int, action_id: int,
+                      actor_id: Optional[int] = None, **fields) -> None:
         self._validate_action_fields(fields)
         if not fields:
             return
@@ -580,6 +584,8 @@ class OperationsWriteRepository:
                     f"Action {action_id} not found in store {store_id}")
             values = {k: _iso(v) if k.endswith("_date") else v
                       for k, v in fields.items()}
+            values["updated_by"] = actor_id
+            values["updated_at"] = datetime.now().isoformat(timespec="seconds")
             sets = ", ".join(f"{k} = ?" for k in values)
             conn.execute(
                 f"UPDATE actions SET {sets} WHERE id = ?",

@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -217,7 +217,27 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 1:
             _apply_v1(conn)
             conn.execute("PRAGMA user_version = 1")
-        # Future migrations: if current < 2: _apply_v2(conn) ...
+            current = 1
+        if current < 2 and current >= 1:
+            _apply_v2(conn)
+            conn.execute("PRAGMA user_version = 2")
         conn.commit()
     finally:
         conn.close()
+
+
+_SCHEMA_V2 = """
+-- v2: audit columns on actions (created/updated by/at). Additive ALTERs;
+-- existing rows keep NULL audit data. No KPI-relevant columns change.
+ALTER TABLE actions ADD COLUMN created_by INTEGER;
+ALTER TABLE actions ADD COLUMN created_at TEXT;
+ALTER TABLE actions ADD COLUMN updated_by INTEGER;
+ALTER TABLE actions ADD COLUMN updated_at TEXT;
+"""
+
+
+def _apply_v2(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA_V2)
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (2,)
+    )

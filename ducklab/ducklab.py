@@ -382,6 +382,8 @@ from ducklab import auth_pages  # noqa: E402
 from ducklab import ops_pages  # noqa: E402
 from ducklab.ops_daily_pages import daily_page  # noqa: E402
 from ducklab.ops_daily_state import DailyState  # noqa: E402
+from ducklab.ops_actions_pages import actions_page  # noqa: E402
+from ducklab.ops_actions_state import ActionsState  # noqa: E402
 from ducklab.ops_expenses_pages import expenses_page  # noqa: E402
 from ducklab.ops_expenses_state import ExpensesState  # noqa: E402
 from ducklab.ops_manpower_pages import manpower_page  # noqa: E402
@@ -448,4 +450,10 @@ app.add_page(
     route="/ops/sales",
     title="Sales Performance — DuckLab",
     on_load=SalesState.load_sales,
+)
+app.add_page(
+    actions_page,
+    route="/ops/actions",
+    title="Action Tracker — DuckLab",
+    on_load=ActionsState.load_actions,
 )
