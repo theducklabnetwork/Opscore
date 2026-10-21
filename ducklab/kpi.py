@@ -21,9 +21,28 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
+from zoneinfo import ZoneInfo
+
+KL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
+
+
+def kl_today() -> date:
+    """One "today" for the whole app: Asia/Kuala_Lumpur."""
+    return datetime.now(KL_TZ).date()
+
+
+def reporting_date(month: str, today: Optional[date] = None) -> date:
+    """Workbook Expense Monitor!B4: max(month start, min(today, month end)).
+
+    For a past month: month end. For the current month: today. For a future
+    month: month start (never before the month exists).
+    """
+    start, end, _ = month_bounds(month)
+    t = kl_today() if today is None else today
+    return max(start, min(t, end))
 
 # --------------------------------------------------------------------------
 # Conversion boundaries
@@ -274,6 +293,33 @@ def expense_validation(e: ExpenseInput, known_category_ids: set[int]) -> str:
     if e.verification != "Verified":
         return "Unverified"
     return "OK"
+
+
+def expense_review_counts(
+    expenses: list[ExpenseInput], month: str, store_id: int,
+    known_category_ids: set[int],
+) -> dict[str, int]:
+    """Expense lines needing review, month-scoped (one rule for the
+    Expenses page, Overview and finalization warnings):
+    lines INCURRED or PAID in the month, plus PENDING lines incurred on
+    or before month end (they still need attention for this month).
+    """
+    _, month_end, _ = month_bounds(month)
+    counts: dict[str, int] = {}
+    for e in expenses:
+        if e.store_id != store_id:
+            continue
+        in_scope = (
+            _in_month(e.incurred_date, month)
+            or _in_month(e.paid_date, month)
+            or (e.status == "Pending" and e.incurred_date is not None
+                and e.incurred_date <= month_end)
+        )
+        if not in_scope:
+            continue
+        status = expense_validation(e, known_category_ids)
+        counts[status] = counts.get(status, 0) + 1
+    return counts
 
 
 def _is_core_valid(e: ExpenseInput) -> bool:
@@ -582,6 +628,40 @@ class ActionInput:
     pillar: Optional[str] = None
 
 
+OPEN_STATUSES = ("Open", "In progress", "Blocked")
+
+
+def is_overdue(a: ActionInput, as_of: date) -> bool:
+    """Action Tracker!E4, per action: due date < as_of AND status not
+    Done/Cancelled AND pillar present (the workbook checks the PILLAR
+    column, not the issue text). Boundary: due == as_of is NOT overdue."""
+    return (a.due_date is not None
+            and a.due_date < as_of
+            and a.status not in ("Done", "Cancelled")
+            and bool(a.pillar))
+
+
+def actions_in_month_scope(actions, month: str) -> list:
+    """One scope rule for Overview / Actions page / Report: an action
+    belongs to a month when it was raised on or before month end AND
+    (raised in the month OR still Open/In progress/Blocked).
+
+    Actions raised after the selected month are excluded. ``actions`` may
+    be ActionRecords (with .raised_date/.input) or ActionInputs (with
+    .raised_date) — the caller keeps one source and passes the same list
+    everywhere."""
+    _, month_end, _ = month_bounds(month)
+    scoped = []
+    for a in actions:
+        raised = getattr(a, "raised_date", None)
+        if raised is None or raised > month_end:
+            continue
+        status = (a.input.status if hasattr(a, "input") else a.status)             or "Open"
+        if raised.strftime("%Y-%m") == month or status in OPEN_STATUSES:
+            scoped.append(a)
+    return scoped
+
+
 def action_counts(actions: list[ActionInput], as_of: date) -> dict[str, int]:
     """Action Tracker!B4/E4/H4. ``as_of`` is explicit — no system clock.
 
@@ -594,12 +674,7 @@ def action_counts(actions: list[ActionInput], as_of: date) -> dict[str, int]:
         key = (a.status or "").lower().replace(" ", "_")
         if key in ("open", "in_progress", "blocked", "done", "cancelled"):
             counts[key] += 1
-        if (
-            a.due_date is not None
-            and a.due_date < as_of
-            and a.status not in ("Done", "Cancelled")
-            and a.pillar
-        ):
+        if is_overdue(a, as_of):
             counts["overdue"] += 1
     return counts
 

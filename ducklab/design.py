@@ -119,3 +119,40 @@ def error_callout(message) -> rx.Component:
 def loading_state(label="Loading…") -> rx.Component:
     return rx.center(rx.spinner(size="3"), rx.text(label, color=TEXT_MUTED),
                      padding="3em", width="100%", spacing="3")
+
+
+# ---------------------------------------------------------------------------
+# One status -> color map for every status string kpi.py can return.
+# Pages must look colors up here, not define their own maps.
+# ---------------------------------------------------------------------------
+STATUS_COLOR: dict[str, str] = {
+    # sales levels
+    "Achieved": "green", "Below target": "red",
+    "Awaiting data": "gray", "No target": "gray",
+    # expenses (total + per-category budget status)
+    "Within budget": "green", "Over budget": "red", "OVER BUDGET": "red",
+    "Watch": "amber", "No budget": "gray", "No payments yet": "gray",
+    # manpower
+    "Within target": "green", "Failure: over target": "red",
+    "Over target": "red", "Above target": "red",
+    "Awaiting payroll": "gray", "Awaiting HC": "gray",
+    "Normal": "green", "HIGH TURNOVER": "red",
+    "On budget": "green", "Over budget (+1)": "red", "Under budget": "amber",
+    # expense line validation
+    "OK": "green", "Incomplete": "amber", "Unknown category": "red",
+    "Missing paid date": "amber", "Check paid date": "amber",
+    "Missing paid by": "amber", "Missing recorder": "amber",
+    "Disputed": "red", "Unverified": "amber",
+    # expense transaction status
+    "Paid": "green", "Pending": "amber", "Cancelled": "gray",
+    # actions
+    "Open": "blue", "In progress": "amber", "Blocked": "red",
+    "Done": "green",
+    # misc engine strings
+    "Restricted": "gray",
+}
+
+
+def status_color(status: str, default: str = "gray") -> str:
+    """The single status -> color lookup keyed by kpi.py's exact strings."""
+    return STATUS_COLOR.get(status, default)

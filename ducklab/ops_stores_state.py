@@ -245,6 +245,17 @@ class StoresState(StockState):
         except Exception:
             self.setup_finalized = False
         if found:
+            # Payroll values (salary/overtime/support/ratio target) enter
+            # state ONLY when the user may edit setup (can_edit_setup,
+            # which is gated on authz.can_manage_config).
+            payroll_vals = (
+                {"s_salary_ratio": _pct_str(cfg.salary_ratio_target),
+                 "s_salary": _money_str(cfg.salary_basic_allowance_cents),
+                 "s_overtime": _money_str(cfg.overtime_cents),
+                 "s_support": _money_str(cfg.support_team_cost_cents)}
+                if self.can_edit_setup else
+                {"s_salary_ratio": "", "s_salary": "", "s_overtime": "",
+                 "s_support": ""})
             vals = {
                 "s_min_rtm": _money_str(cfg.min_rtm_target_cents),
                 "s_level1": _money_str(cfg.level1_base_cents),
@@ -253,16 +264,13 @@ class StoresState(StockState):
                 "s_level4": _pct_str(cfg.level4_pct),
                 "s_last_year": _money_str(cfg.sales_last_year_cents),
                 "s_last_month": _money_str(cfg.sales_last_month_cents),
-                "s_salary_ratio": _pct_str(cfg.salary_ratio_target),
                 "s_budget_hc": _count_str(cfg.budget_headcount),
                 "s_turnover": _pct_str(cfg.turnover_threshold),
                 "s_opening_hc": _count_str(cfg.opening_headcount_ft),
                 "s_pt_factor": _pct_str(cfg.part_timer_factor),
                 "s_stock_target": _pct_str(cfg.stock_loss_target),
-                "s_salary": _money_str(cfg.salary_basic_allowance_cents),
-                "s_overtime": _money_str(cfg.overtime_cents),
-                "s_support": _money_str(cfg.support_team_cost_cents),
             }
+            vals.update(payroll_vals)
             for attr, v in vals.items():
                 setattr(self, attr, v)
             levels = kpi.sales_target_levels_cents(cfg)

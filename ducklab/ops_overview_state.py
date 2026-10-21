@@ -31,19 +31,12 @@ from ducklab.operations_repository import (
 from ducklab.ops_actions_state import ActionsState
 from ducklab.ops_state import OpsState
 
-RATIO_STATUS_COLOR = {"Within target": "green", "Above target": "red",
-                      "Awaiting payroll": "gray", "Awaiting data": "gray",
-                      "No target": "gray"}
-STATUS_COLOR = {"Achieved": "green", "Below target": "red",
-                "Awaiting data": "gray", "No target": "gray"}
-STOCK_COLOR = {"Within target": "green", "Over target": "red",
-               "No target": "gray"}
-TURNOVER_COLOR = {"Normal": "green", "HIGH TURNOVER": "red",
-                  "Awaiting data": "gray"}
+# Status colors come from the one shared map in design.py
+# (ds.status_color) — keyed by the exact strings kpi.py returns.
 
 
 def _today() -> date:
-    return datetime.now(ZoneInfo("Asia/Kuala_Lumpur")).date()
+    return kpi.kl_today()
 
 
 class OverviewState(ActionsState):
@@ -222,7 +215,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     proj_pct = float(proj_cents / l1) if l1 and proj_cents else 0.0
     over = proj_pct > 1.0
     # projected statuses are not results: neutral (amber) until complete
-    sales_chip_color = (STATUS_COLOR.get(l1_status, "gray")
+    sales_chip_color = (ds.status_color(l1_status)
                         if complete else
                         ("gray" if l1_status in ("Awaiting data", "No target")
                          else "amber"))
@@ -245,8 +238,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                     + " of Level 1"),
     }
     exp_status = e.total_expenses_status
-    exp_color = {"Within budget": "green", "Over budget": "red",
-                 "No budget": "gray", "No payments yet": "gray"}[exp_status]
+    exp_color = ds.status_color(exp_status)
     paid_count = kpi.paid_count_in_month([x.input for x in
                                           app_service.get_expense_transactions(
                                               user, store_id)], month,
@@ -281,8 +273,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
             "progress_color": ("red" if m.salary_ratio_status
                                == "Above target" else "green"),
             "status": m.salary_ratio_status,
-            "status_color": RATIO_STATUS_COLOR.get(m.salary_ratio_status,
-                                                   "gray"),
+            "status_color": ds.status_color(m.salary_ratio_status),
             "context": ("Target " + ops_charts.fmt_pct1(target)
                         + " · turnover " + ops_charts.fmt_pct1(m.turnover_pct)
                         + " (" + m.turnover_status + ")"),
@@ -315,7 +306,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "progress_color": ("red" if st.status == "Over target"
                            else "green"),
         "status": st.status,
-        "status_color": STOCK_COLOR.get(st.status, "gray"),
+        "status_color": ds.status_color(st.status),
         "context": ("Target " + ops_charts.fmt_pct1(cfg.stock_loss_target)
                     + " · loss "
                     + ops_charts.fmt_money_compact(st.total_loss_cents)),
@@ -339,10 +330,10 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
          "progress": (min(float(kpi.achievement(proj_cents, t)), 1.0)
                       if kpi.achievement(proj_cents, t) is not None else 0.0),
          "status": s.status_by_level.get(name, "Awaiting data"),
-         "status_color": (STATUS_COLOR.get(
-             s.status_by_level.get(name, ""), "gray") if complete else
-             ("gray" if s.status_by_level.get(name, "Awaiting data")
-              in ("Awaiting data", "No target") else "amber")),
+         "status_color": (ds.status_color(s.status_by_level.get(name, ""))
+                          if complete else
+                          ("gray" if s.status_by_level.get(name, "Awaiting data")
+                           in ("Awaiting data", "No target") else "amber")),
          "progress_color": ("green" if complete and s.status_by_level.get(name)
                             == "Achieved" else "indigo")}
         for i, name in enumerate(level_names, 1)
@@ -365,11 +356,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     # --- secondary figures ("At a glance") --------------------------------
     # action counts for this store/month scope (raised in month or open)
     actions = app_service.get_actions(user, store_id)
-    visible = [a for a in actions
-               if (a.raised_date
-                   and a.raised_date.strftime("%Y-%m") == month)
-               or (a.input.status or "Open") in
-               ("Open", "In progress", "Blocked")]
+    visible = kpi.actions_in_month_scope(actions, month)
     acounts = kpi.action_counts([a.input for a in visible], as_of=today)
     avg = int(s.sales_mtd_cents / entered) if entered else None
     glance_pairs = [
@@ -468,16 +455,19 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=True)
     out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=False)
 
-    # sparklines: raw daily sales (RM) and raw daily total stock loss (RM),
+    # sparklines: raw daily sales (RM) and per-day Total Loss (RM),
     # same gap rules as daily_line — no new aggregation.
+    signs = app_service.read_repo.get_contribution_signs()
     sales_daily = [None] * dim
     loss_daily = [None] * dim
     for d in days:
         if d.sales_cents is not None:
             sales_daily[d.date.day - 1] = d.sales_cents / 100
-        losses = [v for v in d.stock_losses.values() if v is not None]
-        if losses:
-            loss_daily[d.date.day - 1] = sum(losses) / 100
+        if d.stock_losses:
+            # per-day Total Loss via kpi.total_loss_cents (same as the
+            # Stock page: signed contributions, info-only codes excluded)
+            loss_daily[d.date.day - 1] = kpi.total_loss_cents(
+                d.stock_losses, signs) / 100
     spark_days = list(range(1, dim + 1))
     out["spark_sales_dark"] = ops_charts.sparkline(spark_days, sales_daily,
                                                    dark=True)

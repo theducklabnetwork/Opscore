@@ -56,6 +56,11 @@ class AppService:
     def preview_month(self, user: User, store_id: int, month: str,
                       as_of: Optional[date] = None) -> MonthlyOperationsReport:
         authz.require_store_access(user, store_id)
+        # Reporting date (workbook Expense Monitor!B4): clamped to the
+        # month; callers never depend on a hidden system clock.
+        if as_of is None:
+            from ducklab import kpi
+            as_of = kpi.reporting_date(month)
         return self.snapshots.preview_month(store_id, month, as_of=as_of)
 
     def get_finalized_report(self, user: User, store_id: int, month: str,
@@ -72,11 +77,17 @@ class AppService:
     def finalize_month(self, user: User, store_id: int, month: str,
                        as_of: Optional[date] = None) -> dict:
         authz.require_store_finalize(user, store_id)
+        if as_of is None:
+            from ducklab import kpi
+            as_of = kpi.reporting_date(month)
         return self.snapshots.finalize_month(store_id, month, as_of=as_of)
 
     def correct_month(self, user: User, store_id: int, month: str,
                       as_of: Optional[date] = None) -> dict:
         authz.require_store_finalize(user, store_id)
+        if as_of is None:
+            from ducklab import kpi
+            as_of = kpi.reporting_date(month)
         return self.snapshots.correct_month(store_id, month, as_of=as_of)
 
     # -- operational writes ---------------------------------------------------
@@ -184,19 +195,17 @@ class AppService:
             support_team_cost_cents)
 
     def register_store(self, user: User, code: str, name: str, **details):
-        authz.require_config_manager(user)
+        authz.require_store_manager(user)
         return self.write.register_store(code, name, **details)
 
     def update_store_details(self, user: User, store_id: int, **fields):
-        """Edit store details: config managers with access to the store."""
-        authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        """Edit store details: Super Admin only (store management policy)."""
+        authz.require_store_manager(user)
         self.write.update_store_details(store_id, **fields)
 
     def set_store_active(self, user: User, store_id: int, active: bool):
-        """Activate/deactivate (never delete): config managers with access."""
-        authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        """Activate/deactivate (never delete): Super Admin only."""
+        authz.require_store_manager(user)
         if active:
             self.write.activate_store(store_id)
         else:

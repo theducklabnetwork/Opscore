@@ -141,7 +141,10 @@ def assemble_month(
     categories = repo.get_expense_categories(store_id)
     budgets = repo.get_expense_budgets(store_id, month)
     signs = repo.get_contribution_signs()
-    actions = repo.get_actions(store_id, month)
+    # One scope rule (kpi.actions_in_month_scope): raised on or before
+    # month end AND (raised in the month OR still open) — carried over.
+    actions = kpi.actions_in_month_scope(
+        repo.get_actions(store_id), month)
 
     # --- Sales ---
     entered = kpi.days_with_sales_entered(days)
@@ -188,12 +191,12 @@ def assemble_month(
     exp_inputs = [e.input for e in expenses]
     totals = kpi.expense_totals_cents(exp_inputs, month, store_id)
     known_ids = {c.id for c in categories}
-    validation_counts: dict[str, int] = {}
-    for e in exp_inputs:
-        status = kpi.expense_validation(e, known_ids)
-        validation_counts[status] = validation_counts.get(status, 0) + 1
-    budget_values = list(budgets.values())
-    total_budget = sum(b for b in budget_values if b is not None) if budget_values else None
+    validation_counts = kpi.expense_review_counts(exp_inputs, month,
+                                                  store_id, known_ids)
+    # Total budget: sum of non-NULL budgets; None when NONE is set
+    # (workbook: blank -> "No budget", never 0 -> "Over budget").
+    budget_values = [b for b in budgets.values() if b is not None]
+    total_budget = sum(budget_values) if budget_values else None
     cat_rows = [
         ExpenseCategoryRow(
             category_id=c.id,
@@ -255,7 +258,7 @@ def assemble_month(
     )
 
     # --- Actions ---
-    counts = kpi.action_counts([a.input for a in actions], as_of=as_of)
+    counts = kpi.action_counts([a.input for a in actions], as_of=as_of)  # noqa: E501
     actions_section = ActionsSection(
         counts=counts,
         open=kpi.open_actions(counts),

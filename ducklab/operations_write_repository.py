@@ -16,6 +16,11 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+# Audit timestamps: explicit Asia/Kuala_Lumpur offset (+08:00), never
+# naive local time.
+KL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 from pathlib import Path
 from typing import Optional
 
@@ -554,7 +559,7 @@ class OperationsWriteRepository:
             values = {k: _iso(v) if k.endswith("_date") else v
                       for k, v in fields.items()}
             values["created_by"] = actor_id
-            values["created_at"] = datetime.now().isoformat(timespec="seconds")
+            values["created_at"] = datetime.now(KL_TZ).isoformat(timespec="seconds")
             cols = ["store_id", *values]
             cur = conn.execute(
                 f"INSERT INTO actions ({','.join(cols)}) "
@@ -585,7 +590,7 @@ class OperationsWriteRepository:
             values = {k: _iso(v) if k.endswith("_date") else v
                       for k, v in fields.items()}
             values["updated_by"] = actor_id
-            values["updated_at"] = datetime.now().isoformat(timespec="seconds")
+            values["updated_at"] = datetime.now(KL_TZ).isoformat(timespec="seconds")
             sets = ", ".join(f"{k} = ?" for k in values)
             conn.execute(
                 f"UPDATE actions SET {sets} WHERE id = ?",

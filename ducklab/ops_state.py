@@ -15,6 +15,7 @@ from typing import Optional
 import reflex as rx
 
 from ducklab import design as ds
+from ducklab import kpi
 from ducklab.auth_pages import AuthState, app_service
 from ducklab.auth_service import AuthenticationError, AuthorizationError, User
 from ducklab.operations_repository import (
@@ -100,7 +101,7 @@ class OpsState(AuthState):
 
     def _month_choices(self) -> list[tuple[str, str]]:
         # Past 12 months including the current one, newest first.
-        today = date.today()
+        today = kpi.kl_today()
         out = []
         y, m = today.year, today.month
         for _ in range(12):
@@ -208,13 +209,13 @@ class OpsState(AuthState):
                                  .strip().split()[-1])
                 snap = app_service.get_finalized_report(user, store_id, month,
                                                         version=wanted)
-                data = _serialize_snapshot(snap)
+                data = _serialize_snapshot(snap, user=user)
                 self.finalized_note = (
                     f"Finalized version {snap['version']} · {snap['created_at']}"
                     + (" (superseded)" if snap["superseded_by"] else ""))
             else:
                 live = app_service.preview_month(user, store_id, month)
-                data = _serialize_live(live)
+                data = _serialize_live(live, user=user)
                 self.finalized_note = ""
             self.report = {k: v for k, v in data.items()
                            if isinstance(v, dict)}
@@ -250,7 +251,18 @@ class OpsState(AuthState):
 # Serialization (server-side formatting; money as ints/strings, no floats)
 # ---------------------------------------------------------------------------
 
-def _serialize_live(rep) -> dict:
+def _payroll_gated(values: dict, user) -> dict:
+    """Payroll fields (salary, ratios, status) enter serialized state ONLY
+    for configuration managers; everyone else gets 'Restricted' markers and
+    no figures. Turnover/headcount are headcount-based and always shown."""
+    from ducklab import authz as _authz
+    if user is not None and _authz.can_manage_config(user):
+        return values
+    return {**values, "salary": "Restricted", "ratio": "Restricted",
+            "ratio_support": "Restricted", "ratio_status": "Restricted"}
+
+
+def _serialize_live(rep, user=None) -> dict:
     s, e, m, st, a = (rep.sales, rep.expenses, rep.manpower, rep.stock,
                       rep.actions)
     return {
@@ -287,7 +299,7 @@ def _serialize_live(rep) -> dict:
                 for c in e.categories
             ],
         },
-        "manpower": {
+        "manpower": _payroll_gated({
             "opening": ds.fmt_num(m.opening_headcount),
             "hires": ds.fmt_num(m.hires),
             "resigned": ds.fmt_num(m.resigned),
@@ -302,7 +314,7 @@ def _serialize_live(rep) -> dict:
             "effective_staff": ds.fmt_num(
                 float(m.average_effective_staff)
                 if m.average_effective_staff is not None else None),
-        },
+        }, user),
         "stock": {
             "total_loss": ds.fmt_rm(st.total_loss_cents),
             "loss_pct": ds.fmt_pct(st.loss_pct_of_sales),
@@ -316,8 +328,10 @@ def _serialize_live(rep) -> dict:
             ],
         },
         "actions": {
-            "total": sum(a.counts.values()),
-            "open": a.counts.get("todo", 0),
+            # engine counts: total = all status buckets; open = engine's
+            # Open + In progress + Blocked (kpi.open_actions).
+            "total": sum(v for k, v in a.counts.items() if k != "overdue"),
+            "open": a.open,
             "in_progress": a.counts.get("in_progress", 0),
             "blocked": a.counts.get("blocked", 0),
             "done": a.counts.get("done", 0),
@@ -327,7 +341,7 @@ def _serialize_live(rep) -> dict:
     }
 
 
-def _serialize_snapshot(snap: dict) -> dict:
+def _serialize_snapshot(snap: dict, user=None) -> dict:
     rep = snap["report"]
     s, e, m, st, a = (rep["sales"], rep["expenses"], rep["manpower"],
                       rep["stock"], rep["actions"])
@@ -380,7 +394,7 @@ def _serialize_snapshot(snap: dict) -> dict:
                 for c in e.get("categories", [])
             ],
         },
-        "manpower": {
+        "manpower": _payroll_gated({
             "opening": ds.fmt_num(m.get("opening_headcount")),
             "hires": ds.fmt_num(m.get("hires")),
             "resigned": ds.fmt_num(m.get("resigned")),
@@ -395,7 +409,7 @@ def _serialize_snapshot(snap: dict) -> dict:
             "effective_staff": ds.fmt_num(
                 float(m["average_effective_staff"])
                 if m.get("average_effective_staff") is not None else None),
-        },
+        }, user),
         "stock": {
             "total_loss": ds.fmt_rm(st.get("total_loss_cents")),
             "loss_pct": ds.fmt_pct(st.get("loss_pct_of_sales")),
@@ -403,8 +417,8 @@ def _serialize_snapshot(snap: dict) -> dict:
             "codes": codes,
         },
         "actions": {
-            "total": sum(counts.values()),
-            "open": counts.get("todo", 0),
+            "total": sum(v for k, v in counts.items() if k != "overdue"),
+            "open": a.get("open"),
             "in_progress": counts.get("in_progress", 0),
             "blocked": counts.get("blocked", 0),
             "done": counts.get("done", 0),

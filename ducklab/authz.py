@@ -110,6 +110,14 @@ def require_config_manager(user: User) -> None:
         raise AuthorizationError("Configuration management not permitted")
 
 
+def require_store_manager(user: User) -> None:
+    """Store register/edit/activate-deactivate: Super Admin only, matching
+    the authz docstring and the Store Management UI."""
+    require_active(user)
+    if not user.is_super_admin:
+        raise AuthorizationError("Store management requires Super Admin")
+
+
 def require_finalizer(user: User) -> None:
     require_active(user)
     if not can_finalize_reports(user):

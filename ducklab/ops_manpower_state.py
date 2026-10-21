@@ -382,8 +382,11 @@ class ManpowerState(ExpensesState):
         if store_id is not None and month is not None:
             try:
                 user = self._actor()
+                # Event handlers can be invoked directly over the socket:
+                # payroll fields load ONLY for configuration managers.
+                can_payroll = authz.can_manage_config(user)
                 cfg = app_service.get_month_config(user, store_id, month)
-                values.update({
+                staffing = {
                     "c_opening": (str(cfg.opening_headcount_ft)
                                   if cfg.opening_headcount_ft is not None
                                   else ""),
@@ -394,6 +397,8 @@ class ManpowerState(ExpensesState):
                                     else ""),
                     "c_turnover": _pct_str(cfg.turnover_threshold),
                     "c_ratio_target": _pct_str(cfg.salary_ratio_target),
+                }
+                payroll = {
                     "p_salary": (f"{cfg.salary_basic_allowance_cents / 100:.2f}"
                                  if cfg.salary_basic_allowance_cents
                                  is not None else ""),
@@ -402,7 +407,9 @@ class ManpowerState(ExpensesState):
                     "p_support": (f"{cfg.support_team_cost_cents / 100:.2f}"
                                   if cfg.support_team_cost_cents is not None
                                   else ""),
-                })
+                } if can_payroll else {}
+                values.update(staffing)
+                values.update(payroll)
             except Exception:
                 pass
         for a, v in values.items():
@@ -457,6 +464,13 @@ class ManpowerState(ExpensesState):
             user = self._actor()
         except AuthenticationError:
             self.cfg_error = "Your session has expired. Please sign in again."
+            return
+        # Server-side: payroll/config writes require can_manage_config,
+        # even when this event is invoked directly over the socket.
+        if not authz.can_manage_config(user):
+            self.cfg_error = (
+                "Only super admins and administrators can manage monthly "
+                "configuration and payroll.")
             return
         # Never create a configuration implicitly to enable manpower edits.
         try:

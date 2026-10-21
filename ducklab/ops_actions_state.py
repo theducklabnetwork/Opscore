@@ -39,7 +39,7 @@ FILTER_PRIORITIES = ["All priorities", *PRIORITIES]
 
 
 def _today() -> date:
-    return datetime.now(ZoneInfo("Asia/Kuala_Lumpur")).date()
+    return kpi.kl_today()
 
 
 class ActionsState(StoresState):
@@ -141,8 +141,7 @@ class ActionsState(StoresState):
             self.error_message = "No access to this store."
             return
         today = _today()
-        visible = [a for a in all_actions
-                   if _raised_month(a) == month or _is_open(a)]
+        visible = kpi.actions_in_month_scope(all_actions, month)
         counts = kpi.action_counts([a.input for a in visible], as_of=today)
         self.n_open = str(kpi.open_actions(counts))
         self.n_overdue = str(counts["overdue"])
@@ -152,9 +151,7 @@ class ActionsState(StoresState):
         for a in visible:
             st = a.input.status or "Open"
             due = a.input.due_date
-            overdue = (due is not None and due < today
-                       and st not in ("Done", "Cancelled")
-                       and bool(a.issue))
+            overdue = kpi.is_overdue(a.input, today)
             carried = _raised_month(a) != month
             rows.append({
                 "id": str(a.id),

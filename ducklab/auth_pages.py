@@ -89,6 +89,11 @@ class AuthState(rx.State):
         if not ok:
             self.error = "Invalid email or password"
             return None
+        # Reset the whole state tree before redirecting: a direct /login
+        # (without sign-out) must never hydrate the next session with the
+        # previous user's data in this tab.
+        self.reset()
+        self.password = ""
         # The /api/session endpoint already validated credentials and set
         # the HttpOnly cookie. The current WebSocket connection was opened
         # before login, so its cached request headers do not carry the
@@ -102,8 +107,9 @@ class AuthState(rx.State):
             if token:
                 app_service.auth.logout(token)
         finally:
-            self.display_name = ""
-            self.email = ""
+            # Reset the whole state tree: nothing from this session may
+            # remain visible to the next user of this browser tab.
+            self.reset()
         yield rx.call_script(_LOGOUT_JS)
         # Full navigation drops the authenticated socket connection.
         yield rx.call_script("window.location.assign('/login')")
