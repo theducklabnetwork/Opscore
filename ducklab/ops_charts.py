@@ -36,6 +36,7 @@ _DARK = dict(
     grid="#31353B",        # slate-6
     accent="#6E6BD8",      # indigo-9
     accent_fill="rgba(110,107,216,0.18)",
+    pace_fill="rgba(110,107,216,0.07)",
     budget="#B0B4BA",
     green="#3DD68C",
     amber="#FFC53D",
@@ -50,6 +51,7 @@ _LIGHT = dict(
     grid="#DFE0E2",
     accent="#5B5BD6",
     accent_fill="rgba(91,91,214,0.14)",
+    pace_fill="rgba(91,91,214,0.06)",
     budget="#60646C",
     green="#18794E",
     amber="#B26A00",
@@ -213,7 +215,7 @@ def pace_chart(days: Sequence[int],
                          for v in actual_cum_cents],
         mode="lines", connectgaps=False, name="Actual",
         line=dict(color=pal["accent"], width=2.5),
-        fill="tozeroy", fillcolor=pal["accent_fill"],
+        fill="tozeroy", fillcolor=pal["pace_fill"],
         hovertemplate="Day %{x}<br>Actual: RM %{y:,.0f}<extra></extra>",
     ))
     fig.update_layout(**_base_layout(pal, y_title, x_title="Day of month"))

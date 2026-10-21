@@ -77,22 +77,64 @@ def dashboard_page() -> rx.Component:
 # appears exactly once on the page)
 # ---------------------------------------------------------------------------
 
-def _hero_card(icon, title, pill, href, spark=None) -> rx.Component:
-    """One pillar hero card: label, big value, progress bar, status chip,
+def _plain_bar(pill, height: str = "6px") -> rx.Component:
+    """Single-segment styled bar (0..1 in pill["progress"])."""
+    return rx.box(
+        rx.box(
+            width=(pill["progress"].to(float) * 100).to(str) + "%",
+            height="100%",
+            background_color=rx.color(pill["progress_color"], 9),
+            border_radius="3px",
+        ),
+        width="100%", height=height,
+        background_color=rx.color("slate", 4),
+        border_radius="3px", overflow="hidden",
+    )
+
+
+def _sales_bar(pill) -> rx.Component:
+    """Two segments: MTD solid, projected extension lighter; capped at
+    100% width with a "+X%" label when the projection exceeds target."""
+    return rx.hstack(
+        rx.box(
+            rx.box(
+                width=(pill["mtd_pct"].to(float) * 100).to(str) + "%",
+                height="100%",
+                background_color=rx.color(pill["progress_color"], 9),
+            ),
+            rx.box(
+                width=((pill["fill_pct"].to(float)
+                        - pill["mtd_pct"].to(float)) * 100).to(str) + "%",
+                height="100%",
+                background_color=rx.color(pill["progress_color"], 9),
+                opacity="0.35",
+            ),
+            display="flex", width="100%", height="6px",
+            background_color=rx.color("slate", 4),
+            border_radius="3px", overflow="hidden", flex="1",
+        ),
+        rx.cond(
+            pill["over_label"] != "",
+            rx.text(pill["over_label"], size="1", color=ds.TEXT_FAINT,
+                    white_space="nowrap"),
+        ),
+        spacing="2", align="center", width="100%",
+    )
+
+
+def _hero_card(icon, title, pill, href, spark=None,
+               bar=None) -> rx.Component:
+    """One pillar hero card: label, status chip, big value, one visual,
     one context line; compact "Not reported yet" state when empty."""
+    if bar is None:
+        bar = _plain_bar(pill)
     reported = pill["reported"] != ""
     body_reported = rx.vstack(
-        rx.hstack(
-            rx.heading(pill["value"], size="7", weight="bold",
-                       title=pill["title"]),
-            rx.spacer(),
-            rx.badge(pill["status"], color_scheme=pill["status_color"],
-                     variant="soft", size="1"),
-            align="center", width="100%",
-        ),
-        rx.progress(value=pill["progress"].to(int), max=1,
-                    color_scheme=pill["progress_color"],
-                    width="100%", height="6px"),
+        rx.badge(pill["status"], color_scheme=pill["status_color"],
+                 variant="soft", size="1"),
+        rx.heading(pill["value"], size="7", weight="bold",
+                   title=pill["title"], white_space="nowrap"),
+        bar,
         rx.cond(
             spark is not None,
             spark,
@@ -144,7 +186,8 @@ def _hero_row() -> rx.Component:
     )
     return rx.grid(
         _hero_card("trending-up", "Sales MTD", OverviewState.pill_sales,
-                   "/ops/sales", spark=sales_spark),
+                   "/ops/sales", spark=sales_spark,
+                   bar=_sales_bar(OverviewState.pill_sales)),
         _hero_card("receipt", "Expenses paid MTD",
                    OverviewState.pill_expenses, "/ops/expenses"),
         _hero_card("users", "Manpower — salary ratio",
@@ -163,7 +206,7 @@ def _target_row(t) -> rx.Component:
             rx.text(t["label"], size="1", color=ds.TEXT_MUTED,
                     weight="medium"),
             rx.spacer(),
-            rx.text(t["target"], size="1", color=ds.TEXT_FAINT),
+            rx.text(t["target"], size="1", title=t["target"]),
             rx.text(" · ", size="1", color=ds.TEXT_FAINT),
             rx.text(t["pct"], size="1", color=ds.TEXT_FAINT),
             rx.badge(t["status"], color_scheme=t["status_color"],
@@ -201,8 +244,22 @@ def _main_row() -> rx.Component:
     )
     targets_card = rx.card(
         rx.vstack(
-            ds.section_heading("Sales Targets", "target"),
+            ds.section_heading(OverviewState.targets_title, "target"),
             rx.foreach(OverviewState.targets, _target_row),
+            rx.cond(
+                OverviewState.levels_configured == "",
+                rx.text("Levels 2-4: no uplift set in Monthly Setup",
+                        size="1", color=ds.TEXT_FAINT),
+            ),
+            rx.divider(),
+            rx.foreach(
+                OverviewState.targets_extra,
+                lambda x: rx.hstack(
+                    rx.text(x["label"], size="1", color=ds.TEXT_MUTED),
+                    rx.spacer(),
+                    rx.text(x["value"], size="1", weight="medium",
+                            title=x["title"]),
+                    align="center", width="100%")),
             spacing="3", width="100%",
         ),
         width="100%", id="targets-panel",

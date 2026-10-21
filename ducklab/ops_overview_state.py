@@ -67,6 +67,9 @@ class OverviewState(ActionsState):
 
     # sales targets panel: [{label, target, pct, progress, status, ...}]
     targets: list[dict] = []
+    targets_title: str = "Sales targets"
+    targets_extra: list[dict[str, str]] = []
+    levels_configured: str = ""
 
     # "At a glance" secondary figures: [{label, value, title, href}]
     glance: list[dict[str, str]] = []
@@ -99,6 +102,9 @@ class OverviewState(ActionsState):
         self.pace_fig_light = go.Figure()
         self.pace_has_data = False
         self.targets = []
+        self.targets_title = "Sales targets"
+        self.targets_extra = []
+        self.levels_configured = ""
         self.glance = []
         self.header_context = ""
         self.in_progress = ""
@@ -212,18 +218,27 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     proj_cents = (int(s.month_end_sales_cents)
                   if s.month_end_sales_cents is not None else None)
     sales_reported = entered > 0
+    mtd_pct = float(s.sales_mtd_cents / l1) if l1 and sales_reported else 0.0
+    proj_pct = float(proj_cents / l1) if l1 and proj_cents else 0.0
+    over = proj_pct > 1.0
+    # projected statuses are not results: neutral (amber) until complete
+    sales_chip_color = (STATUS_COLOR.get(l1_status, "gray")
+                        if complete else
+                        ("gray" if l1_status in ("Awaiting data", "No target")
+                         else "amber"))
     out["pill_sales"] = {
         "reported": "1" if sales_reported else "",
         "value": ops_charts.fmt_money_compact(s.sales_mtd_cents),
         "title": ds.fmt_rm(s.sales_mtd_cents),
-        "progress": (min(float(s.sales_mtd_cents / l1), 1.0)
-                     if l1 and sales_reported else 0.0),
-        "marker": (min(float(proj_cents / l1), 1.0)
-                   if l1 and proj_cents else 0.0),
-        "progress_color": "green" if l1_status == "Achieved" else "indigo",
+        "mtd_pct": mtd_pct,
+        "proj_pct": proj_pct,
+        "fill_pct": min(proj_pct, 1.0),
+        "over_label": (f"+{round((proj_pct - 1.0) * 100)}%" if over else ""),
+        "progress_color": ("green" if complete and l1_status == "Achieved"
+                           else "indigo"),
         "status": (l1_status if complete
                    else f"Projected: {l1_status}"),
-        "status_color": STATUS_COLOR.get(l1_status, "gray"),
+        "status_color": sales_chip_color,
         "context": ("Projected "
                     + ops_charts.fmt_money_compact(proj_cents)
                     + " · " + ops_charts.fmt_pct1(proj_ach_of(proj_cents, l1))
@@ -306,7 +321,16 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                     + ops_charts.fmt_money_compact(st.total_loss_cents)),
     }
 
-    # Sales targets panel: Level 1-4 progress vs engine achievement/status
+    # Sales targets panel: progress vs engine achievement/status. If no
+    # Level 2-4 uplift is configured, the levels equal Level 1 by workbook
+    # rule (base x (1 + 0)) — collapse to Level 1 plus a muted note.
+    levels_configured = bool(cfg.level2_pct or cfg.level3_pct
+                             or cfg.level4_pct)
+    level_names = (("level1", "level2", "level3", "level4")
+                   if levels_configured else ("level1",))
+    out["levels_configured"] = "1" if levels_configured else ""
+    out["targets_title"] = ("Projected month-end vs targets" if not complete
+                            else "Sales targets")
     out["targets"] = [
         {"label": f"Level {i}",
          "target": ops_charts.fmt_money_compact(t),
@@ -315,12 +339,27 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
          "progress": (min(float(kpi.achievement(proj_cents, t)), 1.0)
                       if kpi.achievement(proj_cents, t) is not None else 0.0),
          "status": s.status_by_level.get(name, "Awaiting data"),
-         "status_color": STATUS_COLOR.get(
-             s.status_by_level.get(name, ""), "gray"),
-         "progress_color": ("green" if s.status_by_level.get(name)
+         "status_color": (STATUS_COLOR.get(
+             s.status_by_level.get(name, ""), "gray") if complete else
+             ("gray" if s.status_by_level.get(name, "Awaiting data")
+              in ("Awaiting data", "No target") else "amber")),
+         "progress_color": ("green" if complete and s.status_by_level.get(name)
                             == "Achieved" else "indigo")}
-        for i, name in enumerate(("level1", "level2", "level3", "level4"), 1)
+        for i, name in enumerate(level_names, 1)
         for t in [s.targets.get(name)]
+    ]
+    # run-rate / needed per remaining day live in the targets panel
+    rr = int(s.required_daily_run_rate) \
+        if s.required_daily_run_rate is not None else None
+    nd = int(s.needed_per_remaining_day) \
+        if s.needed_per_remaining_day is not None else None
+    out["targets_extra"] = [
+        {"label": "Required daily run-rate",
+         "value": ops_charts.fmt_money_compact(rr),
+         "title": ds.fmt_rm0(rr)},
+        {"label": "Needed per remaining day",
+         "value": ops_charts.fmt_money_compact(nd),
+         "title": ds.fmt_rm0(nd)},
     ]
 
     # --- secondary figures ("At a glance") --------------------------------
@@ -332,27 +371,24 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                or (a.input.status or "Open") in
                ("Open", "In progress", "Blocked")]
     acounts = kpi.action_counts([a.input for a in visible], as_of=today)
-    rr = int(s.required_daily_run_rate) \
-        if s.required_daily_run_rate is not None else None
-    nd = int(s.needed_per_remaining_day) \
-        if s.needed_per_remaining_day is not None else None
     avg = int(s.sales_mtd_cents / entered) if entered else None
     glance_pairs = [
-        ("Required daily run-rate",
-         ops_charts.fmt_money_compact(rr), ds.fmt_rm0(rr), "/ops/sales"),
-        ("Needed per remaining day",
-         ops_charts.fmt_money_compact(nd), ds.fmt_rm0(nd), "/ops/sales"),
         ("Average per reported day",
          ops_charts.fmt_money_compact(avg), ds.fmt_rm0(avg), "/ops/sales"),
-        ("Incurred expenses",
-         ops_charts.fmt_money_compact(e.incurred_cents),
-         ds.fmt_rm(e.incurred_cents), "/ops/expenses"),
-        ("Open expenses",
-         ops_charts.fmt_money_compact(e.open_cents),
-         ds.fmt_rm(e.open_cents), "/ops/expenses"),
-        ("Expense lines to review", str(needs_review), "", "/ops/expenses"),
+    ]
+    if exp_reported:
+        glance_pairs += [
+            ("Incurred expenses",
+             ops_charts.fmt_money_compact(e.incurred_cents),
+             ds.fmt_rm(e.incurred_cents), "/ops/expenses"),
+            ("Open expenses",
+             ops_charts.fmt_money_compact(e.open_cents),
+             ds.fmt_rm(e.open_cents), "/ops/expenses"),
+            ("Expense lines to review", str(needs_review), "",
+             "/ops/expenses"),
+        ]
+    glance_pairs += [
         ("Open actions", str(kpi.open_actions(acounts)), "", "/ops/actions"),
-        ("Overdue actions", str(acounts["overdue"]), "", "/ops/actions"),
     ]
     out["glance"] = [
         {"label": label, "value": value, "title": title, "href": href}

@@ -108,6 +108,45 @@ class VisualFixture(unittest.TestCase):
             ov["pill_sales"]["status"].startswith("Projected:"))
         self.assertEqual(ov["in_progress"], "")
 
+    # 4 ------------------------------------------------------------------
+    def test_levels_collapse_when_no_uplift(self):
+        # uplift blank (this fixture) -> Level 1 only + note
+        ov = self.overview()
+        self.assertEqual(ov["levels_configured"], "")
+        self.assertEqual([t["label"] for t in ov["targets"]], ["Level 1"])
+        # set Level 2 uplift -> all four levels shown
+        self.app.configure_month(
+            self.admin, self.sa, "2026-10", level1_base_cents=rm(200000),
+            level2_pct=0.10, level3_pct=0.20, level4_pct=0.30,
+            opening_headcount_ft=9, stock_loss_target=0.015,
+            salary_ratio_target=0.06818, part_timer_factor=0.5,
+            turnover_threshold=0.05,
+            salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
+        ov = self.overview()
+        self.assertEqual(ov["levels_configured"], "1")
+        self.assertEqual([t["label"] for t in ov["targets"]],
+                         ["Level 1", "Level 2", "Level 3", "Level 4"])
+        self.assertNotEqual(ov["targets"][0]["target"],
+                            ov["targets"][1]["target"])
+
+    # 5 ------------------------------------------------------------------
+    def test_chip_style_projected_neutral_until_complete(self):
+        # incomplete month -> projected chips are amber (not green/red)
+        for d in range(1, 21):
+            self.app.record_daily(self.admin, self.sa, date(2026, 10, d),
+                                  sales_cents=rm(9565))  # above-pace
+        ov = self.overview()
+        self.assertEqual(ov["pill_sales"]["status_color"], "amber")
+        self.assertTrue(all(t["status_color"] == "amber"
+                            for t in ov["targets"]))
+        # complete month -> semantic colors return
+        for d in range(1, 31):
+            self.app.record_daily(self.admin, self.sa, date(2026, 9, d),
+                                  sales_cents=rm(9000))  # 270k > 200k L1
+        ov = self.overview(month="2026-09")
+        self.assertEqual(ov["pill_sales"]["status_color"], "green")
+        self.assertEqual(ov["targets"][0]["status_color"], "green")
+
 
 if __name__ == "__main__":
     unittest.main()

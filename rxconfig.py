@@ -13,5 +13,6 @@ config = rx.Config(
                 appearance="dark",
             )
         ),
-    ]
+    ],
+    show_built_with_reflex=False,
 )
