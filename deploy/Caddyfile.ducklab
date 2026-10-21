@@ -1,0 +1,32 @@
+# DuckLab Operations — production Caddy configuration (PROPOSAL — not applied)
+#
+# Validate:   caddy validate --config /path/to/this/file
+# Apply:      replace /etc/caddy/Caddyfile, then `systemctl reload caddy`
+#
+# Single-port architecture: granian serves the compiled frontend, /api/*,
+# the /_event WebSocket, and static assets together on 127.0.0.1:3000.
+# Caddy therefore needs only a single reverse_proxy — no path splitting,
+# no separate backend upstream. WebSocket upgrade is handled automatically
+# by reverse_proxy (Connection/Upgrade headers pass through by default).
+
+app.theducklab.com {
+	# Automatic HTTPS (Let's Encrypt) via the public domain. Caddy manages
+	# the certificate and HTTP->HTTPS redirect on ports 80/443, and passes
+	# X-Forwarded-For/Proto/Host to the upstream by default. DuckLab trusts
+	# X-Forwarded-For only from loopback (DUCKLAB_TRUST_PROXY=1).
+	reverse_proxy 127.0.0.1:3000
+
+	# Reasonable request ceiling for form posts / uploads (none today, but
+	# defensive). Reflex has no large uploads; keep this small.
+	request_body {
+		max_size 16MB
+	}
+
+	# Do not expose server internals; defense-in-depth headers.
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

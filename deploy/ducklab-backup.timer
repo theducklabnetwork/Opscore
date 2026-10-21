@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly DuckLab Operations SQLite backup
+
+[Timer]
+# Run nightly at 02:15 local time; persist across reboots / missed runs.
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

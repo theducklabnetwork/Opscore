@@ -1,0 +1,17 @@
+[Unit]
+Description=DuckLab Operations SQLite backup
+# Runs the consistent online-backup script as the same non-root identity as
+# the app, so the main application never needs root and the backup job needs
+# no extra privilege. Failure is visible via `journalctl -u ducklab-backup`.
+
+[Service]
+Type=oneshot
+User=ducklab
+Group=ducklab
+EnvironmentFile=-/etc/ducklab/ducklab.env
+ExecStart=/usr/local/bin/ducklab-backup
+# The script reads DUCKLAB_DB_PATH and writes to /var/lib/ducklab/backups
+# (owned by ducklab, mode 700; backup files mode 600).
+Nice=10
+IOSchedulingClass=best-effort
+NoNewPrivileges=true

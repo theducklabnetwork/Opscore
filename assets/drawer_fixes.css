@@ -1,0 +1,11 @@
+/* DuckLab global CSS fixes.
+ *
+ * Radix Themes select dropdowns render in a portal (position: fixed, no
+ * z-index) and so paint *underneath* the vaul drawer content (which sets
+ * z-index: 50). Pin all Radix select popovers above drawer layers so
+ * options inside drawer forms stay clickable.
+ */
+.rt-SelectContent,
+.rt-SelectContent[data-state="open"] {
+  z-index: 60 !important;
+}

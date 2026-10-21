@@ -1,0 +1,20 @@
+.web
+__pycache__/
+*.db
+*.py[cod]
+assets/external/
+.states
+
+# private / local data
+.devdata/
+.env
+.env.*
+*.xlsx
+*.xls
+*.log
+*.pgid
+
+# environments and caches
+.venv/
+node_modules/
+.pytest_cache/

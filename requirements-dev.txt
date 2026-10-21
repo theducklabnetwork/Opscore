@@ -1,0 +1,6 @@
+# Development / QA dependencies — installed in the developer venv only.
+# NEVER installed in production. Install with:
+#   pip install -r requirements.txt -r requirements-dev.txt
+pytest==9.1.1
+playwright==1.64.0
+openpyxl==3.1.5

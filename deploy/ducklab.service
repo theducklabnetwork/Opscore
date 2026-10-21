@@ -1,0 +1,70 @@
+[Unit]
+Description=DuckLab Operations (Reflex, production single-port, versioned releases)
+Documentation=https://app.theducklab.com/
+# Start after the network is up; Caddy proxies to this service.
+After=network-online.target
+Wants=network-online.target
+# Restart-loop guard: at most 5 starts per 5 minutes.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Dedicated non-root identity (created by the installer).
+User=ducklab
+Group=ducklab
+
+# Versioned release layout: /opt/ducklab-current is an atomic symlink to the
+# active release under /opt/ducklab-releases/<release-id>/. systemd resolves
+# the symlink at service start; flipping the symlink + restarting the service
+# is the entire cutover mechanism (see deploy/OPERATOR-RELEASE.md).
+#
+# NOTE: the virtual environment lives inside each release directory and was
+# created IN PLACE at that absolute path — a venv must never be relocated.
+WorkingDirectory=/opt/ducklab-current
+EnvironmentFile=/etc/ducklab/ducklab.env
+# Release identity for /api/health and audit logs. Updated by the release
+# tooling at activation time via this drop-in — see ducklab-release.conf.
+EnvironmentFile=-/etc/ducklab/ducklab-release.env
+
+# Production single-port: the granian backend serves the compiled frontend,
+# /api/*, /_event (WebSocket), and static assets together on one loopback port.
+# Caddy reverse-proxies https://app.theducklab.com -> 127.0.0.1:3000.
+# systemd resolves /opt/ducklab-current to the real release dir before exec,
+# so shebangs inside the release venv always point at a stable absolute path.
+ExecStart=/opt/ducklab-current/.venv/bin/reflex run \
+    --env prod \
+    --single-port \
+    --backend-host 127.0.0.1 \
+    --backend-port 3000
+
+# Startup: production build (compile + frontend bundle) can take a few minutes
+# on first boot; do not kill it prematurely.
+TimeoutStartSec=300
+# Graceful stop: granian handles SIGTERM by draining; give it time.
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+
+# Restart policy: recover from crashes, but avoid aggressive restart loops.
+Restart=on-failure
+RestartSec=5
+
+# Logging to the journal (view: journalctl -u ducklab -f).
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ducklab
+
+# --- Hardening (scoped to what the app actually needs) ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Writable only: the persistent DB dir and the release tree (build artifacts
+# under .web). The symlink target lives under /opt/ducklab-releases, so BOTH
+# paths must be listed — systemd follows the symlink and checks the real path.
+ReadWritePaths=/var/lib/ducklab /opt/ducklab-releases
+ProtectHome=true
+# Reflex/granian need real network sockets and process control; not restricted.
+
+[Install]
+WantedBy=multi-user.target

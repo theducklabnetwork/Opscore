@@ -1,0 +1,16 @@
+# DuckLab Operations — runtime dependencies (direct, top-level only).
+#
+# Transitive dependencies are pinned in requirements.lock, which is the
+# authoritative manifest for production builds. Edit THIS file to change
+# direct dependencies, then regenerate the lock (see below).
+#
+# Regenerate the lock (on the dev VM, Python 3.14):
+#   python3.14 -m venv /tmp/opencode/lock-venv
+#   /tmp/opencode/lock-venv/bin/pip install -r requirements.txt
+#   /tmp/opencode/lock-venv/bin/pip freeze --exclude-editable > requirements.lock
+#   rm -rf /tmp/opencode/lock-venv
+# Review the diff of requirements.lock before committing it.
+#
+# Python: 3.14 (see pyproject-independent note in deploy/RELEASES.md).
+reflex==0.10.0
+argon2-cffi==25.1.0
