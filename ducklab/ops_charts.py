@@ -64,7 +64,7 @@ _CONFIG = dict(
 )
 
 
-def chart(fig_json):
+def chart(fig_json, height: str = "340px"):
     """Render a builder's figure dict (may be a State Var)."""
     import reflex as rx
     return rx.plotly(
@@ -72,7 +72,7 @@ def chart(fig_json):
         config=_CONFIG,
         use_resize_handler=True,
         width="100%",
-        height="340px",
+        height=height,
     )
 
 FONT_FAMILY = ("ui-sans-serif, system-ui, -apple-system, 'Segoe UI', "
@@ -151,7 +151,47 @@ def daily_line(day_labels: Sequence[str],
 
 
 # ---------------------------------------------------------------------------
-# 2. cumulative actual vs budget pace
+# 2. sparkline (tiny daily line, no axes, static — overview hero cards)
+# ---------------------------------------------------------------------------
+def sparkline(days: Sequence[int],
+              values_rm: Sequence[Optional[float]],
+              dark: bool,
+              height: int = 56) -> go.Figure:
+    """One value per calendar day; None -> gap (same rules as daily_line).
+    No axes, no hover, no modebar — a compact trend shape only."""
+    pal = _pal(dark)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=list(days), y=[None if v is None else v for v in values_rm],
+        mode="lines", connectgaps=False,
+        line=dict(color=pal["accent"], width=1.5),
+        fill="tozeroy", fillcolor=pal["accent_fill"],
+        hoverinfo="skip",
+    ))
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=0, r=0, t=2, b=0),
+        xaxis=dict(visible=False, fixedrange=True),
+        yaxis=dict(visible=False, fixedrange=True),
+        showlegend=False, hovermode=False, height=height,
+    )
+    return fig
+
+
+def sparkline_chart(fig_json):
+    """Render a sparkline figure (no interactions)."""
+    import reflex as rx
+    return rx.plotly(
+        data=fig_json,
+        config={"displayModeBar": False, "staticPlot": True,
+                "responsive": True},
+        width="100%",
+        height="56px",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 2b. cumulative actual vs budget pace
 # ---------------------------------------------------------------------------
 def pace_chart(days: Sequence[int],
                actual_cum_cents: Sequence[Optional[float]],
@@ -249,3 +289,29 @@ def composition(items: Sequence[dict], dark: bool,
     fig.update_layout(**layout)
     fig.update_xaxes(type="category")
     return fig
+
+
+# --- overview-only compact formatting (module pages keep exact values) ---
+def fmt_money_compact(cents: Optional[float]) -> str:
+    """Overview-only compact money: RM 191.3k / RM 660 / — for blank.
+
+    Values < 10,000 are shown exact; >= 10,000 rounded to 0.1k (>= 1M as
+    M). The exact value is always available via fmt_rm for tooltips.
+    """
+    if cents is None:
+        return "—"
+    rm = cents / 100
+    sign = "-" if rm < 0 else ""
+    a = abs(rm)
+    if a >= 1_000_000:
+        return f"{sign}RM {a / 1_000_000:.1f}M"
+    if a >= 10_000:
+        return f"{sign}RM {a / 1_000:.1f}k"
+    return f"{sign}RM {a:,.2f}"
+
+
+def fmt_pct1(ratio: Optional[float]) -> str:
+    """Overview-only: percentages to 1 decimal; dash for blank."""
+    if ratio is None:
+        return "—"
+    return f"{float(ratio) * 100:.1f}%"

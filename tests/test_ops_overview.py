@@ -99,8 +99,8 @@ class OverviewFixture(unittest.TestCase):
         self.assertEqual(ov["cc"]["sales_mtd"],
                          ds.fmt_rm(rep.sales.sales_mtd_cents))
         self.assertEqual(ov["cc"]["paid"], ds.fmt_rm(rep.expenses.paid_cents))
-        self.assertEqual(ov["cc"]["stock_loss"],
-                         ds.fmt_rm(rep.stock.total_loss_cents))
+        self.assertEqual(ov["pill_stock"]["title"],
+                         ds.fmt_pct(rep.stock.loss_pct_of_sales))
         self.assertEqual(ov["cc"]["days"],
                          f"{rep.sales.days_entered} / "
                          f"{rep.sales.days_in_month}")
@@ -111,11 +111,11 @@ class OverviewFixture(unittest.TestCase):
         ov = self.overview()
         rep = self.app.preview_month(self.admin, self.sa, self.month,
                                      as_of=TODAY)
-        self.assertEqual(ov["pill_sales"]["status"],
-                         rep.sales.status_by_level["level1"])
+        self.assertIn(rep.sales.status_by_level["level1"],
+                      ov["pill_sales"]["status"])  # "Projected:" prefix ok
         self.assertEqual(ov["pill_stock"]["status"], rep.stock.status)
         self.assertIn(rep.manpower.turnover_status,
-                      ov["pill_manpower"]["status"])
+                      ov["pill_manpower"]["context"])
 
     # 3 ------------------------------------------------------------------
     def test_payroll_hidden_without_permission(self):

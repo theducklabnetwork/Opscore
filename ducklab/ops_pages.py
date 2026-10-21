@@ -54,20 +54,15 @@ def dashboard_page() -> rx.Component:
                     rx.cond(
                         OverviewState.loaded,
                         rx.vstack(
-                            _pillar_strip(),
-                            _command_center(),
-                            _attention_panel(),
-                            _pace_chart(),
-                            rx.link(
-                                rx.button(
-                                    rx.icon("file-chart-column", size=16),
-                                    "Open Monthly Report",
-                                    color_scheme="indigo", variant="soft"),
-                                href="/ops/report"),
-                            spacing="5", width="100%",
+                            rx.text(OverviewState.header_context, size="2",
+                                    color=ds.TEXT_MUTED),
+                            _hero_row(),
+                            _main_row(),
+                            _bottom_row(),
+                            spacing="4", width="100%",
                         ),
                     ),
-                    spacing="4", width="100%",
+                    spacing="3", width="100%",
                 ),
             ),
             width="100%",
@@ -78,101 +73,157 @@ def dashboard_page() -> rx.Component:
 
 
 # ---------------------------------------------------------------------------
-# Overview sections (values pre-formatted by OverviewState)
+# Overview sections (values pre-formatted by OverviewState; each figure
+# appears exactly once on the page)
 # ---------------------------------------------------------------------------
 
-def _pillar(icon, title, pill, href) -> rx.Component:
+def _hero_card(icon, title, pill, href, spark=None) -> rx.Component:
+    """One pillar hero card: label, big value, progress bar, status chip,
+    one context line; compact "Not reported yet" state when empty."""
+    reported = pill["reported"] != ""
+    body_reported = rx.vstack(
+        rx.hstack(
+            rx.heading(pill["value"], size="7", weight="bold",
+                       title=pill["title"]),
+            rx.spacer(),
+            rx.badge(pill["status"], color_scheme=pill["status_color"],
+                     variant="soft", size="1"),
+            align="center", width="100%",
+        ),
+        rx.progress(value=pill["progress"].to(int), max=1,
+                    color_scheme=pill["progress_color"],
+                    width="100%", height="6px"),
+        rx.cond(
+            spark is not None,
+            spark,
+            rx.text(pill["context"], size="1", color=ds.TEXT_FAINT),
+        ),
+        spacing="2", align="start", width="100%",
+    )
+    body_empty = rx.vstack(
+        rx.spacer(),
+        rx.text("Not reported yet", size="2", color=ds.TEXT_MUTED,
+                weight="medium"),
+        rx.text("Open this module to enter data", size="1",
+                color=ds.TEXT_FAINT),
+        rx.spacer(),
+        spacing="1", align="start", width="100%",
+    )
     return rx.link(
         rx.card(
             rx.vstack(
-                rx.hstack(rx.icon(icon, size=18, color=ds.ACCENT_TEXT),
-                          rx.text(title, size="2", color=ds.TEXT_MUTED,
+                rx.hstack(rx.icon(icon, size=16, color=ds.TEXT_MUTED),
+                          rx.text(title, size="1", color=ds.TEXT_MUTED,
                                   weight="medium"),
                           spacing="2", align="center"),
-                rx.heading(pill["value"], size="6", weight="bold"),
-                rx.text(pill["reference"], size="1", color=ds.TEXT_FAINT),
-                rx.badge(pill["status"],
-                         color_scheme=pill["status_color"],
-                         variant="soft", size="1"),
-                spacing="2", align="start",
+                rx.cond(reported, body_reported, body_empty),
+                spacing="2", align="start", width="100%",
             ),
-            width="100%",
+            width="100%", height="100%",
         ),
         href=href, width="100%",
     )
 
 
-def _pillar_strip() -> rx.Component:
+def _hero_row() -> rx.Component:
+    sales_spark = rx.vstack(
+        rx.cond(OverviewState.is_dark,
+                ops_charts.sparkline_chart(OverviewState.spark_sales_dark),
+                ops_charts.sparkline_chart(OverviewState.spark_sales_light)),
+        rx.text(OverviewState.pill_sales["context"], size="1",
+                color=ds.TEXT_FAINT),
+        spacing="1", width="100%",
+    )
+    stock_spark = rx.vstack(
+        rx.cond(OverviewState.is_dark,
+                ops_charts.sparkline_chart(OverviewState.spark_stock_dark),
+                ops_charts.sparkline_chart(OverviewState.spark_stock_light)),
+        rx.text(OverviewState.pill_stock["context"], size="1",
+                color=ds.TEXT_FAINT),
+        spacing="1", width="100%",
+    )
     return rx.grid(
-        _pillar("trending-up", "Sales (month-end vs Level 1)",
-                OverviewState.pill_sales, "/ops/sales"),
-        _pillar("receipt", "Expenses (paid share of sales)",
-                OverviewState.pill_expenses, "/ops/expenses"),
-        _pillar("users", "Manpower (salary ratio · turnover)",
-                OverviewState.pill_manpower, "/ops/manpower"),
-        _pillar("boxes", "Stock (loss % vs target)",
-                OverviewState.pill_stock, "/ops/stock"),
+        _hero_card("trending-up", "Sales MTD", OverviewState.pill_sales,
+                   "/ops/sales", spark=sales_spark),
+        _hero_card("receipt", "Expenses paid MTD",
+                   OverviewState.pill_expenses, "/ops/expenses"),
+        _hero_card("users", "Manpower — salary ratio",
+                   OverviewState.pill_manpower, "/ops/manpower"),
+        _hero_card("boxes", "Stock loss % of sales",
+                   OverviewState.pill_stock, "/ops/stock",
+                   spark=stock_spark),
         columns=rx.breakpoints(initial="1", sm="2", lg="4"),
         spacing="3", width="100%", id="pillar-strip",
     )
 
 
-def _cc_card(label, value, href, icon="chevron-right") -> rx.Component:
-    return rx.link(
-        rx.card(
-            rx.vstack(
-                rx.text(label, size="1", color=ds.TEXT_MUTED),
-                rx.heading(value, size="4", weight="bold", wrap="nowrap"),
-                spacing="1", align="start"),
-            width="100%"),
-        href=href, width="100%")
+def _target_row(t) -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.text(t["label"], size="1", color=ds.TEXT_MUTED,
+                    weight="medium"),
+            rx.spacer(),
+            rx.text(t["target"], size="1", color=ds.TEXT_FAINT),
+            rx.text(" · ", size="1", color=ds.TEXT_FAINT),
+            rx.text(t["pct"], size="1", color=ds.TEXT_FAINT),
+            rx.badge(t["status"], color_scheme=t["status_color"],
+                     variant="soft", size="1"),
+            align="center", width="100%",
+        ),
+        rx.progress(value=t["progress"], max=1,
+                    color_scheme=t["progress_color"],
+                    width="100%", height="4px"),
+        spacing="1", width="100%",
+    )
 
 
-def _command_center() -> rx.Component:
-    cc = OverviewState.cc
-    return rx.card(
+def _main_row() -> rx.Component:
+    chart_card = rx.card(
         rx.vstack(
-            ds.section_heading("Command Center", "gauge"),
-            rx.grid(
-                _cc_card("Sales MTD", cc["sales_mtd"], "/ops/sales"),
-                _cc_card("Level 1 budget", cc["budget_l1"], "/ops/sales"),
-                _cc_card("Budget achievement", cc["achievement"],
-                         "/ops/sales"),
-                _cc_card("Projected achievement", cc["proj_achievement"],
-                         "/ops/sales"),
-                _cc_card("Days entered", cc["days"], "/ops/daily"),
-                _cc_card("Required daily run-rate", cc["run_rate"],
-                         "/ops/sales"),
-                _cc_card("Needed per remaining day", cc["needed"],
-                         "/ops/sales"),
-                _cc_card("Average per reported day", cc["avg_day"],
-                         "/ops/sales"),
-                _cc_card("Paid expenses", cc["paid"], "/ops/expenses"),
-                _cc_card("Incurred expenses", cc["incurred"],
-                         "/ops/expenses"),
-                _cc_card("Open expenses", cc["open_exp"], "/ops/expenses"),
-                _cc_card("Expense lines to review", cc["review"],
-                         "/ops/expenses"),
-                _cc_card("Stock loss MTD", cc["stock_loss"], "/ops/stock"),
-                _cc_card("Stock loss % of sales", cc["stock_pct"],
-                         "/ops/stock"),
-                _cc_card("Sales completion", cc["completion"], "/ops/daily"),
-                _cc_card("Open actions", cc["actions_open"], "/ops/actions"),
-                _cc_card("Overdue actions", cc["actions_overdue"],
-                         "/ops/actions"),
-                columns=rx.breakpoints(initial="2", sm="3", lg="4", xl="6"),
-                spacing="3", width="100%",
+            ds.section_heading("Pace vs Level 1 Budget", "chart-line"),
+            rx.cond(
+                OverviewState.pace_has_data,
+                rx.cond(
+                    OverviewState.is_dark,
+                    ops_charts.chart(OverviewState.pace_fig_dark,
+                                     height="360px"),
+                    ops_charts.chart(OverviewState.pace_fig_light,
+                                     height="360px")),
+                ds.empty_state(
+                    "Awaiting data",
+                    "Cumulative actuals stop at the last reported day; "
+                    "unreported days are never interpolated.",
+                    icon="chart-line"),
             ),
             spacing="3", width="100%",
         ),
-        width="100%", id="command-center",
+        width="100%", id="overview-pace",
+    )
+    targets_card = rx.card(
+        rx.vstack(
+            ds.section_heading("Sales Targets", "target"),
+            rx.foreach(OverviewState.targets, _target_row),
+            spacing="3", width="100%",
+        ),
+        width="100%", id="targets-panel",
+    )
+    return rx.grid(
+        chart_card, targets_card,
+        columns=rx.breakpoints(initial="1", lg="2fr 1fr"),
+        spacing="3", width="100%",
     )
 
 
 def _attention_panel() -> rx.Component:
     return rx.card(
         rx.vstack(
-            ds.section_heading("Needs Attention", "flag"),
+            rx.hstack(
+                ds.section_heading("Needs Attention", "flag"),
+                rx.spacer(),
+                rx.badge(OverviewState.attention.length(), color_scheme="red",
+                         variant="soft", size="1"),
+                align="center", width="100%",
+            ),
             rx.cond(
                 OverviewState.attention.length() > 0,
                 rx.vstack(
@@ -195,27 +246,43 @@ def _attention_panel() -> rx.Component:
             ),
             spacing="3", width="100%",
         ),
-        width="100%", id="attention-panel",
+        width="100%", height="100%", id="attention-panel",
     )
 
 
-def _pace_chart() -> rx.Component:
+def _glance_item(item) -> rx.Component:
+    return rx.link(
+        rx.hstack(
+            rx.text(item["label"], size="1", color=ds.TEXT_MUTED),
+            rx.spacer(),
+            rx.text(item["value"], size="1", weight="medium",
+                    title=item["title"]),
+            align="center", width="100%",
+        ),
+        href=item["href"], width="100%",
+    )
+
+
+def _glance_panel() -> rx.Component:
     return rx.card(
         rx.vstack(
-            ds.section_heading("Pace vs Level 1 Budget", "chart-line"),
-            rx.cond(
-                OverviewState.pace_has_data,
-                rx.cond(OverviewState.is_dark,
-                        ops_charts.chart(OverviewState.pace_fig_dark),
-                        ops_charts.chart(OverviewState.pace_fig_light)),
-                ds.empty_state("Awaiting data",
-                               "Cumulative actuals stop at the last reported "
-                               "day; unreported days are never interpolated.",
-                               icon="chart-line"),
+            ds.section_heading("At a Glance", "gauge"),
+            rx.grid(
+                rx.foreach(OverviewState.glance, _glance_item),
+                columns=rx.breakpoints(initial="1", sm="2"),
+                spacing="2", width="100%",
             ),
             spacing="3", width="100%",
         ),
-        width="100%", id="overview-pace",
+        width="100%", height="100%", id="at-a-glance",
+    )
+
+
+def _bottom_row() -> rx.Component:
+    return rx.grid(
+        _attention_panel(), _glance_panel(),
+        columns=rx.breakpoints(initial="1", lg="2"),
+        spacing="3", width="100%",
     )
 
 

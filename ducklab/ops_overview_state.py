@@ -53,17 +53,32 @@ class OverviewState(ActionsState):
     error: str = ""
     finalized_notice: str = ""
 
-    # four pillars (each: value / reference / status / status_color / href)
-    pill_sales: dict[str, str] = {}
-    pill_expenses: dict[str, str] = {}
-    pill_manpower: dict[str, str] = {}
-    pill_stock: dict[str, str] = {}
+    # four pillars (values pre-formatted; progress floats 0..1)
+    pill_sales: dict = {}
+    pill_expenses: dict = {}
+    pill_manpower: dict = {}
+    pill_stock: dict = {}
 
     # command-center cards
     cc: dict[str, str] = {}
 
     # needs attention: [{icon, text, href}]
     attention: list[dict[str, str]] = []
+
+    # sales targets panel: [{label, target, pct, progress, status, ...}]
+    targets: list[dict] = []
+
+    # "At a glance" secondary figures: [{label, value, title, href}]
+    glance: list[dict[str, str]] = []
+
+    header_context: str = ""
+    in_progress: str = ""
+
+    # sparklines (sales + stock), one figure per theme
+    spark_sales_dark: go.Figure = go.Figure()
+    spark_sales_light: go.Figure = go.Figure()
+    spark_stock_dark: go.Figure = go.Figure()
+    spark_stock_light: go.Figure = go.Figure()
 
     # pace chart (same data as /ops/sales)
     pace_fig_dark: go.Figure = go.Figure()
@@ -83,6 +98,14 @@ class OverviewState(ActionsState):
         self.pace_fig_dark = go.Figure()
         self.pace_fig_light = go.Figure()
         self.pace_has_data = False
+        self.targets = []
+        self.glance = []
+        self.header_context = ""
+        self.in_progress = ""
+        self.spark_sales_dark = go.Figure()
+        self.spark_sales_light = go.Figure()
+        self.spark_stock_dark = go.Figure()
+        self.spark_stock_light = go.Figure()
 
     # --- selector overrides -------------------------------------------------
     @rx.event
@@ -166,73 +189,141 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
 
     # --- four pillars ---------------------------------------------------
     l1_status = s.status_by_level.get("level1", "Awaiting data")
-    out = {}
-    out["pill_sales"] = {
-        "value": ds.fmt_rm0(int(s.month_end_sales_cents)
-                            if s.month_end_sales_cents is not None
-                            else None),
-        "reference": "Level 1 " + ds.fmt_rm0(s.targets.get("level1")),
-        "status": l1_status,
-        "status_color": STATUS_COLOR.get(l1_status, "gray"),
-    }
-    exp_status = e.total_expenses_status
-    exp_color = {"Within budget": "green", "Over budget": "red",
-                 "No budget": "gray", "No payments yet": "gray"}[exp_status]
-    out["pill_expenses"] = {
-        "value": ds.fmt_pct(e.expense_share_of_sales),
-        "reference": "Paid / sales, budget "
-                     + ds.fmt_rm0(e.total_budget_cents),
-        "status": exp_status,
-        "status_color": exp_color,
-    }
-    if can_payroll:
-        out["pill_manpower"] = {
-            "value": ds.fmt_pct(m.salary_ratio_incl_support),
-            "reference": "Target " + ds.fmt_pct(cfg.salary_ratio_target)
-                         + " · turnover "
-                         + ds.fmt_pct(m.turnover_pct),
-            "status": m.salary_ratio_status
-                      + " · " + m.turnover_status,
-            "status_color": RATIO_STATUS_COLOR.get(
-                m.salary_ratio_status, "gray"),
-            "turnover_color": TURNOVER_COLOR.get(m.turnover_status,
-                                                 "gray"),
-        }
-    else:
-        # Restricted: never place payroll figures in state. Turnover is
-        # headcount-based and follows the Manpower module (always shown).
-        out["pill_manpower"] = {
-            "value": "Restricted",
-            "reference": "Turnover " + ds.fmt_pct(m.turnover_pct),
-            "status": "Restricted · " + m.turnover_status,
-            "status_color": "gray",
-            "turnover_color": TURNOVER_COLOR.get(m.turnover_status,
-                                                 "gray"),
-        }
-    out["pill_stock"] = {
-        "value": ds.fmt_pct(st.loss_pct_of_sales),
-        "reference": "Target " + ds.fmt_pct(cfg.stock_loss_target),
-        "status": st.status,
-        "status_color": STOCK_COLOR.get(st.status, "gray"),
-    }
-
-    # --- command-center cards -------------------------------------------
     complete = entered == dim
     y, mnum = (int(x) for x in month.split("-"))
     month_end = date(y, mnum, dim)
     in_progress = today <= month_end
+    l1 = s.targets.get("level1")
+    out = {}
+
+    def proj_ach_of(cents, target):
+        return kpi.achievement(cents, target) if cents is not None else None
+
+    needs_review = sum(v for k, v in e.validation_counts.items()
+                       if k != "OK")
     if entered == 0:
         completion = "Awaiting entry"
     elif complete:
         completion = "Month complete"
     else:
         completion = "In progress"
-    l1 = s.targets.get("level1")
-    proj_ach = None
-    if s.month_end_sales_cents is not None and l1:
-        proj_ach = kpi.achievement(int(s.month_end_sales_cents), l1)
-    needs_review = sum(v for k, v in e.validation_counts.items()
-                       if k != "OK")
+    # Sales hero: MTD, progress vs Level 1 with projected marker; the
+    # status chip is prefixed "Projected:" while the month is incomplete.
+    proj_cents = (int(s.month_end_sales_cents)
+                  if s.month_end_sales_cents is not None else None)
+    sales_reported = entered > 0
+    out["pill_sales"] = {
+        "reported": "1" if sales_reported else "",
+        "value": ops_charts.fmt_money_compact(s.sales_mtd_cents),
+        "title": ds.fmt_rm(s.sales_mtd_cents),
+        "progress": (min(float(s.sales_mtd_cents / l1), 1.0)
+                     if l1 and sales_reported else 0.0),
+        "marker": (min(float(proj_cents / l1), 1.0)
+                   if l1 and proj_cents else 0.0),
+        "progress_color": "green" if l1_status == "Achieved" else "indigo",
+        "status": (l1_status if complete
+                   else f"Projected: {l1_status}"),
+        "status_color": STATUS_COLOR.get(l1_status, "gray"),
+        "context": ("Projected "
+                    + ops_charts.fmt_money_compact(proj_cents)
+                    + " · " + ops_charts.fmt_pct1(proj_ach_of(proj_cents, l1))
+                    + " of Level 1"),
+    }
+    exp_status = e.total_expenses_status
+    exp_color = {"Within budget": "green", "Over budget": "red",
+                 "No budget": "gray", "No payments yet": "gray"}[exp_status]
+    paid_count = kpi.paid_count_in_month([x.input for x in
+                                          app_service.get_expense_transactions(
+                                              user, store_id)], month,
+                                         store_id)
+    exp_reported = paid_count > 0
+    out["pill_expenses"] = {
+        "reported": "1" if exp_reported else "",
+        "value": ops_charts.fmt_money_compact(e.paid_cents),
+        "title": ds.fmt_rm(e.paid_cents),
+        "progress": (min(float(e.paid_cents / e.total_budget_cents), 1.0)
+                     if e.total_budget_cents else 0.0),
+        "marker": 0.0,
+        "progress_color": ("red" if exp_status == "Over budget"
+                           else "green"),
+        "status": exp_status,
+        "status_color": exp_color,
+        "context": ("Budget "
+                    + ops_charts.fmt_money_compact(e.total_budget_cents)
+                    + " · " + ops_charts.fmt_pct1(e.expense_share_of_sales)
+                    + " of sales"),
+    }
+    if can_payroll:
+        ratio = m.salary_ratio_incl_support
+        target = cfg.salary_ratio_target
+        out["pill_manpower"] = {
+            "reported": "1" if ratio is not None else "",
+            "value": ops_charts.fmt_pct1(ratio),
+            "title": ds.fmt_pct(ratio),
+            "progress": (min(float(ratio / target), 1.0)
+                         if ratio is not None and target else 0.0),
+            "marker": 0.0,
+            "progress_color": ("red" if m.salary_ratio_status
+                               == "Above target" else "green"),
+            "status": m.salary_ratio_status,
+            "status_color": RATIO_STATUS_COLOR.get(m.salary_ratio_status,
+                                                   "gray"),
+            "context": ("Target " + ops_charts.fmt_pct1(target)
+                        + " · turnover " + ops_charts.fmt_pct1(m.turnover_pct)
+                        + " (" + m.turnover_status + ")"),
+        }
+    else:
+        # Restricted: never place payroll figures in state. Turnover is
+        # headcount-based and follows the Manpower module (always shown).
+        out["pill_manpower"] = {
+            "reported": "1",
+            "value": "Restricted",
+            "title": "Restricted",
+            "progress": 0.0,
+            "marker": 0.0,
+            "progress_color": "indigo",
+            "status": "Restricted",
+            "status_color": "gray",
+            "context": ("Turnover " + ops_charts.fmt_pct1(m.turnover_pct)
+                        + " (" + m.turnover_status + ")"),
+        }
+    stock_reported = st.total_loss_cents != 0 or sales_reported
+    out["pill_stock"] = {
+        "reported": "1" if stock_reported else "",
+        "value": ops_charts.fmt_pct1(st.loss_pct_of_sales),
+        "title": ds.fmt_pct(st.loss_pct_of_sales),
+        "progress": (min(float(st.loss_pct_of_sales / cfg.stock_loss_target),
+                         1.0)
+                     if st.loss_pct_of_sales is not None
+                     and cfg.stock_loss_target else 0.0),
+        "marker": 0.0,
+        "progress_color": ("red" if st.status == "Over target"
+                           else "green"),
+        "status": st.status,
+        "status_color": STOCK_COLOR.get(st.status, "gray"),
+        "context": ("Target " + ops_charts.fmt_pct1(cfg.stock_loss_target)
+                    + " · loss "
+                    + ops_charts.fmt_money_compact(st.total_loss_cents)),
+    }
+
+    # Sales targets panel: Level 1-4 progress vs engine achievement/status
+    out["targets"] = [
+        {"label": f"Level {i}",
+         "target": ops_charts.fmt_money_compact(t),
+         "pct": ops_charts.fmt_pct1(
+             kpi.achievement(proj_cents, t)),
+         "progress": (min(float(kpi.achievement(proj_cents, t)), 1.0)
+                      if kpi.achievement(proj_cents, t) is not None else 0.0),
+         "status": s.status_by_level.get(name, "Awaiting data"),
+         "status_color": STATUS_COLOR.get(
+             s.status_by_level.get(name, ""), "gray"),
+         "progress_color": ("green" if s.status_by_level.get(name)
+                            == "Achieved" else "indigo")}
+        for i, name in enumerate(("level1", "level2", "level3", "level4"), 1)
+        for t in [s.targets.get(name)]
+    ]
+
+    # --- secondary figures ("At a glance") --------------------------------
     # action counts for this store/month scope (raised in month or open)
     actions = app_service.get_actions(user, store_id)
     visible = [a for a in actions
@@ -241,30 +332,47 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                or (a.input.status or "Open") in
                ("Open", "In progress", "Blocked")]
     acounts = kpi.action_counts([a.input for a in visible], as_of=today)
-    out["cc"] = {
+    rr = int(s.required_daily_run_rate) \
+        if s.required_daily_run_rate is not None else None
+    nd = int(s.needed_per_remaining_day) \
+        if s.needed_per_remaining_day is not None else None
+    avg = int(s.sales_mtd_cents / entered) if entered else None
+    glance_pairs = [
+        ("Required daily run-rate",
+         ops_charts.fmt_money_compact(rr), ds.fmt_rm0(rr), "/ops/sales"),
+        ("Needed per remaining day",
+         ops_charts.fmt_money_compact(nd), ds.fmt_rm0(nd), "/ops/sales"),
+        ("Average per reported day",
+         ops_charts.fmt_money_compact(avg), ds.fmt_rm0(avg), "/ops/sales"),
+        ("Incurred expenses",
+         ops_charts.fmt_money_compact(e.incurred_cents),
+         ds.fmt_rm(e.incurred_cents), "/ops/expenses"),
+        ("Open expenses",
+         ops_charts.fmt_money_compact(e.open_cents),
+         ds.fmt_rm(e.open_cents), "/ops/expenses"),
+        ("Expense lines to review", str(needs_review), "", "/ops/expenses"),
+        ("Open actions", str(kpi.open_actions(acounts)), "", "/ops/actions"),
+        ("Overdue actions", str(acounts["overdue"]), "", "/ops/actions"),
+    ]
+    out["glance"] = [
+        {"label": label, "value": value, "title": title, "href": href}
+        for label, value, title, href in glance_pairs
+    ]
+    out["cc"] = {  # kept for backward-compat with existing tests
         "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
-        "budget_l1": ds.fmt_rm0(l1),
         "achievement": ds.fmt_pct(s.mtd_achievement_l1),
-        "days": f"{entered} / {dim}",
-        "run_rate": ds.fmt_rm0(int(s.required_daily_run_rate)
-                               if s.required_daily_run_rate is not None
-                               else None),
-        "needed": ds.fmt_rm0(int(s.needed_per_remaining_day)
-                             if s.needed_per_remaining_day is not None
-                             else None),
-        "avg_day": ds.fmt_rm0(int(s.sales_mtd_cents / entered)
-                              if entered else None),
+        "proj_achievement": ds.fmt_pct(proj_ach_of(proj_cents, l1)),
         "paid": ds.fmt_rm(e.paid_cents),
-        "incurred": ds.fmt_rm(e.incurred_cents),
-        "open_exp": ds.fmt_rm(e.open_cents),
-        "review": str(needs_review),
-        "stock_loss": ds.fmt_rm(st.total_loss_cents),
-        "stock_pct": ds.fmt_pct(st.loss_pct_of_sales),
+        "days": f"{entered} / {dim}",
         "completion": completion,
-        "proj_achievement": ds.fmt_pct(proj_ach),
         "actions_open": str(kpi.open_actions(acounts)),
         "actions_overdue": str(acounts["overdue"]),
     }
+    # header context line: "18 of 31 days reported · month in progress"
+    prog = ("month in progress" if in_progress and not complete
+            else ("month complete" if complete else "month ended"))
+    out["header_context"] = (f"{entered} of {dim} days reported · {prog}")
+    out["in_progress"] = "1" if not complete else ""
 
     # --- needs attention (existing flags only) --------------------------
     items: list[dict[str, str]] = []
@@ -323,6 +431,26 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["pace_has_data"] = last_reported > 0
     out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=True)
     out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=False)
+
+    # sparklines: raw daily sales (RM) and raw daily total stock loss (RM),
+    # same gap rules as daily_line — no new aggregation.
+    sales_daily = [None] * dim
+    loss_daily = [None] * dim
+    for d in days:
+        if d.sales_cents is not None:
+            sales_daily[d.date.day - 1] = d.sales_cents / 100
+        losses = [v for v in d.stock_losses.values() if v is not None]
+        if losses:
+            loss_daily[d.date.day - 1] = sum(losses) / 100
+    spark_days = list(range(1, dim + 1))
+    out["spark_sales_dark"] = ops_charts.sparkline(spark_days, sales_daily,
+                                                   dark=True)
+    out["spark_sales_light"] = ops_charts.sparkline(spark_days, sales_daily,
+                                                    dark=False)
+    out["spark_stock_dark"] = ops_charts.sparkline(spark_days, loss_daily,
+                                                   dark=True)
+    out["spark_stock_light"] = ops_charts.sparkline(spark_days, loss_daily,
+                                                    dark=False)
     
     out["finalized_notice"] = finalized_notice
     return out
