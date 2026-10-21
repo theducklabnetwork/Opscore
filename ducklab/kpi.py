@@ -22,7 +22,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -145,6 +145,35 @@ def month_bounds(month: str) -> tuple[date, date, int]:
     y, m = int(month[:4]), int(month[5:7])
     days = calendar.monthrange(y, m)[1]
     return date(y, m, 1), date(y, m, days), days
+
+
+def parse_money_cents(raw: str) -> int:
+    """Shared money parser for all data-entry pages: '350819' or
+    '350,819.00' -> integer cents. Rejects sub-cent input, inf and nan.
+    Negative amounts are allowed here (refunds are valid money); callers
+    that forbid negatives say so themselves. Raises ValueError."""
+    cleaned = raw.replace(",", "").replace("RM", "").strip()
+    try:
+        dec = Decimal(cleaned)
+    except InvalidOperation:
+        raise ValueError(f"Invalid amount: {raw!r}")
+    if not dec.is_finite():
+        raise ValueError(f"Invalid amount: {raw!r}")
+    cents = int(dec * 100)
+    if Decimal(cents) != dec * 100:
+        raise ValueError(f"Amount has sub-cent precision: {raw!r}")
+    return cents
+
+
+def parse_count(raw: str, label: str) -> int:
+    """Whole, non-negative number. Raises ValueError with ``label``."""
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{label} must be a whole number")
+    if value < 0:
+        raise ValueError(f"{label} cannot be negative")
+    return value
 
 
 def _in_month(d: Optional[date], month: str) -> bool:

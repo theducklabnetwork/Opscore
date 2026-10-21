@@ -59,6 +59,14 @@ class OperationsWriteService:
             support_team_cost_cents=support_team_cost_cents,
         )
 
+    def configure_month_with_budgets(self, store_id: int, month: str,
+                                     fields: dict,
+                                     budgets: dict[int, Optional[int]]
+                                     ) -> dict:
+        """Atomic monthly setup save: config + budgets in one transaction."""
+        return self.repo.save_month_config_with_budgets(
+            store_id, month, fields, budgets)
+
     # -- categories & budgets ---------------------------------------------
     def add_expense_category(self, store_id: int, name: str,
                              sort_order: int = 0) -> int:
@@ -78,11 +86,13 @@ class OperationsWriteService:
     # -- daily operations ---------------------------------------------------
     def record_daily(self, store_id: int, day: date,
                      stock_losses: Optional[dict[str, int]] = None,
+                     stock_remove: Optional[list[str]] = None,
                      **daily_fields) -> int:
         """Save one day (optionally with stock losses, atomically)."""
-        if stock_losses:
+        if stock_losses or stock_remove:
             return self.repo.save_daily_with_stock_losses(
-                store_id, day, stock_losses, **daily_fields)
+                store_id, day, stock_losses or {},
+                stock_remove=stock_remove, **daily_fields)
         return self.repo.save_daily_record(store_id, day, **daily_fields)
 
     def correct_daily(self, store_id: int, day: date, **daily_fields) -> int:

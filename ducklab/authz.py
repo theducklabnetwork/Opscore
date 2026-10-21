@@ -24,6 +24,8 @@ Restrictive defaults where business policy is undecided:
 
 from __future__ import annotations
 
+from typing import Optional
+
 from ducklab.auth_service import AuthorizationError, User
 
 # Role name constants
@@ -136,10 +138,18 @@ def require_store_access(user: User, store_id: int) -> None:
         raise AuthorizationError("No access to this store")
 
 
-def require_store_write(user: User, store_id: int) -> None:
+def require_store_write(user: User, store_id: int,
+                        store_active: Optional[bool] = None) -> None:
+    """Writes to a DEACTIVATED store are rejected server-side
+    ("Store is deactivated: read-only"); reads stay allowed.
+
+    ``store_active`` is supplied by the caller (AppService), which owns the
+    store lookup — authz itself never queries the database."""
     require_operations_writer(user)
     if not can_access_store(user, store_id):
         raise AuthorizationError("No write access to this store")
+    if store_active is False:
+        raise AuthorizationError("Store is deactivated: read-only")
 
 
 def require_store_finalize(user: User, store_id: int) -> None:

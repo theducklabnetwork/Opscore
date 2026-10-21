@@ -56,6 +56,8 @@ class DailyState(OpsState):
     """Daily Operations page state (inherits selectors from OpsState)."""
 
     stock_codes: list[dict[str, str]] = []   # code/name/sign (sign as str)
+    # loaded via AppService.get_month_config; None -> unset (shows "—")
+    pt_factor: Optional[float] = None
     day_rows: list[dict[str, str]] = []      # overview table rows
     day_kpis: dict[str, str] = {}
     can_write: bool = False
@@ -80,10 +82,11 @@ class DailyState(OpsState):
     f_leave_mc: str = ""
     f_leave_other: str = ""
     f_leave_unpaid: str = ""
-    # explicit clear checkboxes (sales block only)
-    c_sales: bool = False
-    c_transactions: bool = False
-    c_units: bool = False
+    # explicit clear checkboxes: every value-bearing field (sales +
+    # manpower) and every stock-loss code. A ticked field writes NULL —
+    # a ticked stock code is REMOVED back to "no entry" (NULL), never 0.
+    clear_fields: dict = {}
+    clear_stock: dict = {}
     # stock-loss amounts, RM strings keyed by code
     stock_form: dict[str, str] = {}
     stock_original: dict[str, str] = {}
@@ -105,7 +108,7 @@ class DailyState(OpsState):
             return True
         if self.stock_form != self.stock_original:
             return True
-        return self.c_sales or self.c_transactions or self.c_units
+        return any(self.clear_fields.values()) or any(self.clear_stock.values())
 
     @rx.var
     def contributing_codes(self) -> list[dict[str, str]]:
@@ -145,17 +148,10 @@ class DailyState(OpsState):
             pt = _parse_count(self.f_pt_working, "pt_working")
         except ValueError:
             return "—"
-        factor = self._pt_factor()
-        eff = kpi.effective_staff(ft, pt, factor)
+        if self.pt_factor is None:
+            return "—"
+        eff = kpi.effective_staff(ft, pt, self.pt_factor)
         return f"{float(eff):,.2f}" if eff is not None else "—"
-
-    def _pt_factor(self):
-        try:
-            cfg = app_service.read_repo.get_month_config(
-                self._selected_store_id(), self._selected_month())
-            return cfg.part_timer_factor
-        except Exception:
-            return None
 
     # ------------------------------------------------------------------
     # selector overrides: keep daily data in sync with store/month
@@ -227,13 +223,20 @@ class DailyState(OpsState):
             self.report_status = "error"
             return
         from ducklab import authz
-        self.can_write = authz.can_write_operations(user)
+        self.can_write = (authz.can_write_operations(user)
+                          and self.selected_store_active)
         if not self.stock_codes:
             self.stock_codes = [
                 {"code": c["code"], "name": c["name"],
                  "sign": str(c["contribution_sign"])}
                 for c in app_service.list_stock_loss_codes(user)
             ]
+        try:
+            cfg = app_service.get_month_config(user, store_id, month)
+            self.pt_factor = (float(cfg.part_timer_factor)
+                              if cfg.part_timer_factor is not None else None)
+        except Exception:
+            self.pt_factor = None
         try:
             days = app_service.get_daily_records(user, store_id, month)
         except (AuthorizationError, StoreNotFoundError):
@@ -362,11 +365,21 @@ class DailyState(OpsState):
     @rx.event
     def set_f_leave_unpaid(self, v: str): self.f_leave_unpaid = v
     @rx.event
-    def set_c_sales(self, v: bool): self.c_sales = v
+    def set_clear_field(self, attr: str, v: bool):
+        self.clear_fields = {**self.clear_fields, attr: v}
+
     @rx.event
-    def set_c_transactions(self, v: bool): self.c_transactions = v
+    def set_clear_stock(self, code: str, v: bool):
+        self.clear_stock = {**self.clear_stock, code: v}
+
+    # Back-compat shims for the three original sales checkboxes.
     @rx.event
-    def set_c_units(self, v: bool): self.c_units = v
+    def set_c_sales(self, v: bool): self.set_clear_field("f_sales", v)
+    @rx.event
+    def set_c_transactions(self, v: bool):
+        self.set_clear_field("f_transactions", v)
+    @rx.event
+    def set_c_units(self, v: bool): self.set_clear_field("f_units", v)
 
     # ------------------------------------------------------------------
     # form open/close
@@ -399,7 +412,8 @@ class DailyState(OpsState):
                     self.stock_form[code] = f"{cents / 100:.2f}"
         for attr, v in values.items():
             setattr(self, attr, v)
-        self.c_sales = self.c_transactions = self.c_units = False
+        self.clear_fields = {}
+        self.clear_stock = {}
         self.form_original = dict(values)
         self.stock_original = dict(self.stock_form)
         self.form_open = True
@@ -443,21 +457,22 @@ class DailyState(OpsState):
 
         # parse + validate
         fields: dict = {}
-        clears = {"f_sales": self.c_sales, "f_transactions": self.c_transactions,
-                  "f_units": self.c_units}
         try:
             for attr, col, kind, label in SALES_FIELDS + MANPOWER_FIELDS:
                 raw = getattr(self, attr).strip()
                 if raw:
                     fields[col] = (_parse_money(raw) if kind == "money"
                                    else _parse_count(raw, label))
-                elif attr in clears and clears[attr]:
-                    fields[col] = None  # explicit clear
+                elif self.clear_fields.get(attr):
+                    fields[col] = None  # explicit clear -> NULL
         except ValueError as exc:
             self.form_error = str(exc)
             self.form_open = True
             return
+        # Stock: ticked clear checkbox REMOVES the code back to "no entry"
+        # (NULL), never written as 0.
         stock: dict[str, int] = {}
+        stock_remove: list[str] = []
         for c in self.stock_codes:
             code = c["code"]
             raw = self.stock_form.get(code, "").strip()
@@ -469,9 +484,10 @@ class DailyState(OpsState):
                     self.form_error = f"{c['name']} ({code}): {exc}"
                     self.form_open = True
                     return
-            elif orig:
-                stock[code] = 0  # previously had a value, now cleared
-        if not fields and not stock and not any(clears.values()):
+            elif self.clear_stock.get(code) and orig:
+                stock_remove.append(code)
+        if (not fields and not stock and not stock_remove
+                and not any(self.clear_fields.values())):
             self.form_error = "Nothing to save — enter at least one value."
             self.form_open = True
             return
@@ -488,6 +504,8 @@ class DailyState(OpsState):
             kwargs: dict = dict(fields)
             if stock:
                 kwargs["stock_losses"] = stock
+            if stock_remove:
+                kwargs["stock_remove"] = stock_remove
             app_service.record_daily(user, store_id, d, **kwargs)
         except AuthorizationError:
             self.saving = False
@@ -516,24 +534,7 @@ class DailyState(OpsState):
 # parsing helpers (server-side; never silently blank -> 0)
 # ---------------------------------------------------------------------------
 
-def _parse_money(raw: str) -> int:
-    """'350819' or '350,819.00' -> integer cents. Raises ValueError."""
-    cleaned = raw.replace(",", "").replace("RM", "").strip()
-    try:
-        dec = Decimal(cleaned)
-    except InvalidOperation:
-        raise ValueError(f"Invalid amount: {raw!r}")
-    cents = int(dec * 100)
-    if Decimal(cents) != dec * 100:
-        raise ValueError(f"Amount has sub-cent precision: {raw!r}")
-    return cents
-
-
-def _parse_count(raw: str, label: str) -> int:
-    try:
-        value = int(raw)
-    except ValueError:
-        raise ValueError(f"{label} must be a whole number")
-    if value < 0:
-        raise ValueError(f"{label} cannot be negative")
-    return value
+# Shared parsers live in kpi.py; these thin wrappers keep existing call
+# sites (and imports from other ops_*_state modules) stable.
+_parse_money = kpi.parse_money_cents
+_parse_count = kpi.parse_count

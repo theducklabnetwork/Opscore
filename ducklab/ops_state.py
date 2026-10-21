@@ -43,6 +43,7 @@ class OpsState(AuthState):
     month_options: list[str] = []       # labels
     selected_month_label: str = ""
     has_stores: bool = True
+    selected_store_active: bool = True
 
     # report mode
     report_mode: str = "live"           # live | finalized
@@ -87,6 +88,11 @@ class OpsState(AuthState):
     finalized_note: str = ""
 
     # --- internals ---------------------------------------------------------
+    def _sync_store_active(self) -> None:
+        self.selected_store_active = next(
+            (bool(s.get("active", True)) for s in self.stores
+             if s["label"] == self.selected_store_label), True)
+
     def _selected_store_id(self) -> Optional[int]:
         for s in self.stores:
             if s["label"] == self.selected_store_label:
@@ -136,6 +142,7 @@ class OpsState(AuthState):
         self.stores = stores
         self.store_options = [s["label"] for s in stores]
         self.has_stores = bool(stores)
+        self._sync_store_active()
         self.month_options = [label for _, label in self._month_choices()]
         if stores and self._selected_store_id() is None:
             self.selected_store_label = stores[0]["label"]
@@ -148,6 +155,7 @@ class OpsState(AuthState):
         if label == self.selected_store_label:
             return
         self.selected_store_label = label
+        self._sync_store_active()
         self._clear_report()  # never show stale cross-store data
         yield OpsState.refresh_report()
 
@@ -184,6 +192,21 @@ class OpsState(AuthState):
             return
         try:
             user = self._actor()
+        except AuthenticationError:
+            self.error_message = "Your session has expired. Please sign in again."
+            self.report_status = "error"
+            return
+        # Re-read the selected store's active flag on EVERY refresh so a
+        # store deactivated since page load is shown read-only immediately
+        # (the cached store list from load_ops may be stale).
+        try:
+            store = app_service.read_repo.get_store(store_id)
+            self.selected_store_active = bool(store.active)
+            for s in self.stores:
+                if s["label"] == self.selected_store_label:
+                    s["active"] = bool(store.active)
+        except Exception:
+            pass
         except AuthenticationError:
             self.report_status = "error"
             self.error_message = "Your session has expired. Please sign in again."

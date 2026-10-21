@@ -278,6 +278,81 @@ class OperationsWriteRepository:
         finally:
             conn.close()
 
+    def save_month_config_with_budgets(self, store_id: int, month: str,
+                                       fields: dict,
+                                       budgets: dict[int, Optional[int]]
+                                       ) -> dict:
+        """Atomic: monthly config + per-category budgets in ONE
+        transaction — either everything is written or nothing."""
+        _check_month(month)
+        bad = set(fields) - set(self._CONFIG_FIELDS)
+        if bad:
+            raise ValidationError(f"Unknown config fields: {sorted(bad)}")
+        for pct in ("level2_pct", "level3_pct", "level4_pct",
+                    "salary_ratio_target", "turnover_threshold",
+                    "stock_loss_target", "part_timer_factor"):
+            v = fields.get(pct)
+            if v is not None and not (0 <= float(v) <= 10):
+                raise ValidationError(f"{pct} out of range: {v}")
+        for cat_id, cents in budgets.items():
+            if cents is not None and not isinstance(cents, int):
+                raise ValidationError(
+                    "budget_cents must be integer cents or None")
+        conn = self._connect()
+        try:
+            conn.execute("BEGIN")
+            self._require_store(conn, store_id)
+            row = conn.execute(
+                "SELECT id FROM monthly_configs WHERE store_id = ? AND month = ?",
+                (store_id, month),
+            ).fetchone()
+            if row is None:
+                cols = ["store_id", "month", *fields]
+                cur = conn.execute(
+                    f"INSERT INTO monthly_configs ({','.join(cols)}) "
+                    f"VALUES ({','.join('?' for _ in cols)})",
+                    (store_id, month, *fields.values()),
+                )
+                config_id = cur.lastrowid
+            else:
+                config_id = row[0]
+                if fields:
+                    sets = ", ".join(f"{k} = ?" for k in fields)
+                    conn.execute(
+                        f"UPDATE monthly_configs SET {sets} WHERE id = ?",
+                        (*fields.values(), config_id),
+                    )
+            for cat_id, cents in budgets.items():
+                cat = conn.execute(
+                    "SELECT 1 FROM expense_categories WHERE id = ? AND store_id = ?",
+                    (cat_id, store_id),
+                ).fetchone()
+                if cat is None:
+                    raise RecordNotFoundError(
+                        f"Unknown expense category {cat_id} for this store")
+                conn.execute(
+                    "INSERT INTO expense_budgets "
+                    "(monthly_config_id, category_id, budget_cents) "
+                    "VALUES (?,?,?) "
+                    "ON CONFLICT (monthly_config_id, category_id) "
+                    "DO UPDATE SET budget_cents = excluded.budget_cents",
+                    (config_id, cat_id, cents),
+                )
+            conn.commit()
+            return {
+                "config_id": config_id,
+                "finalized_snapshot_exists": self.finalized_snapshot_exists(
+                    store_id, month),
+            }
+        except (WriteError, ValidationError, RecordNotFoundError):
+            conn.rollback()
+            raise
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise WriteError(str(exc)) from exc
+        finally:
+            conn.close()
+
     def save_expense_budget(self, store_id: int, month: str, category_id: int,
                             budget_cents: Optional[int]) -> int:
         """Create/update one category budget for a store/month. Idempotent
@@ -378,13 +453,21 @@ class OperationsWriteRepository:
 
     def save_daily_with_stock_losses(
         self, store_id: int, day: date,
-        stock_losses: dict[str, int], **daily_fields
+        stock_losses: dict[str, int],
+        stock_remove: Optional[list[str]] = None, **daily_fields
     ) -> int:
-        """Atomic: daily record + its stock-loss entries, or nothing."""
+        """Atomic: daily record + its stock-loss entries, or nothing.
+
+        ``stock_remove`` codes are DELETEd back to "no entry" (NULL) —
+        never written as 0."""
         self._validate_daily_fields(daily_fields)
         for code, cents in stock_losses.items():
             if not isinstance(cents, int):
                 raise ValidationError("Stock-loss amounts must be integer cents")
+            if cents < 0:
+                raise ValidationError(
+                    f"Stock-loss amount for {code} cannot be negative "
+                    f"(offsets are recorded via Extra, not negative values)")
         conn = self._connect()
         try:
             conn.execute("BEGIN")
@@ -420,6 +503,12 @@ class OperationsWriteRepository:
                     "ON CONFLICT (daily_record_id, code) "
                     "DO UPDATE SET amount_cents = excluded.amount_cents",
                     (record_id, code, cents),
+                )
+            for code in stock_remove or []:
+                conn.execute(
+                    "DELETE FROM daily_stock_losses "
+                    "WHERE daily_record_id = ? AND code = ?",
+                    (record_id, code),
                 )
             conn.commit()
             return record_id

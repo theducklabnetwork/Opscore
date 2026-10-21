@@ -41,10 +41,10 @@ class AppService:
         try:
             if user.is_super_admin:
                 rows = conn.execute(
-                    "SELECT id, code, name FROM stores ORDER BY code").fetchall()
+                    "SELECT id, code, name, active FROM stores ORDER BY code").fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT s.id, s.code, s.name FROM stores s "
+                    "SELECT s.id, s.code, s.name, s.active FROM stores s "
                     "JOIN auth_user_store_assignments a ON a.store_id = s.id "
                     "WHERE a.user_id = ? AND a.is_active = 1 ORDER BY s.code",
                     (user.id,)).fetchall()
@@ -110,21 +110,27 @@ class AppService:
         authz.require_store_access(user, store_id)
         return self.read_repo.get_month_config(store_id, month)
 
+    def _store_write(self, user: User, store_id: int) -> None:
+        """require_store_write with the store's active flag (deactivated
+        stores are read-only; reads still work)."""
+        store = self.read_repo.get_store(store_id)
+        authz.require_store_write(user, store_id, store_active=store.active)
+
     def record_daily(self, user: User, store_id: int, day: date, **fields):
-        authz.require_store_write(user, store_id)
+        self._store_write(user, store_id)
         return self.write.record_daily(store_id, day, **fields)
 
     def correct_daily(self, user: User, store_id: int, day: date, **fields):
-        authz.require_store_write(user, store_id)
+        self._store_write(user, store_id)
         return self.write.correct_daily(store_id, day, **fields)
 
     def record_expense(self, user: User, store_id: int, **fields):
-        authz.require_store_write(user, store_id)
+        self._store_write(user, store_id)
         return self.write.record_expense(store_id, **fields)
 
     def update_expense(self, user: User, store_id: int, expense_id: int,
                        **fields):
-        authz.require_store_write(user, store_id)
+        self._store_write(user, store_id)
         self.write.update_expense(store_id, expense_id, **fields)
 
     def get_expense_transactions(self, user: User, store_id: int):
@@ -161,7 +167,7 @@ class AppService:
     def raise_action(self, user: User, store_id: int, raised_date: date,
                      pillar: str, description: str, priority: str,
                      **fields):
-        authz.require_store_write(user, store_id)
+        self._store_write(user, store_id)
         return self.write.raise_action(store_id, raised_date, pillar,
                                        description, priority,
                                        actor_id=user.id, **fields)
@@ -169,7 +175,7 @@ class AppService:
     def save_action(self, user: User, store_id: int, action_id,
                     today: date, **fields):
         """Create/update with workbook validation; store-scoped write."""
-        authz.require_store_write(user, store_id)
+        self._store_write(user, store_id)
         return self.write.save_action(store_id, user.id, action_id, today,
                                       **fields)
 
@@ -180,8 +186,18 @@ class AppService:
     # -- configuration ----------------------------------------------------------
     def configure_month(self, user: User, store_id: int, month: str, **fields):
         authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        self._store_write(user, store_id)
         return self.write.configure_month(store_id, month, **fields)
+
+    def configure_month_with_budgets(self, user: User, store_id: int,
+                                     month: str, fields: dict,
+                                     budgets: dict) -> dict:
+        """Atomic setup save (config + budgets); deactivated stores are
+        read-only. Config-manager permission required."""
+        authz.require_config_manager(user)
+        self._store_write(user, store_id)
+        return self.write.configure_month_with_budgets(
+            store_id, month, fields, budgets)
 
     def record_payroll(self, user: User, store_id: int, month: str,
                        salary_basic_allowance_cents, overtime_cents,

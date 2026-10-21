@@ -134,7 +134,8 @@ class ActionsState(StoresState):
             self.error_message = "Your session has expired. Please sign in again."
             self.report_status = "error"
             return
-        self.can_write_actions = authz.can_write_operations(user)
+        self.can_write_actions = (authz.can_write_operations(user)
+                                  and self.selected_store_active)
         try:
             all_actions = app_service.get_actions(user, store_id)
         except AuthorizationError:

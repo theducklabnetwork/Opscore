@@ -49,7 +49,8 @@ SETUP_MANPOWER = [
     ("s_turnover", "turnover_threshold", "pct", "High-turnover threshold (%)"),
     ("s_opening_hc", "opening_headcount_ft", "count",
      "Opening full-time headcount"),
-    ("s_pt_factor", "part_timer_factor", "pct", "Part-timer conversion factor"),
+    ("s_pt_factor", "part_timer_factor", "factor",
+     "Part-timer conversion factor (e.g. 0.5)"),
 ]
 SETUP_STOCK = [
     ("s_stock_target", "stock_loss_target", "pct",
@@ -67,6 +68,11 @@ SETUP_ALL = SETUP_SALES + SETUP_MANPOWER + SETUP_STOCK + SETUP_PAYROLL
 
 def _money_str(cents) -> str:
     return "" if cents is None else f"{cents / 100:.2f}"
+
+
+def _factor_str(factor) -> str:
+    """Raw decimal factor (workbook Setup!B47, e.g. 0.5) — NOT a %."""
+    return "" if factor is None else f"{float(factor):g}"
 
 
 def _pct_str(ratio) -> str:
@@ -112,6 +118,7 @@ class StoresState(StockState):
     setup_error: str = ""
     setup_saving: bool = False
     setup_levels: list[dict[str, str]] = []  # read-only L1-L4
+    setup_original: dict = {}  # loaded values, for changed-only saves
     s_min_rtm: str = ""
     s_level1: str = ""
     s_level2: str = ""
@@ -148,6 +155,7 @@ class StoresState(StockState):
         self.assign_selected = ""
 
     def _clear_setup(self) -> None:
+        self.setup_original = {}
         self.setup_finalized = False
         self.setup_notice = ""
         self.setup_error = ""
@@ -211,6 +219,7 @@ class StoresState(StockState):
         store_id = self._selected_store_id()
         month = self._selected_month()
         self.can_edit_setup = (
+            self.selected_store_active and
             store_id is not None and authz.can_manage_config(user)
             and authz.can_access_store(user, store_id))
 
@@ -267,12 +276,13 @@ class StoresState(StockState):
                 "s_budget_hc": _count_str(cfg.budget_headcount),
                 "s_turnover": _pct_str(cfg.turnover_threshold),
                 "s_opening_hc": _count_str(cfg.opening_headcount_ft),
-                "s_pt_factor": _pct_str(cfg.part_timer_factor),
+                "s_pt_factor": _factor_str(cfg.part_timer_factor),
                 "s_stock_target": _pct_str(cfg.stock_loss_target),
             }
             vals.update(payroll_vals)
             for attr, v in vals.items():
                 setattr(self, attr, v)
+            self.setup_original = dict(vals)
             levels = kpi.sales_target_levels_cents(cfg)
             self.setup_levels = [
                 {"level": name.capitalize(),
@@ -285,7 +295,8 @@ class StoresState(StockState):
             budgets = app_service.get_expense_budgets(user, store_id, month)
             self.budget_rows = [
                 {"id": str(c.id), "name": c.name,
-                 "value": _money_str(budgets.get(c.id))}
+                 "value": _money_str(budgets.get(c.id)),
+                 "original": _money_str(budgets.get(c.id))}
                 for c in cats
             ]
         except Exception:
@@ -455,33 +466,69 @@ class StoresState(StockState):
     # monthly setup save
     # ------------------------------------------------------------------
     def _parse_fields(self) -> dict:
-        """Parse setup form strings -> config fields; blank stays NULL."""
+        """Parse setup form strings -> config fields for ONE write.
+
+        Only fields the user CHANGED are returned (blank fields the user
+        never touched never overwrite a value saved elsewhere; a field the
+        user cleared to blank writes NULL explicitly). ALL fields are
+        validated first and every problem is reported together — nothing
+        is written until the whole form is valid.
+        """
         out: dict = {}
+        errors: list[str] = []
         for attr, field, kind, label in SETUP_ALL:
             raw = getattr(self, attr).strip()
+            if raw == self.setup_original.get(attr, ""):
+                continue  # unchanged — do not send
             if raw == "":
-                out[field] = None
+                out[field] = None  # explicitly cleared
                 continue
             try:
                 if kind == "money":
-                    cents = int(Decimal(raw) * 100)
+                    cents = kpi.parse_money_cents(raw)
                     if cents < 0:
-                        raise ValueError
+                        raise ValueError("negative")
                     out[field] = cents
                 elif kind == "count":
-                    v = int(raw)
-                    if v < 0:
-                        raise ValueError
-                    out[field] = v
+                    out[field] = kpi.parse_count(raw, label)
+                elif kind == "factor":
+                    d = Decimal(raw)
+                    if not d.is_finite() or not (0 <= d <= 2):
+                        raise ValueError("range")
+                    out[field] = float(d)
                 else:  # pct -> fraction
                     d = Decimal(raw)
-                    if d < 0:
-                        raise ValueError
+                    if not d.is_finite() or d < 0:
+                        raise ValueError("range")
                     out[field] = float(d / 100)
             except (InvalidOperation, ValueError):
-                raise ValidationError(
+                errors.append(
                     f"{label}: enter a non-negative number (or leave blank)")
-        return out
+        return out, errors
+
+    def _parse_budgets(self):
+        """Validate every budget row before ANY write; -> (updates, errors).
+
+        updates = {category_id: cents} only for rows the user changed
+        (blank rows that were already blank are not sent)."""
+        updates: dict[int, int | None] = {}
+        errors: list[str] = []
+        for row in self.budget_rows:
+            raw = row["value"].strip()
+            if raw == row.get("original", ""):
+                continue
+            cents = None
+            if raw != "":
+                try:
+                    cents = kpi.parse_money_cents(raw)
+                    if cents < 0:
+                        raise ValueError("negative")
+                except ValueError:
+                    errors.append(
+                        f"Budget for {row['name']}: non-negative number")
+                    continue
+            updates[int(row["id"])] = cents
+        return updates, errors
 
     # ------------------------------------------------------------------
     # form field setters (explicit, matching the daily page pattern)
@@ -586,20 +633,17 @@ class StoresState(StockState):
             month = self._selected_month()
             if store_id is None or month is None:
                 raise ValidationError("Select a store and month first.")
-            fields = self._parse_fields()
-            result = app_service.configure_month(user, store_id, month,
-                                                 **fields)
-            # per-category budgets (blank -> NULL)
-            for row in self.budget_rows:
-                raw = row["value"].strip()
-                cents = None
-                if raw != "":
-                    cents = int(Decimal(raw) * 100)
-                    if cents < 0:
-                        raise ValidationError(
-                            f"Budget for {row['name']}: non-negative number")
-                app_service.set_expense_budget(user, store_id, month,
-                                               int(row["id"]), cents)
+            # Parse and validate EVERYTHING first; one bad field or
+            # budget rejects the whole save and nothing is written.
+            fields, errors = self._parse_fields()
+            budgets, budget_errors = self._parse_budgets()
+            errors += budget_errors
+            if errors:
+                raise ValidationError("; ".join(errors))
+            if not fields and not budgets:
+                raise ValidationError("Nothing to save — no changes made.")
+            result = app_service.configure_month_with_budgets(
+                user, store_id, month, fields, budgets)
             self.setup_notice = (
                 "Monthly setup saved."
                 + (" Note: a finalized snapshot exists — the finalized report"

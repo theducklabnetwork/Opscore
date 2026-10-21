@@ -176,6 +176,16 @@ def shell(title: str, content: rx.Component,
         rx.box(
             rx.vstack(
                 header(title, on_store=on_store, on_month=on_month),
+                rx.cond(
+                    ~OpsState.selected_store_active,
+                    rx.callout(
+                        "This store is deactivated — read-only. "
+                        "Reactivate it on Store Management to make changes.",
+                        icon="lock", color_scheme="gray", variant="surface",
+                        width="100%", margin_top="0.75em",
+                        id="store-readonly-banner",
+                    ),
+                ),
                 rx.box(content, padding_top="1.5em", width="100%"),
                 width="100%", max_width="1200px", margin="0 auto",
                 padding=["1em", "1.5em", "2em"],
