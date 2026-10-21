@@ -259,18 +259,18 @@ class ExpensesState(DailyState):
             variance = None
             if e.total_budget_cents is not None:
                 variance = e.total_budget_cents - e.paid_cents
-            no_payments = e.total_expenses_status == "No payments yet"
+            # Each card decides from its own data (engine counts):
+            # Paid: no Paid lines in month -> "No payments yet".
+            # Incurred: no valid lines incurred in month -> "Not reported
+            #   yet" (even when nothing is paid, amounts still show).
+            # Pending: any Pending line in scope -> the amount; none ->
+            #   genuine zero "RM 0.00" (not missing data).
             self.exp_kpis = {
-                # Empty-state rule: when the engine says "No payments yet"
-                # there is nothing recorded — show the status, not RM 0.00
-                # (a genuine recorded zero still shows RM 0.00).
-                "paid": (e.total_expenses_status if no_payments
+                "paid": ("No payments yet" if e.paid_count == 0
                          else ds.fmt_rm(e.paid_cents)),
-                "incurred": ("Not reported yet"
-                             if e.incurred_cents == 0 and no_payments
+                "incurred": ("Not reported yet" if e.incurred_count == 0
                              else ds.fmt_rm(e.incurred_cents)),
-                "open": (e.total_expenses_status if no_payments
-                         else ds.fmt_rm(e.open_cents)),
+                "open": ds.fmt_rm(e.open_cents),
                 # Total budget None -> "—" (NULL), never RM 0.00
                 "budget": ("—" if e.total_budget_cents is None
                            else ds.fmt_rm(e.total_budget_cents)),

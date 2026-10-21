@@ -218,3 +218,54 @@ class StatusColorMapTests(unittest.TestCase):
         }
         missing = [st for st in statuses if st not in ds.STATUS_COLOR]
         self.assertEqual(missing, [])
+
+class ExpensesEmptyStateTests(unittest.TestCase):
+    """Task 19c: each Expenses KPI card decides from its own data."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.app = AppService(Path(self._tmp.name) / "e.db")
+        self.admin = self.app.auth.bootstrap_first_admin(
+            "admin@ducklab.com", "Root", "Sup3rSecure!x")
+        self.sid = self.app.register_store(self.admin, "A01", "Alpha")
+        self.month = "2026-10"
+        self.app.configure_month(
+            self.admin, self.sid, self.month, level1_base_cents=rm(200000),
+            opening_headcount_ft=9, stock_loss_target=0.015,
+            salary_ratio_target=0.06818, part_timer_factor=0.5,
+            turnover_threshold=0.05)
+        self.cat = self.app.add_expense_category(self.admin, self.sid,
+                                                 "Elec", sort_order=1)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _cards(self):
+        rep = self.app.preview_month(self.admin, self.sid, self.month,
+                                     as_of=date(2026, 10, 21))
+        e = rep.expenses
+        return {
+            "paid": "No payments yet" if e.paid_count == 0 else e.paid_cents,
+            "incurred": ("Not reported yet" if e.incurred_count == 0
+                         else e.incurred_cents),
+            "open": e.open_cents,
+        }
+
+    def test_pending_lines_without_payments(self):
+        for i, amt in enumerate((100, 250), start=1):
+            self.app.record_expense(
+                self.admin, self.sid, incurred_date=date(2026, 10, i),
+                paid_date=None, category_id=self.cat, description=f"p{i}",
+                amount_cents=rm(amt), paid_by=None, status="Pending",
+                verification="Unverified", recorded_by="DEV",
+                receipt_ref=f"R{i}")
+        cards = self._cards()
+        self.assertEqual(cards["paid"], "No payments yet")
+        self.assertEqual(cards["incurred"], rm(350))   # amount shows
+        self.assertEqual(cards["open"], rm(350))       # amount shows
+
+    def test_all_empty_month(self):
+        cards = self._cards()
+        self.assertEqual(cards["paid"], "No payments yet")
+        self.assertEqual(cards["incurred"], "Not reported yet")
+        self.assertEqual(cards["open"], 0)             # genuine zero

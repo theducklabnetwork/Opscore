@@ -369,6 +369,29 @@ def expense_validation(e: ExpenseInput, known_category_ids: set[int]) -> str:
     return "OK"
 
 
+def incurred_count_in_month(
+    expenses: list[ExpenseInput], month: str, store_id: int
+) -> int:
+    """COUNT of non-cancelled, core-valid lines INCURRED in the month
+    (same per-line rule as Register column O, counted not summed)."""
+    n = 0
+    for e in expenses:
+        if e.store_id != store_id:
+            continue
+        if incurred_value_cents(e) and _in_month(e.incurred_date, month):
+            n += 1
+    return n
+
+
+def pending_count(
+    expenses: list[ExpenseInput], store_id: int
+) -> int:
+    """COUNT of Pending, core-valid lines on this store's register (same
+    per-line rule as Register column N)."""
+    return sum(1 for e in expenses
+               if e.store_id == store_id and pending_value_cents(e))
+
+
 def expense_review_counts(
     expenses: list[ExpenseInput], month: str, store_id: int,
     known_category_ids: set[int],

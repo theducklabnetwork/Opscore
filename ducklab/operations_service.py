@@ -70,6 +70,9 @@ class ExpensesSection:
     expense_share_of_sales: Optional[Decimal]
     total_expenses_status: str
     budget_control_status: str  # Expense Monitor total row H25
+    paid_count: int      # Paid lines with paid date in month (E40 basis)
+    incurred_count: int  # valid non-cancelled lines incurred in month
+    pending_count: int   # valid Pending lines on the register
     validation_counts: dict[str, int]
     categories: list[ExpenseCategoryRow] = field(default_factory=list)
 
@@ -234,6 +237,10 @@ def assemble_month(
         open_cents=totals["open"],
         total_budget_cents=total_budget,
         expense_share_of_sales=kpi.expense_share_of_sales(totals["paid"], mtd),
+        paid_count=kpi.paid_count_in_month(exp_inputs, month, store_id),
+        incurred_count=kpi.incurred_count_in_month(exp_inputs, month,
+                                                   store_id),
+        pending_count=kpi.pending_count(exp_inputs, store_id),
         total_expenses_status=kpi.total_expenses_status(
             exp_inputs, month, store_id, totals["paid"], total_budget),
         budget_control_status=kpi.budget_control_status(
