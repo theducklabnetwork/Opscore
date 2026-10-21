@@ -232,8 +232,12 @@ class ExpensesState(DailyState):
             self.error_message = "Your session has expired. Please sign in again."
             self.report_status = "error"
             return
-        self.can_write_expenses = authz.can_write_operations(user)
-        self.can_manage_budgets = authz.can_manage_config(user)
+        # Deactivated stores are read-only: hide every write control
+        # (AppService rejects the writes server-side regardless).
+        self.can_write_expenses = (authz.can_write_operations(user)
+                                   and self.selected_store_active)
+        self.can_manage_budgets = (authz.can_manage_config(user)
+                                   and self.selected_store_active)
         try:
             self.exp_month_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))

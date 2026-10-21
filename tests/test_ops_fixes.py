@@ -1,5 +1,6 @@
-"""Task 17 tests: reporting date, total-budget None, engine action counts
-in reports, one action scope rule, is_overdue boundary/pillar, review-count
+"""Task 17/20 tests: reporting date, total-budget None, engine action counts
+in reports (literal values), one action scope rule + one overdue
+reference date across Report/Overview/Actions, salary bar colour, is_overdue boundary/pillar, review-count
 scope, shared status-color map coverage, stock sparkline = Total Loss per
 day, month choices use kl_today. Disposable temp DBs only.
 
@@ -118,27 +119,98 @@ class EngineFixture(unittest.TestCase):
         self.assertEqual(rep.expenses.total_expenses_status, "No budget")
 
     # 5 ------------------------------------------------------------------
+    def _act(self, raised, status, due, issue, month_today=TODAY):
+        self.app.save_action(
+            self.admin, self.sa, None, month_today, raised_date=raised,
+            pillar="General Operations", issue=issue, priority="High",
+            status=status, pic="DEV", due_date=due,
+            corrective_action=None, completion_date=None, remarks=None)
+
     def test_report_action_counts_equal_engine(self):
+        """3 actions in Oct 2026, as of 21 Oct: Open (due 30 Oct),
+        Done, In progress due 10 Oct (overdue). Hand-computed:
+        total 3, open 2, in progress 1, done 1, overdue 1, 1/3 done."""
         self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
                               sales_cents=rm(100))
-        self.app.save_action(
-            self.admin, self.sa, None, TODAY, raised_date=TODAY,
-            pillar="General Operations", issue="x", priority="High",
-            status="Open", pic="DEV", due_date=TODAY - timedelta(days=1),
-            corrective_action=None, completion_date=None, remarks=None)
+        self._act(date(2026, 10, 5), "Open", date(2026, 10, 30), "a")
+        self._act(date(2026, 10, 6), "Done", date(2026, 10, 15), "b")
+        self._act(date(2026, 10, 7), "In progress", date(2026, 10, 10), "c")
         rep = self.app.preview_month(self.admin, self.sa, self.month,
                                      as_of=TODAY)
         from ducklab.ops_state import _serialize_live, _serialize_snapshot
+        expected = {"total": 3, "open": 2, "in_progress": 1, "blocked": 0,
+                    "done": 1, "overdue": 1, "completion": "33.3%"}
         live = _serialize_live(rep, user=self.admin)
-        self.assertEqual(live["actions"]["open"], rep.actions.open)
-        engine_total = sum(v for k, v in rep.actions.counts.items()
-                           if k != "overdue")
-        self.assertEqual(live["actions"]["total"], engine_total)
+        self.assertEqual(live["actions"], expected)
         self.app.finalize_month(self.admin, self.sa, self.month, as_of=TODAY)
         snap = self.app.get_finalized_report(self.admin, self.sa, self.month)
         out = _serialize_snapshot(snap, user=self.admin)
-        self.assertEqual(out["actions"]["open"],
-                         snap["report"]["actions"]["open"])
+        self.assertEqual(out["actions"], expected)
+
+    def test_overdue_reference_date_same_on_every_page(self):
+        """Past month (Sep 2026) viewed on 21 Oct: overdue is judged as
+        of 30 Sep everywhere. A (due 25 Sep) is overdue; B (due 5 Oct)
+        is not yet — it would be if 'today' were used."""
+        self.app.configure_month(self.admin, self.sa, "2026-09",
+                                 level1_base_cents=rm(200000))
+        self._act(date(2026, 9, 10), "Open", date(2026, 9, 25), "A")
+        self._act(date(2026, 9, 12), "Open", date(2026, 10, 5), "B")
+        # Report (AppService default reporting date = month end)
+        rep = self.app.preview_month(self.admin, self.sa, "2026-09")
+        self.assertEqual(rep.actions.counts["overdue"], 1)
+        self.assertEqual(rep.actions.open, 2)
+        # Overview
+        import ducklab.ops_overview_state as mod
+        from ducklab import auth_pages
+        orig_app, orig_mod = auth_pages.app_service, mod.app_service
+        auth_pages.app_service = mod.app_service = self.app
+        try:
+            ov = mod.compute_overview(self.admin, self.sa, "2026-09", TODAY)
+        finally:
+            auth_pages.app_service = orig_app
+            mod.app_service = orig_mod
+        self.assertEqual(ov["cc"]["actions_overdue"], "1")
+        self.assertEqual(ov["cc"]["actions_open"], "2")
+        self.assertIn({"icon": "list-checks", "text": "1 overdue action(s)",
+                       "href": "/ops/actions"}, ov["attention"])
+        # Actions page
+        from ducklab.ops_actions_state import actions_summary
+        counts, rows = actions_summary(
+            self.app.get_actions(self.admin, self.sa), "2026-09", TODAY)
+        self.assertEqual(counts["overdue"], 1)
+        self.assertEqual(kpi.open_actions(counts), 2)
+        self.assertEqual([(r["issue"], r["overdue"]) for r in rows],
+                         [("A", "1"), ("B", "")])
+
+    def _overview(self):
+        import ducklab.ops_overview_state as mod
+        from ducklab import auth_pages
+        orig_app, orig_mod = auth_pages.app_service, mod.app_service
+        auth_pages.app_service = mod.app_service = self.app
+        try:
+            return mod.compute_overview(self.admin, self.sa, self.month,
+                                        TODAY)
+        finally:
+            auth_pages.app_service = orig_app
+            mod.app_service = orig_mod
+
+    def test_salary_bar_red_when_over_target(self):
+        """Payroll RM 11,000 vs sales RM 100 -> ratio 110x, far above the
+        6.818% target: engine status 'Failure: over target', bar red."""
+        self.assertEqual(kpi.SALARY_FAILURE, "Failure: over target")
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
+                              sales_cents=rm(100))
+        pill = self._overview()["pill_manpower"]
+        self.assertEqual(pill["status"], "Failure: over target")
+        self.assertEqual(pill["progress_color"], "red")
+
+    def test_salary_bar_green_when_within_target(self):
+        """Payroll RM 11,000 vs sales RM 200,000 -> 5.5% <= 6.818%."""
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
+                              sales_cents=rm(200000))
+        pill = self._overview()["pill_manpower"]
+        self.assertEqual(pill["status"], "Within target")
+        self.assertEqual(pill["progress_color"], "green")
 
     # 6 ------------------------------------------------------------------
     def test_review_count_scope_excludes_other_month(self):

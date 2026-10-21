@@ -138,44 +138,10 @@ class ActionsState(StoresState):
         except AuthorizationError:
             self.error_message = "No access to this store."
             return
-        today = _today()
-        visible = kpi.actions_in_month_scope(all_actions, month)
-        counts = kpi.action_counts([a.input for a in visible], as_of=today)
+        counts, rows = actions_summary(all_actions, month, _today())
         self.n_open = str(kpi.open_actions(counts))
         self.n_overdue = str(counts["overdue"])
         self.n_done = str(counts["done"])
-
-        rows = []
-        for a in visible:
-            st = a.input.status or "Open"
-            due = a.input.due_date
-            overdue = kpi.is_overdue(a.input, today)
-            carried = _raised_month(a) != month
-            rows.append({
-                "id": str(a.id),
-                "raised": a.raised_date.strftime("%d %b %Y")
-                    if a.raised_date else "—",
-                "raised_iso": a.raised_date.isoformat()
-                    if a.raised_date else "",
-                "pillar": a.input.pillar or "—",
-                "issue": a.issue or "—",
-                "priority": a.priority or "—",
-                "priority_color": ds.status_color(a.priority or ""),
-                "status": st,
-                "status_color": ds.status_color(st),
-                "pic": a.pic or "—",
-                "due": due.strftime("%d %b %Y") if due else "—",
-                "due_iso": due.isoformat() if due else "9999-12-31",
-                "overdue": "1" if overdue else "",
-                "carried": "1" if carried else "",
-                "completion": a.completion_date.strftime("%d %b %Y")
-                    if a.completion_date else "—",
-                "corrective": a.corrective_action or "",
-                "remarks": a.remarks or "",
-            })
-        # default sort: overdue first, then due date ascending
-        rows.sort(key=lambda r: (not r["overdue"], r["due_iso"],
-                                 r["raised_iso"]))
         self.rows = rows
         self.loaded = True
 
@@ -352,6 +318,49 @@ class ActionsState(StoresState):
 def _pdate(s: str) -> Optional[date]:
     s = (s or "").strip()
     return date.fromisoformat(s) if s else None
+
+
+def actions_summary(all_actions, month: str, today: date):
+    """Counts + table rows for one store/month (pure; testable).
+
+    Overdue is evaluated as of kpi.reporting_date(month, today) — the same
+    reference date the Monthly Report and Overview use (today for the
+    current month, month end for a past month)."""
+    as_of = kpi.reporting_date(month, today)
+    visible = kpi.actions_in_month_scope(all_actions, month)
+    counts = kpi.action_counts([a.input for a in visible], as_of=as_of)
+    rows = []
+    for a in visible:
+        st = a.input.status or "Open"
+        due = a.input.due_date
+        overdue = kpi.is_overdue(a.input, as_of)
+        carried = _raised_month(a) != month
+        rows.append({
+            "id": str(a.id),
+            "raised": a.raised_date.strftime("%d %b %Y")
+                if a.raised_date else "—",
+            "raised_iso": a.raised_date.isoformat()
+                if a.raised_date else "",
+            "pillar": a.input.pillar or "—",
+            "issue": a.issue or "—",
+            "priority": a.priority or "—",
+            "priority_color": ds.status_color(a.priority or ""),
+            "status": st,
+            "status_color": ds.status_color(st),
+            "pic": a.pic or "—",
+            "due": due.strftime("%d %b %Y") if due else "—",
+            "due_iso": due.isoformat() if due else "9999-12-31",
+            "overdue": "1" if overdue else "",
+            "carried": "1" if carried else "",
+            "completion": a.completion_date.strftime("%d %b %Y")
+                if a.completion_date else "—",
+            "corrective": a.corrective_action or "",
+            "remarks": a.remarks or "",
+        })
+    # default sort: overdue first, then due date ascending
+    rows.sort(key=lambda r: (not r["overdue"], r["due_iso"],
+                             r["raised_iso"]))
+    return counts, rows
 
 
 def _raised_month(a) -> Optional[str]:

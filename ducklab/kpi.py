@@ -28,6 +28,21 @@ from zoneinfo import ZoneInfo
 
 KL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 
+# Status names returned by this engine. Callers compare against these
+# constants, never against retyped string literals. Values are the
+# workbook strings (stored in snapshots; keys of design.STATUS_COLOR).
+SALES_ACHIEVED = "Achieved"
+SALES_BELOW = "Below target"
+TOTAL_OVER_BUDGET = "Over budget"          # Summary!E40
+CATEGORY_OVER_BUDGET = "OVER BUDGET"       # Expense Monitor!H15-25
+SALARY_AWAITING_PAYROLL = "Awaiting payroll"
+SALARY_AWAITING_DATA = "Awaiting data"
+SALARY_WITHIN = "Within target"
+SALARY_FAILURE = "Failure: over target"
+TURNOVER_HIGH = "HIGH TURNOVER"
+STOCK_WITHIN = "Within target"
+STOCK_OVER_TARGET = "Over target"
+
 
 def kl_today() -> date:
     """One "today" for the whole app: Asia/Kuala_Lumpur."""
@@ -289,8 +304,9 @@ def sales_status(actual_cents: Optional[int], target_cents) -> str:
         return "No target"
     # Compare as Decimal — no int() truncation: 1051 vs 1051.05 is
     # "Below target" (workbook float semantics, kept exact).
-    return ("Achieved" if to_decimal(actual_cents) >= to_decimal(target_cents)
-            else "Below target")
+    return (SALES_ACHIEVED
+            if to_decimal(actual_cents) >= to_decimal(target_cents)
+            else SALES_BELOW)
 
 
 def growth(actual_cents: Optional[int], reference_cents: Optional[int]) -> Optional[Decimal]:
@@ -482,7 +498,7 @@ def total_expenses_status(
         return "No budget"
     if paid_cents <= total_budget_cents:
         return "Within budget"
-    return "Over budget"
+    return TOTAL_OVER_BUDGET
 
 
 def mtd_achievement(sales_mtd_cents: int, target_cents) -> Optional[Decimal]:
@@ -533,7 +549,7 @@ def budget_status(paid_cents: int, budget_cents: Optional[int]) -> str:
     if budget_cents is None:
         return "No budget"
     if paid_cents > budget_cents:
-        return "OVER BUDGET"
+        return CATEGORY_OVER_BUDGET
     if budget_cents > 0 and Decimal(paid_cents) / Decimal(budget_cents) >= Decimal("0.8"):
         return "Watch"
     return "Within budget"
@@ -602,11 +618,11 @@ def salary_ratio_status(cfg: MonthConfig, sales_cents: Optional[int],
                         include_support: bool = False) -> str:
     """Summary!E44/E45: Awaiting payroll / Awaiting data / Within target / Failure."""
     if cfg.salary_basic_allowance_cents is None:
-        return "Awaiting payroll"
+        return SALARY_AWAITING_PAYROLL
     r = salary_ratio(cfg, sales_cents, include_support)
     if r is None or cfg.salary_ratio_target is None:
-        return "Awaiting data"
-    return "Within target" if r <= cfg.salary_ratio_target else "Failure: over target"
+        return SALARY_AWAITING_DATA
+    return SALARY_WITHIN if r <= cfg.salary_ratio_target else SALARY_FAILURE
 
 
 def salary_budget_cents(sales_cents: Optional[int], ratio_target) -> Optional[Decimal]:
@@ -635,7 +651,7 @@ def turnover_status(resigned: int, opening: Optional[int], threshold) -> str:
     if t is None:
         return "Awaiting HC"
     if th is not None and t > th:
-        return "HIGH TURNOVER"
+        return TURNOVER_HIGH
     return "Normal"
 
 
@@ -719,7 +735,7 @@ def stock_loss_status(loss_cents: int, sales_cents: Optional[int], target) -> st
     p = stock_loss_pct(loss_cents, sales_cents)
     if t is None or p is None:
         return ""
-    return "Within target" if p <= t else "Over target"
+    return STOCK_WITHIN if p <= t else STOCK_OVER_TARGET
 
 
 # --------------------------------------------------------------------------

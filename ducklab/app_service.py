@@ -77,6 +77,7 @@ class AppService:
     def finalize_month(self, user: User, store_id: int, month: str,
                        as_of: Optional[date] = None) -> dict:
         authz.require_store_finalize(user, store_id)
+        self._store_write(user, store_id)  # deactivated stores: read-only
         if as_of is None:
             from ducklab import kpi
             as_of = kpi.reporting_date(month)
@@ -85,6 +86,7 @@ class AppService:
     def correct_month(self, user: User, store_id: int, month: str,
                       as_of: Optional[date] = None) -> dict:
         authz.require_store_finalize(user, store_id)
+        self._store_write(user, store_id)  # deactivated stores: read-only
         if as_of is None:
             from ducklab import kpi
             as_of = kpi.reporting_date(month)
@@ -112,7 +114,9 @@ class AppService:
 
     def _store_write(self, user: User, store_id: int) -> None:
         """require_store_write with the store's active flag (deactivated
-        stores are read-only; reads still work)."""
+        stores are read-only; reads still work). Access is checked BEFORE
+        the store lookup, so an unassigned store is never probed."""
+        authz.require_store_write(user, store_id)
         store = self.read_repo.get_store(store_id)
         authz.require_store_write(user, store_id, store_active=store.active)
 
@@ -148,19 +152,19 @@ class AppService:
     def add_expense_category(self, user: User, store_id: int, name: str,
                              **fields) -> int:
         authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        self._store_write(user, store_id)
         return self.write.add_expense_category(store_id, name, **fields)
 
     def rename_expense_category(self, user: User, store_id: int,
                                 category_id: int, name: str) -> None:
         authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        self._store_write(user, store_id)
         self.write.rename_expense_category(store_id, category_id, name)
 
     def set_expense_budget(self, user: User, store_id: int, month: str,
                            category_id: int, budget_cents) -> None:
         authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        self._store_write(user, store_id)
         self.write.set_expense_budget(store_id, month, category_id,
                                       budget_cents)
 
@@ -205,7 +209,7 @@ class AppService:
         """Month-end payroll entry. Restricted to configuration managers;
         None means awaiting payroll (explicit NULL, never coerced to 0)."""
         authz.require_config_manager(user)
-        authz.require_store_access(user, store_id)
+        self._store_write(user, store_id)
         return self.write.record_payroll(
             store_id, month, salary_basic_allowance_cents, overtime_cents,
             support_team_cost_cents)

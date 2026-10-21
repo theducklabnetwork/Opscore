@@ -67,6 +67,16 @@ def _check_month(month: str) -> None:
         raise InvalidMonthError(f"Invalid reporting month: {month!r}")
 
 
+def _check_budget_cents(category_id: int, cents) -> None:
+    """Budget rule shared by both budget writers: integer cents or None
+    (no budget entered); never negative."""
+    if cents is not None and not isinstance(cents, int):
+        raise ValidationError("budget_cents must be integer cents or None")
+    if cents is not None and cents < 0:
+        raise ValidationError(
+            f"Budget for category {category_id} cannot be negative")
+
+
 def _iso(d: Optional[date]) -> Optional[str]:
     return d.isoformat() if d is not None else None
 
@@ -295,9 +305,7 @@ class OperationsWriteRepository:
             if v is not None and not (0 <= float(v) <= 10):
                 raise ValidationError(f"{pct} out of range: {v}")
         for cat_id, cents in budgets.items():
-            if cents is not None and not isinstance(cents, int):
-                raise ValidationError(
-                    "budget_cents must be integer cents or None")
+            _check_budget_cents(cat_id, cents)
         conn = self._connect()
         try:
             conn.execute("BEGIN")
@@ -330,13 +338,15 @@ class OperationsWriteRepository:
                 if cat is None:
                     raise RecordNotFoundError(
                         f"Unknown expense category {cat_id} for this store")
+                # Same table/columns/conflict rule as save_expense_budget
+                # (the Expenses page writer).
                 conn.execute(
-                    "INSERT INTO expense_budgets "
-                    "(monthly_config_id, category_id, budget_cents) "
-                    "VALUES (?,?,?) "
+                    "INSERT INTO monthly_expense_budgets (store_id, "
+                    "monthly_config_id, category_id, budget_cents) "
+                    "VALUES (?,?,?,?) "
                     "ON CONFLICT (monthly_config_id, category_id) "
                     "DO UPDATE SET budget_cents = excluded.budget_cents",
-                    (config_id, cat_id, cents),
+                    (store_id, config_id, cat_id, cents),
                 )
             conn.commit()
             return {
@@ -350,6 +360,9 @@ class OperationsWriteRepository:
         except sqlite3.IntegrityError as exc:
             conn.rollback()
             raise WriteError(str(exc)) from exc
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise WriteError(f"Database error: {exc}") from exc
         finally:
             conn.close()
 
@@ -358,8 +371,7 @@ class OperationsWriteRepository:
         """Create/update one category budget for a store/month. Idempotent
         on UNIQUE(monthly_config_id, category_id); never duplicates."""
         _check_month(month)
-        if budget_cents is not None and not isinstance(budget_cents, int):
-            raise ValidationError("budget_cents must be integer cents or None")
+        _check_budget_cents(category_id, budget_cents)
         conn = self._connect()
         try:
             self._require_store(conn, store_id)
@@ -389,6 +401,9 @@ class OperationsWriteRepository:
         except sqlite3.IntegrityError as exc:
             conn.rollback()
             raise DuplicateRecordError(str(exc)) from exc
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise WriteError(f"Database error: {exc}") from exc
         finally:
             conn.close()
 

@@ -169,7 +169,11 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     assemble_month via AppService.preview_month — nothing recomputed.
     Raises ConfigNotFoundError/AuthorizationError/... for the caller.
     """
-    rep = app_service.preview_month(user, store_id, month, as_of=today)
+    # One overdue/reporting reference date for Report, Overview and
+    # Actions: kpi.reporting_date (today for the current month, month end
+    # for a past month). ``today`` itself only drives "in progress".
+    as_of = kpi.reporting_date(month, today)
+    rep = app_service.preview_month(user, store_id, month, as_of=as_of)
     finalized_notice = ""
     try:
         versions = app_service.list_report_versions(user, store_id, month)
@@ -229,7 +233,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "proj_pct": proj_pct,
         "fill_pct": min(proj_pct, 1.0),
         "over_label": (f"+{round((proj_pct - 1.0) * 100)}%" if over else ""),
-        "progress_color": ("green" if complete and l1_status == "Achieved"
+        "progress_color": ("green" if complete
+                           and l1_status == kpi.SALES_ACHIEVED
                            else "indigo"),
         "status": sales_status_label,
         "status_color": sales_chip_color,
@@ -255,7 +260,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "progress": (min(float(e.paid_cents / e.total_budget_cents), 1.0)
                      if e.total_budget_cents else 0.0),
         "marker": 0.0,
-        "progress_color": ("red" if exp_status == "Over budget"
+        "progress_color": ("red" if exp_status == kpi.TOTAL_OVER_BUDGET
                            else "green"),
         "status": exp_status,
         "status_color": exp_color,
@@ -282,7 +287,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                          if ratio is not None and target else 0.0),
             "marker": 0.0,
             "progress_color": ("red" if m.salary_ratio_status
-                               == "Above target" else "green"),
+                               == kpi.SALARY_FAILURE else "green"),
             "status": m.salary_ratio_status,
             "status_color": ds.status_color(m.salary_ratio_status),
             "early_tag": "", "early_tip": "",
@@ -318,7 +323,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                      if st.loss_pct_of_sales is not None
                      and cfg.stock_loss_target else 0.0),
         "marker": 0.0,
-        "progress_color": ("red" if st.status == "Over target"
+        "progress_color": ("red" if st.status == kpi.STOCK_OVER_TARGET
                            else "green"),
         "status": st.status,
         "status_color": ds.status_color(st.status),
@@ -352,7 +357,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                           ("gray" if s.status_by_level.get(name, "Awaiting data")
                            in ("Awaiting data", "No target") else "amber")),
          "progress_color": ("green" if complete and s.status_by_level.get(name)
-                            == "Achieved" else "indigo")}
+                            == kpi.SALES_ACHIEVED else "indigo")}
         for i, name in enumerate(level_names, 1)
         for t in [s.targets.get(name)]
     ]
@@ -374,7 +379,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     # action counts for this store/month scope (raised in month or open)
     actions = app_service.get_actions(user, store_id)
     visible = kpi.actions_in_month_scope(actions, month)
-    acounts = kpi.action_counts([a.input for a in visible], as_of=today)
+    acounts = kpi.action_counts([a.input for a in visible], as_of=as_of)
     avg = int(s.average_per_day) if s.average_per_day is not None else None
     glance_pairs = [
         ("Average per reported day",
@@ -416,12 +421,12 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
 
     # --- needs attention (existing flags only) --------------------------
     items: list[dict[str, str]] = []
-    if complete and l1_status == "Below target":
+    if complete and l1_status == kpi.SALES_BELOW:
         items.append({"icon": "trending-down",
                       "text": "Sales below Level 1 for a complete month",
                       "href": "/ops/sales"})
     over_budget = [c.name for c in e.categories
-                   if c.budget_status == "OVER BUDGET"]
+                   if c.budget_status == kpi.CATEGORY_OVER_BUDGET]
     for name in over_budget:
         items.append({"icon": "receipt",
                       "text": f"Expense category OVER BUDGET: {name}",
@@ -435,11 +440,11 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         items.append({"icon": "list-checks",
                       "text": f"{acounts['overdue']} overdue action(s)",
                       "href": "/ops/actions"})
-    if m.turnover_status == "HIGH TURNOVER":
+    if m.turnover_status == kpi.TURNOVER_HIGH:
         items.append({"icon": "users",
                       "text": "HIGH TURNOVER this month",
                       "href": "/ops/manpower"})
-    if st.status == "Over target":
+    if st.status == kpi.STOCK_OVER_TARGET:
         items.append({"icon": "boxes",
                       "text": "Stock loss over target",
                       "href": "/ops/stock"})

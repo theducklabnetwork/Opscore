@@ -71,19 +71,79 @@ class Fixture(unittest.TestCase):
 
     # 2 ------------------------------------------------------------------
     def test_setup_save_atomic_bad_budget_writes_nothing(self):
+        """A negative budget is rejected by the repository with a specific
+        ValidationError; the config change in the same save is NOT
+        written (one transaction)."""
         cat = self.app.add_expense_category(self.admin, self.sid, "Elec",
                                             sort_order=1)
-        before_cfg = self.app.get_month_config(self.admin, self.sid,
-                                               self.month)
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError) as ctx:
             self.app.configure_month_with_budgets(
                 self.admin, self.sid, self.month,
-                {"level1_base_cents": rm(123456)},
-                {cat: -500})  # invalid budget -> nothing written
-        after_cfg = self.app.get_month_config(self.admin, self.sid,
-                                              self.month)
-        self.assertEqual(after_cfg.level1_base_cents,
-                         before_cfg.level1_base_cents)
+                {"level1_base_cents": 12345600},
+                {cat: -500})
+        self.assertEqual(str(ctx.exception),
+                         f"Budget for category {cat} cannot be negative")
+        cfg = self.app.get_month_config(self.admin, self.sid, self.month)
+        self.assertEqual(cfg.level1_base_cents, 20000000)  # unchanged
+        self.assertEqual(
+            self.app.get_expense_budgets(self.admin, self.sid, self.month),
+            {})
+
+    def test_setup_save_two_budgets_read_back(self):
+        """Setup save writes budgets where the Expenses page reads them."""
+        c1 = self.app.add_expense_category(self.admin, self.sid, "Elec",
+                                           sort_order=1)
+        c2 = self.app.add_expense_category(self.admin, self.sid, "Water",
+                                           sort_order=2)
+        self.app.configure_month_with_budgets(
+            self.admin, self.sid, self.month,
+            {"level1_base_cents": 12345600}, {c1: 50000, c2: 12345})
+        self.assertEqual(
+            self.app.get_expense_budgets(self.admin, self.sid, self.month),
+            {c1: 50000, c2: 12345})
+        cfg = self.app.get_month_config(self.admin, self.sid, self.month)
+        self.assertEqual(cfg.level1_base_cents, 12345600)
+        rep = self.app.preview_month(self.admin, self.sid, self.month,
+                                     as_of=TODAY)
+        self.assertEqual(rep.expenses.total_budget_cents, 62345)
+        self.assertEqual(
+            {c.name: c.budget_cents for c in rep.expenses.categories},
+            {"Elec": 50000, "Water": 12345})
+        # second save updates in place (no duplicate rows)
+        self.app.configure_month_with_budgets(
+            self.admin, self.sid, self.month, {}, {c1: 60000})
+        self.assertEqual(
+            self.app.get_expense_budgets(self.admin, self.sid, self.month),
+            {c1: 60000, c2: 12345})
+
+    def test_expense_page_budget_negative_rejected(self):
+        cat = self.app.add_expense_category(self.admin, self.sid, "Elec",
+                                            sort_order=1)
+        with self.assertRaises(ValidationError) as ctx:
+            self.app.set_expense_budget(self.admin, self.sid, self.month,
+                                        cat, -1)
+        self.assertEqual(str(ctx.exception),
+                         f"Budget for category {cat} cannot be negative")
+        self.assertEqual(
+            self.app.get_expense_budgets(self.admin, self.sid, self.month),
+            {})
+
+    def test_setup_blank_budget_matches_expenses_page(self):
+        """Blank budget rule = Expenses page: an untouched blank is not
+        sent; clearing an existing budget to blank is rejected (never
+        written as NULL or 0)."""
+        import types
+        from ducklab.ops_stores_state import StoresState
+        st = types.SimpleNamespace(budget_rows=[
+            {"id": "7", "name": "Elec", "value": "", "original": ""},
+            {"id": "8", "name": "Water", "value": " ", "original": "500.00"},
+            {"id": "9", "name": "Gas", "value": "123.45", "original": ""},
+        ])
+        updates, errors = StoresState._parse_budgets(st)
+        self.assertEqual(updates, {9: 12345})
+        self.assertEqual(errors, [
+            "Budget for Water: enter a budget amount. A missing budget is "
+            "distinct from RM 0 — leave unset instead."])
 
     # 3 ------------------------------------------------------------------
     def test_unchanged_blank_field_does_not_overwrite(self):
@@ -155,6 +215,48 @@ class Fixture(unittest.TestCase):
         rep = self.app.preview_month(self.admin, self.sid, self.month,
                                      as_of=TODAY)
         self.assertIsNotNone(rep)
+
+    def test_inactive_store_rejects_config_payroll_finalize_writes(self):
+        cat = self.app.add_expense_category(self.admin, self.sid, "Elec",
+                                            sort_order=1)
+        self.app.set_expense_budget(self.admin, self.sid, self.month, cat,
+                                    50000)
+        self.app.finalize_month(self.admin, self.sid, self.month,
+                                as_of=TODAY)
+        self.app.set_store_active(self.admin, self.sid, False)
+        attempts = {
+            "record_payroll": lambda: self.app.record_payroll(
+                self.admin, self.sid, self.month, 100000, 0),
+            "add_expense_category": lambda: self.app.add_expense_category(
+                self.admin, self.sid, "Water"),
+            "rename_expense_category":
+                lambda: self.app.rename_expense_category(
+                    self.admin, self.sid, cat, "Power"),
+            "set_expense_budget": lambda: self.app.set_expense_budget(
+                self.admin, self.sid, self.month, cat, 70000),
+            "finalize_month": lambda: self.app.finalize_month(
+                self.admin, self.sid, "2026-09", as_of=TODAY),
+            "correct_month": lambda: self.app.correct_month(
+                self.admin, self.sid, self.month, as_of=TODAY),
+        }
+        for name, call in attempts.items():
+            with self.subTest(name):
+                with self.assertRaises(AuthorizationError) as ctx:
+                    call()
+                self.assertEqual(str(ctx.exception),
+                                 "Store is deactivated: read-only")
+        # nothing changed
+        self.assertEqual(
+            self.app.get_expense_budgets(self.admin, self.sid, self.month),
+            {cat: 50000})
+        self.assertEqual(
+            [c.name for c in self.app.get_expense_categories(
+                self.admin, self.sid)], ["Elec"])
+        cfg = self.app.get_month_config(self.admin, self.sid, self.month)
+        self.assertIsNone(cfg.salary_basic_allowance_cents)
+        self.assertEqual(
+            [v["version"] for v in self.app.list_report_versions(
+                self.admin, self.sid, self.month)], [1])
 
     # 9 ------------------------------------------------------------------
     def test_daily_loads_factor_via_appservice(self):

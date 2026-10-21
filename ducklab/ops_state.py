@@ -363,9 +363,9 @@ def _serialize_live(rep, user=None) -> dict:
             ],
         },
         "actions": {
-            # engine counts: total = all status buckets; open = engine's
-            # Open + In progress + Blocked (kpi.open_actions).
-            "total": sum(v for k, v in a.counts.items() if k != "overdue"),
+            # engine counts: total = kpi.action_counts "total"; open =
+            # engine's Open + In progress + Blocked (kpi.open_actions).
+            "total": a.counts["total"],
             "open": a.open,
             "in_progress": a.counts.get("in_progress", 0),
             "blocked": a.counts.get("blocked", 0),
@@ -452,7 +452,7 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
             "codes": codes,
         },
         "actions": {
-            "total": sum(v for k, v in counts.items() if k != "overdue"),
+            "total": counts.get("total", 0),
             "open": a.get("open"),
             "in_progress": counts.get("in_progress", 0),
             "blocked": counts.get("blocked", 0),

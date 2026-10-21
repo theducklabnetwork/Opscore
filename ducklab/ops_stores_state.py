@@ -9,6 +9,7 @@ stored as NULL; an explicit 0 is stored as 0.
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal, InvalidOperation
 
 import reflex as rx
@@ -64,6 +65,8 @@ SETUP_PAYROLL = [
      "Support team cost (RM, optional)"),
 ]
 SETUP_ALL = SETUP_SALES + SETUP_MANPOWER + SETUP_STOCK + SETUP_PAYROLL
+
+log = logging.getLogger("ducklab.ops_stores_state")
 
 
 def _money_str(cents) -> str:
@@ -510,23 +513,30 @@ class StoresState(StockState):
         """Validate every budget row before ANY write; -> (updates, errors).
 
         updates = {category_id: cents} only for rows the user changed
-        (blank rows that were already blank are not sent)."""
-        updates: dict[int, int | None] = {}
+        (blank rows that were already blank are not sent). Blank handling
+        matches the Expenses page budget form: a budget is never written
+        as blank — clearing an existing budget is rejected, not saved as
+        NULL or 0."""
+        updates: dict[int, int] = {}
         errors: list[str] = []
         for row in self.budget_rows:
             raw = row["value"].strip()
             if raw == row.get("original", ""):
                 continue
-            cents = None
-            if raw != "":
-                try:
-                    cents = kpi.parse_money_cents(raw)
-                    if cents < 0:
-                        raise ValueError("negative")
-                except ValueError:
-                    errors.append(
-                        f"Budget for {row['name']}: non-negative number")
-                    continue
+            if raw == "":
+                errors.append(
+                    f"Budget for {row['name']}: enter a budget amount. A "
+                    "missing budget is distinct from RM 0 — leave unset "
+                    "instead.")
+                continue
+            try:
+                cents = kpi.parse_money_cents(raw)
+                if cents < 0:
+                    raise ValueError("negative")
+            except ValueError:
+                errors.append(
+                    f"Budget for {row['name']}: non-negative number")
+                continue
             updates[int(row["id"])] = cents
         return updates, errors
 
@@ -654,6 +664,12 @@ class StoresState(StockState):
             self.setup_error = str(exc)
         except AuthenticationError:
             self.setup_error = "Session expired — sign in again."
+        except Exception as exc:
+            # Never crash the handler silently: log with traceback and
+            # tell the user nothing was saved (the write is atomic).
+            log.exception("Monthly setup save failed")
+            self.setup_error = (f"Save failed ({type(exc).__name__}); "
+                                "nothing was saved.")
         finally:
             self.setup_saving = False
         yield
