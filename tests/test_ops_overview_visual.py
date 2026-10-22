@@ -27,8 +27,8 @@ class CompactMoneyTests(unittest.TestCase):
         f = ops_charts.fmt_money_compact
         self.assertEqual(f(19130000), "RM 191.3k")      # 191,300 -> 191.3k
         self.assertEqual(f(66000), "RM 660.00")         # 660 exact (2dp)
-        self.assertEqual(f(-19130000), "-RM 191.3k")    # negatives
-        self.assertEqual(f(-500), "-RM 5.00")
+        self.assertEqual(f(-19130000), "\u2212RM 191.3k")    # negatives
+        self.assertEqual(f(-500), "\u2212RM 5.00")
         self.assertEqual(f(None), "—")
         self.assertEqual(f(123456789), "RM 1.2M")
         self.assertEqual(f(9999900), "RM 100.0k")   # 99,999 RM

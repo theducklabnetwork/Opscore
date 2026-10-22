@@ -163,7 +163,13 @@ def main() -> int:
         # --- /ops/stock: trend + composition ---
         page.goto(f"{BASE}/ops/stock")
         page.wait_for_selector("#stock-status", timeout=90000)
-        pick(page, "B02", "September 2026")
+        # under 3 days with stock entries the charts are replaced by one
+        # "Not enough data yet" card (B02 has 2 days in October)
+        pick(page, "B02", "October 2026")
+        check("stock: few entries -> one 'Not enough data yet' card",
+              page.locator("text=Not enough data yet").count() == 1
+              and count_plotly(page) == 0)
+        pick(page, "A01", "September 2026")
         n = count_plotly(page)
         check("stock: two plotly charts (trend + composition)", n >= 2)
         tip = hover_first_point(page)
@@ -174,7 +180,8 @@ def main() -> int:
         # --- /ops/expenses: budget vs actual ---
         page.goto(f"{BASE}/ops/expenses")
         page.wait_for_selector("#expense-kpis", timeout=90000)
-        pick(page, "B02", "September 2026")
+        # X01 (seed_ui_expenses_dev) has categories + budgets in October
+        pick(page, "X01", "October 2026")
         n = count_plotly(page)
         check("expenses: plotly budget-vs-actual rendered", n >= 1)
 

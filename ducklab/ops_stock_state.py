@@ -297,8 +297,7 @@ class StockState(ManpowerState):
                 "share": ds.fmt_pct(share) if sign == 1 else "—",
                 "days": str(n_days),
                 "treatment": TREATMENT[sign],
-                "treatment_color": {"Included": "indigo", "Offset": "blue",
-                                    "Info only": "gray"}[TREATMENT[sign]],
+                "treatment_color": ds.status_color(TREATMENT[sign]),
                 "selected": "1" if code == self.selected_code else "0",
             })
         self.cat_rows = rows

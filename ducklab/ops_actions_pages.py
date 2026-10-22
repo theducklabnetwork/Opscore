@@ -5,6 +5,7 @@ from __future__ import annotations
 import reflex as rx
 
 from ducklab import design as ds
+from ducklab import ui
 from ducklab.ops_actions_state import (
     FILTER_PILLARS, FILTER_PRIORITIES, FILTER_STATUSES, PILLARS, PRIORITIES,
     ACTION_STATUSES, ActionsState,
@@ -12,155 +13,110 @@ from ducklab.ops_actions_state import (
 from ducklab.ops_shell import shell
 
 
+A = ActionsState
+
+
 # ---------------------------------------------------------------------------
-# 1. Cards
+# 1. Tiles: Open, Overdue, Completed
 # ---------------------------------------------------------------------------
 
 def _cards() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Actions Overview", "list-checks"),
-            rx.grid(
-                ds.kpi_card("Open (incl. In progress, Blocked)",
-                            ActionsState.n_open, icon="circle-dot"),
-                rx.card(
-                    rx.vstack(
-                        rx.hstack(
-                            rx.icon("alarm-clock", size=16,
-                                    color=ds.ERROR),
-                            rx.text("Overdue", size="2",
-                                    color=ds.TEXT_MUTED, weight="medium"),
-                            spacing="2", align="center"),
-                        rx.heading(ActionsState.n_overdue, size="6"),
-                        rx.cond(
-                            ActionsState.n_overdue != "0",
-                            rx.badge("Needs attention", color_scheme="red",
-                                     variant="soft", size="1",
-                                     id="overdue-attention")),
-                        spacing="1", align="start"),
-                    id="card-overdue"),
-                ds.kpi_card("Completed", ActionsState.n_done,
-                            icon="circle-check", accent="green"),
-                columns=rx.breakpoints(initial="1", sm="3"),
-                spacing="3", width="100%",
-            ),
-            spacing="3", width="100%",
-        ),
-        width="100%", id="action-cards",
+    # keep the open count the first number in #action-cards (suite parses it)
+    return ui.kpi_grid(
+        ui.kpi_tile("Open", A.n_open, sub="Incl. In progress and Blocked"),
+        rx.box(
+            ui.kpi_tile("Overdue", A.n_overdue,
+                        chip=(rx.cond(A.n_overdue != "0", "Needs attention",
+                                      ""), "red"),
+                        chip_id="overdue-attention",
+                        sub="Due before today, not Done/Cancelled"),
+            id="card-overdue", height="100%"),
+        ui.kpi_tile("Completed", A.n_done),
+        columns=rx.breakpoints(initial="3"),
+        id="action-cards",
     )
 
 
 # ---------------------------------------------------------------------------
-# 2. Filters + table
+# 2. Filters (one row) + actions table
 # ---------------------------------------------------------------------------
 
 def _filters() -> rx.Component:
     return rx.hstack(
-        rx.select(FILTER_STATUSES, value=ActionsState.f_status,
-                  on_change=ActionsState.set_f_status, size="2",
-                  id="f-status"),
-        rx.select(FILTER_PILLARS, value=ActionsState.f_pillar,
-                  on_change=ActionsState.set_f_pillar, size="2",
-                  id="f-pillar"),
-        rx.select(FILTER_PRIORITIES, value=ActionsState.f_priority,
-                  on_change=ActionsState.set_f_priority, size="2",
-                  id="f-priority"),
+        rx.select(FILTER_STATUSES, value=A.f_status,
+                  on_change=A.set_f_status, size="2", id="f-status"),
+        rx.select(FILTER_PILLARS, value=A.f_pillar,
+                  on_change=A.set_f_pillar, size="2", id="f-pillar"),
+        rx.select(FILTER_PRIORITIES, value=A.f_priority,
+                  on_change=A.set_f_priority, size="2", id="f-priority"),
         rx.hstack(
-            rx.checkbox(checked=ActionsState.f_overdue_only,
-                        on_change=ActionsState.set_f_overdue_only,
-                        id="f-overdue"),
+            rx.checkbox(checked=A.f_overdue_only,
+                        on_change=A.set_f_overdue_only, id="f-overdue"),
             rx.text("Overdue only", size="2"),
             spacing="2", align="center"),
-        rx.spacer(),
-        rx.cond(
-            ActionsState.can_write_actions,
-            rx.button(rx.icon("plus", size=14), "Add Action",
-                      color_scheme="indigo", on_click=ActionsState.open_add,
-                      id="add-action")),
         wrap="wrap", spacing="3", width="100%", align="center",
     )
 
 
+# phones keep Issue, Priority, Status and Due
+_COLS = [("Raised", False, True), ("Pillar", False, True, True), "Issue",
+         "Priority",
+         "Status",
+         ("Person in charge", False, True), "Due", ("Completed", False, True),
+         ""]
+
+
 def _row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(row["raised"]),
-        rx.table.cell(row["pillar"]),
-        rx.table.cell(
-            rx.vstack(
-                rx.text(row["issue"], size="2"),
-                rx.cond(
-                    row["carried"],
+    return rx.el.tr(
+        ui.td(row["raised"], wide_only=True),
+        ui.td(row["pillar"], wide_only=True, xl_only=True),
+        ui.td(rx.vstack(
+            rx.text(row["issue"], size="2"),
+            rx.cond(row["carried"],
                     rx.badge("Carried over", size="1", variant="outline",
-                             color_scheme="violet")),
-                spacing="1", align="start"),
-            min_width="220px"),
-        rx.table.cell(rx.badge(row["priority"],
-                               color_scheme=row["priority_color"],
-                               variant="soft", size="1")),
-        rx.table.cell(rx.badge(row["status"],
-                               color_scheme=row["status_color"],
-                               variant="soft", size="1")),
-        rx.table.cell(row["pic"]),
-        rx.table.cell(
-            rx.hstack(
-                rx.text(row["due"], size="2"),
-                rx.cond(row["overdue"],
-                        rx.badge("Overdue", color_scheme="red", size="1",
-                                 variant="soft")),
-                spacing="2", align="center")),
-        rx.table.cell(row["completion"]),
-        rx.table.cell(
-            rx.cond(
-                ActionsState.can_write_actions,
-                rx.button("Edit", size="1", variant="soft",
-                          on_click=lambda: ActionsState.open_edit(row["id"]),
-                          class_name="act-edit"))),
+                             color_scheme="violet", radius="full")),
+            spacing="1", align="start"),
+            wrap=True, style={"minWidth": "min(220px, 42vw)"}),
+        ui.td(ui.status_chip(row["priority"], row["priority_color"])),
+        ui.td(ui.status_chip(row["status"], row["status_color"])),
+        ui.td(row["pic"], wide_only=True),
+        ui.td(rx.hstack(
+            rx.text(row["due"], size="2"),
+            rx.cond(row["overdue"], ui.status_chip("Overdue", "red")),
+            spacing="2", align="center")),
+        ui.td(row["completion"], wide_only=True),
+        ui.td(rx.cond(
+            A.can_write_actions,
+            rx.button("Edit", size="1", variant="soft",
+                      on_click=lambda: A.open_edit(row["id"]),
+                      class_name="act-edit"))),
     )
 
 
 def _table() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Actions", "clipboard-list"),
-            rx.text(
-                "Shows actions raised in the selected month plus any open "
-                "action raised earlier (carried-over lines are labelled). "
-                "Actions are never part of finalized-month snapshots.",
-                size="1", color=ds.TEXT_FAINT),
-            rx.cond(
-                ActionsState.loaded & (ActionsState.rows.length() > 0),
-                rx.scroll_area(
-                    rx.table.root(
-                        rx.table.header(rx.table.row(
-                            rx.table.column_header_cell("Raised"),
-                            rx.table.column_header_cell("Pillar"),
-                            rx.table.column_header_cell("Issue"),
-                            rx.table.column_header_cell("Priority"),
-                            rx.table.column_header_cell("Status"),
-                            rx.table.column_header_cell("Person in charge"),
-                            rx.table.column_header_cell("Due"),
-                            rx.table.column_header_cell("Completed"),
-                            rx.table.column_header_cell(""),
-                        )),
-                        rx.table.body(
-                            rx.foreach(ActionsState.filtered_rows, _row)),
-                        variant="surface", width="100%",
-                    ),
-                    type="auto", scrollbars="horizontal",
-                    style={"maxWidth": "100%"},
-                ),
-                ds.empty_state("No actions for this month",
-                               "Raise a follow-up with the Add Action button; "
-                               "open items from earlier months appear here "
-                               "automatically.", icon="list-checks"),
-            ),
-            rx.cond(ActionsState.notice != "",
-                    rx.callout(ActionsState.notice, icon="circle-check",
-                               color_scheme="green", variant="soft",
-                               id="act-notice")),
-            spacing="3", width="100%",
+    return ui.section_card(
+        _filters(),
+        rx.cond(
+            A.loaded & (A.rows.length() > 0),
+            ui.data_table(_COLS, rx.foreach(A.filtered_rows, _row)),
+            ui.empty_state("No actions for this month",
+                           "Raise a follow-up with Add action; open items "
+                           "from earlier months appear here automatically.",
+                           icon="list-checks"),
         ),
-        width="100%", id="actions-table",
+        rx.cond(A.notice != "",
+                rx.callout(A.notice, icon="circle-check",
+                           color_scheme="green", variant="soft",
+                           id="act-notice")),
+        title="Actions",
+        subtitle="Raised this month plus open actions from earlier months "
+                 "(labelled Carried over). Never part of finalized "
+                 "snapshots.",
+        extra=rx.cond(
+            A.can_write_actions,
+            rx.button(rx.icon("plus", size=14), "Add action",
+                      on_click=A.open_add, id="add-action")),
+        id="actions-table",
     )
 
 
@@ -294,23 +250,16 @@ def actions_page() -> rx.Component:
     return shell(
         "Action Tracker",
         rx.vstack(
-            rx.text(
-                "Follow-up actions per store. Owner and due date are "
-                "required for accountability; Overdue = due date before "
-                "today and not Done/Cancelled.",
-                size="2", color=ds.TEXT_MUTED),
             rx.cond(
-                ActionsState.loaded,
-                rx.vstack(
-                    _cards(),
-                    _filters(),
-                    _table(),
-                    spacing="5", width="100%",
-                ),
+                A.loaded,
+                rx.vstack(_cards(), _table(), spacing=ui.GAP, width="100%"),
             ),
             _dialog(),
-            spacing="4", width="100%",
+            spacing=ui.GAP, width="100%",
         ),
-        on_store=ActionsState.select_store,
-        on_month=ActionsState.select_month,
+        on_store=A.select_store,
+        on_month=A.select_month,
+        description="Follow-up actions per store. Owner and due date are "
+                    "required; overdue = due before today and not "
+                    "Done/Cancelled.",
     )

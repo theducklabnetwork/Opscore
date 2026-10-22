@@ -317,6 +317,11 @@ class ManpowerState(ExpensesState):
                            else m.salary_ratio_status),
                 "mtd": "" if month_complete else "1",
                 "status_color": ds.status_color(m.salary_ratio_status),
+                # bar in the status colour (red on failure), as the Overview
+                "bar_color": ("red" if m.salary_ratio_status
+                              == kpi.SALARY_FAILURE else "green"
+                              if m.salary_ratio_status == kpi.SALARY_WITHIN
+                              else "gray"),
                 "ratio_bar": (f"{ratio_used_pct:.0f}"
                               if ratio_used_pct is not None else "0"),
                 "sales": ds.fmt_rm(s.sales_mtd_cents),

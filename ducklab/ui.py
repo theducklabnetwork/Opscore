@@ -126,7 +126,10 @@ def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
          chip_id=None) -> rx.Component:
     """Label + big value (+ chips, + sub-line). No border: use inside a
     section_card, or kpi_tile for a standalone tile."""
-    items = [rx.text(label, size="2", color=ds.TEXT_MUTED, weight="medium"),
+    # below 992px labels get room for two lines, so values in a row line
+    # up and tiles keep one height even when a label wraps
+    items = [rx.text(label, size="2", color=ds.TEXT_MUTED, weight="medium",
+                     min_height=rx.breakpoints(initial="2.6em", md="0")),
              _value(value, compact, exact, size_wide=size)]
     if chip is not None or tag is not None:
         chips = []
@@ -179,6 +182,8 @@ def kpi_grid(*tiles, columns=None, id=None) -> rx.Component:
 _TABLE_STYLE = {
     "width": "100%",
     # columns marked wide-only drop out on phones (< 768px)
+    # xl-only columns (secondary detail) need a very wide screen
+    "@media (max-width: 1535px)": {"& .xl-only": {"display": "none"}},
     "@media (max-width: 767px)": {
         "& .wide-only": {"display": "none"},
         "& th, & td": {"paddingLeft": "8px", "paddingRight": "8px"},
@@ -208,20 +213,26 @@ _TABLE_STYLE = {
 }
 
 
-def _cls(numeric: bool, wide_only: bool, wrap: bool = False) -> str:
+def _cls(numeric: bool, wide_only: bool, wrap: bool = False,
+         xl_only: bool = False) -> str:
     return " ".join(c for c, on in (("num", numeric),
                                     ("wide-only", wide_only),
-                                    ("wrap", wrap)) if on)
+                                    ("wrap", wrap),
+                                    ("xl-only", xl_only)) if on)
 
 
-def th(label, numeric: bool = False, wide_only: bool = False) -> rx.Component:
-    return rx.el.th(label, class_name=_cls(numeric, wide_only))
+def th(label, numeric: bool = False, wide_only: bool = False,
+       xl_only: bool = False) -> rx.Component:
+    return rx.el.th(label, class_name=_cls(numeric, wide_only,
+                                           xl_only=xl_only))
 
 
 def td(*children, numeric: bool = False, wide_only: bool = False,
-       wrap: bool = False, **props) -> rx.Component:
-    """Table cell; ``wrap`` lets long labels/chips wrap (narrow tables)."""
-    return rx.el.td(*children, class_name=_cls(numeric, wide_only, wrap),
+       wrap: bool = False, xl_only: bool = False, **props) -> rx.Component:
+    """Table cell; ``wrap`` lets long labels/chips wrap; ``wide_only``
+    hides it on phones, ``xl_only`` below 1536px (match the column)."""
+    return rx.el.td(*children,
+                    class_name=_cls(numeric, wide_only, wrap, xl_only),
                     **props)
 
 
@@ -231,8 +242,9 @@ def data_table(columns, *body, id=None) -> rx.Component:
     container, on narrow screens. (A sticky header is not possible together
     with that sideways scroll in plain CSS, so the header is not sticky.)
 
-    ``columns``: labels or (label, numeric[, wide_only]) tuples — wide_only
-    columns are hidden on phones (pass the same flag to their ``td``);
+    ``columns``: labels or (label, numeric[, wide_only[, xl_only]])
+    tuples — wide_only columns are hidden on phones, xl_only ones below
+    1536px (pass the same flag to their ``td``);
     ``body``: row components (``rx.el.tr`` built with ``td``)."""
     heads = [th(c) if isinstance(c, str) else th(*c) for c in columns]
     return rx.box(
