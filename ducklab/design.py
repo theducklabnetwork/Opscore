@@ -260,6 +260,9 @@ def projection_style(state: str, status: str) -> tuple[str, str, str]:
     tag = "Early estimate" if state == "early_estimate" else ""
     if state == "actual":
         return status, status_color(status), ""
+    if status == "No reference":
+        # a missing reference is a fact, not a projection: no prefix/tag
+        return status, status_color(status), ""
     if status in ("Awaiting data", "No target"):
         return status, "gray", tag
     return f"Projected: {status}", "amber", tag

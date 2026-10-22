@@ -142,7 +142,7 @@ def month_selector(on_month=None) -> rx.Component:
 
 
 def header(title: str, on_store=None, on_month=None,
-           description=None) -> rx.Component:
+           description=None, actions=None) -> rx.Component:
     return rx.vstack(
         rx.hstack(
             mobile_drawer(),
@@ -170,8 +170,9 @@ def header(title: str, on_store=None, on_month=None,
         rx.hstack(
             store_selector(on_store=on_store),
             month_selector(on_month=on_month),
+            *([rx.spacer(), actions] if actions is not None else []),
             spacing="3", width="100%",
-            wrap="wrap",
+            wrap="wrap", align="center",
         ),
         spacing="4", width="100%",
         padding_bottom="1.25em",
@@ -180,13 +181,14 @@ def header(title: str, on_store=None, on_month=None,
 
 
 def shell(title: str, content: rx.Component,
-          on_store=None, on_month=None, description=None) -> rx.Component:
+          on_store=None, on_month=None, description=None,
+          actions=None) -> rx.Component:
     return rx.hstack(
         sidebar(),
         rx.box(
             rx.vstack(
                 header(title, on_store=on_store, on_month=on_month,
-                       description=description),
+                       description=description, actions=actions),
                 rx.cond(
                     ~OpsState.selected_store_active,
                     rx.callout(

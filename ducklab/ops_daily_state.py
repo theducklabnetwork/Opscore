@@ -65,6 +65,11 @@ class DailyState(OpsState):
     hidden_count: int = 0                    # unreported days (collapsed)
     hidden_label: str = ""
     show_hidden: bool = False
+    # "Record a day" header button: today if in month and not entered,
+    # else the first unreported day; disabled for read-only / no target
+    record_day_iso: str = ""
+    record_day_enabled: bool = False
+    record_day_tip: str = ""
     day_kpis: dict[str, str] = {}
     can_write: bool = False
     month_finalized: bool = False
@@ -226,6 +231,9 @@ class DailyState(OpsState):
         self.day_rows_reported = []
         self.hidden_count = 0
         self.hidden_label = ""
+        self.record_day_iso = ""
+        self.record_day_enabled = False
+        self.record_day_tip = ""
         self.day_kpis = {}
         self.month_finalized = False
         store_id = self._selected_store_id()
@@ -276,6 +284,30 @@ class DailyState(OpsState):
         self.hidden_count = len(rows) - len(self.day_rows_reported)
         self.hidden_label = ds.days_not_reported_label(self.hidden_count)
         self.day_kpis = day_kpis
+        self._set_record_day(rows, authz.can_write_operations(user))
+
+    def _set_record_day(self, rows, role_can_write: bool) -> None:
+        """Target + enabled state + tooltip of the "Record a day" button."""
+        open_days = [r["iso"] for r in rows
+                     if r["status"] == ds.DAY_NOT_REPORTED]
+        today = kpi.kl_today().isoformat()
+        target = today if today in open_days else (
+            open_days[0] if open_days else "")
+        self.record_day_iso = target
+        if not self.selected_store_active:
+            self.record_day_tip = ("This store is deactivated — records "
+                                   "are read-only.")
+        elif not role_can_write:
+            self.record_day_tip = ("Your role has read-only access to "
+                                   "daily records.")
+        elif not target:
+            self.record_day_tip = "Every day of this month is entered."
+        else:
+            d = date.fromisoformat(target)
+            self.record_day_tip = (f"Opens {calendar.day_name[d.weekday()]}"
+                                   f" {d.day} {calendar.month_name[d.month]}")
+        self.record_day_enabled = bool(
+            target and role_can_write and self.selected_store_active)
 
     def _day_row(self, d: date, rec, signs, factor) -> dict[str, str]:
         base = {
@@ -357,6 +389,9 @@ class DailyState(OpsState):
                 "early_tip": (ds.EARLY_ESTIMATE_TIP.format(
                     n=s.days_entered, m=s.days_in_month)
                     if early_tag else ""),
+                "projected_sub": ("Actual"
+                                  if s.projection_state == "actual"
+                                  else "Projected"),
                 "proj_achievement_sub": (
                     "Month-end vs Level 1"
                     if s.projection_state == "actual"
@@ -370,7 +405,7 @@ class DailyState(OpsState):
                         "proj_achievement": "—", "projected": "—",
                         "projected_compact": "—", "projected_exact": "—",
                         "proj_status": "", "proj_color": "gray",
-                        "proj_achievement_sub": "",
+                        "proj_achievement_sub": "", "projected_sub": "",
                         "early_tag": "", "early_tip": "", "loss": "—"})
         summary = _sales_summary(days, s)
         out.update(summary)
@@ -386,9 +421,9 @@ class DailyState(OpsState):
                                                whole_below=True)
         out["avg_daily_exact"] = ds.fmt_rm(
             int(avg) if entered and avg is not None else None)
-        out["target_sub"] = ("Level 1 target " + out["target"]
-                             if out["target"] != "—"
-                             else "No Level 1 target")
+        level1 = s.targets.get("level1") if s is not None else None
+        out["target_sub"] = ("Level 1 target " + ds.fmt_rm0(level1)
+                             if level1 is not None else "No Level 1 target")
         return out
 
 

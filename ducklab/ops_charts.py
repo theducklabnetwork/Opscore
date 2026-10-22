@@ -130,14 +130,19 @@ def daily_line(day_labels: Sequence[str],
                dark: bool,
                name: str = "Daily",
                y_title: str = "RM",
-               target_rm: Optional[float] = None) -> go.Figure:
-    """One value per calendar day; None -> gap (no interpolation)."""
+               target_rm: Optional[float] = None,
+               day_numbers: Optional[Sequence[int]] = None) -> go.Figure:
+    """One value per calendar day; None -> gap (no interpolation).
+
+    With ``day_numbers`` the x axis is numeric day-of-month (a few clean
+    ticks, never 31 rotated labels); ``day_labels`` then only feed hover."""
     pal = _pal(dark)
     hover = [f"{lbl}<br>{name}: {fmt_rm(v * 100 if v is not None else None)}"
              for lbl, v in zip(day_labels, values_rm)]
+    x = list(day_numbers) if day_numbers is not None else list(day_labels)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=list(day_labels), y=[None if v is None else v for v in values_rm],
+        x=x, y=[None if v is None else v for v in values_rm],
         mode="lines+markers", connectgaps=False, name=name,
         line=dict(color=pal["accent"], width=2),
         marker=dict(size=5, color=pal["accent"]),
@@ -149,7 +154,11 @@ def daily_line(day_labels: Sequence[str],
                       line_color=pal["budget"],
                       annotation_text=f"Target {fmt_rm0(target_rm * 100)}",
                       annotation_font_color=pal["muted"])
-    fig.update_layout(**_base_layout(pal, y_title))
+    layout = _base_layout(pal, y_title,
+                          x_title="Day of month" if day_numbers else "")
+    if day_numbers:
+        layout["xaxis"]["range"] = [0.5, max(day_numbers) + 0.5]
+    fig.update_layout(**layout)
     return fig
 
 

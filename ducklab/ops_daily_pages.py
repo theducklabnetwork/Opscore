@@ -31,27 +31,28 @@ def _kpi_summary() -> rx.Component:
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
+        # same tiles and names as Sales; the projection chip + early-estimate
+        # tag appear once, on the projected-achievement tile
         ui.kpi_grid(
-            ui.kpi_tile("Month-to-Date Sales", K["mtd"],
+            ui.kpi_tile("Sales MTD", K["mtd"],
                         compact=K["mtd_compact"], exact=K["mtd"],
                         sub=K["reported_days"], id="kpi-mtd"),
-            ui.kpi_tile("Achievement", K["achievement"],
+            ui.kpi_tile("Achievement to date", K["achievement"],
                         sub=K["target_sub"], id="kpi-achievement"),
-            ui.kpi_tile("Projected Month-End", K["projected"],
+            ui.kpi_tile("Month-end sales", K["projected"],
                         compact=K["projected_compact"],
                         exact=K["projected_exact"],
-                        chip=_PROJ_CHIP, tag=K["early_tag"],
-                        tag_tip=K["early_tip"], id="kpi-projected"),
-            ui.kpi_tile("Projected Achievement", K["proj_achievement"],
+                        sub=K["projected_sub"], id="kpi-projected"),
+            ui.kpi_tile("Projected achievement", K["proj_achievement"],
                         chip=_PROJ_CHIP, tag=K["early_tag"],
                         tag_tip=K["early_tip"],
                         sub=K["proj_achievement_sub"],
                         id="kpi-proj-achievement"),
-            ui.kpi_tile("Avg Daily Sales", K["avg_daily"],
+            ui.kpi_tile("Avg daily sales", K["avg_daily"],
                         exact=K["avg_daily_exact"]),
             ui.kpi_tile("Transactions", K["transactions"]),
-            ui.kpi_tile("Units Sold", K["units"]),
-            ui.kpi_tile("Total Loss", K["loss"]),
+            ui.kpi_tile("Units sold", K["units"]),
+            ui.kpi_tile("Total loss", K["loss"]),
         ),
         spacing="4", width="100%", id="daily-kpis",
     )
@@ -95,6 +96,20 @@ def _day_row(row) -> rx.Component:
                 ),
             ),
         ),
+    )
+
+
+def _record_day_button() -> rx.Component:
+    """Header action: opens the entry dialog for today (if in the month and
+    not entered) or the first unreported day. Disabled with a tooltip for
+    read-only users and deactivated stores. The box keeps the tooltip
+    working on a disabled button."""
+    return rx.tooltip(
+        rx.box(rx.button(
+            rx.icon("plus", size=15), "Record a day", size="2",
+            on_click=DailyState.open_entry(DailyState.record_day_iso),
+            disabled=~DailyState.record_day_enabled, id="record-day")),
+        content=DailyState.record_day_tip,
     )
 
 
@@ -399,4 +414,5 @@ def daily_page() -> rx.Component:
         on_month=DailyState.select_month,
         description="Record daily sales, staffing and stock losses. "
                     "Saving recalculates the live KPIs immediately.",
+        actions=_record_day_button(),
     )

@@ -105,7 +105,7 @@ def main() -> int:
 
         body = page.inner_text("body")
         check("5. headcount metrics visible",
-              "Opening Headcount" in body and "Closing Headcount" in body)
+              "Opening headcount" in body and "Closing headcount" in body)
         check("hc status badge (Vacancy or On budget etc.)",
               page.locator("#hc-status").inner_text() != "")
         # seeded: opening 10, +1 hire, -1 resignation -> closing 10, budget 12

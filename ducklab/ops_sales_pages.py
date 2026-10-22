@@ -19,24 +19,24 @@ _PROJ_CHIP = (S.sp_proj_status, S.sp_proj_color)
 
 
 def _kpi_tiles() -> rx.Component:
+    # the projection chip + early-estimate tag appear once per page, on the
+    # projected-achievement tile (same tiles and names as Daily)
     return ui.kpi_grid(
         ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
                     compact=S.sp_sales_mtd_compact,
                     exact=S.sp_sales_mtd_exact, sub=S.sp_sales_mtd_sub),
-        ui.kpi_tile("Achievement to Date", S.sp_mtd_achievement,
+        ui.kpi_tile("Achievement to date", S.sp_mtd_achievement,
                     sub=S.sp_mtd_achievement_sub),
-        ui.kpi_tile("Month-End Sales", S.sp_month_end,
+        ui.kpi_tile("Month-end sales", S.sp_month_end,
                     compact=S.sp_month_end_compact,
-                    exact=S.sp_month_end_exact,
-                    chip=_PROJ_CHIP, tag=S.sp_early_tag,
-                    tag_tip=S.sp_early_tip),
-        ui.kpi_tile("Level 1 Achievement", S.sp_l1_achievement,
+                    exact=S.sp_month_end_exact, sub=S.sp_month_end_sub),
+        ui.kpi_tile("Projected achievement", S.sp_l1_achievement,
                     chip=_PROJ_CHIP, tag=S.sp_early_tag,
                     tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub),
-        ui.kpi_tile("Needed / Remaining Day", S.sp_needed,
+        ui.kpi_tile("Needed per remaining day", S.sp_needed,
                     compact=S.sp_needed_compact, exact=S.sp_needed_exact,
                     sub=S.sp_needed_sub),
-        ui.kpi_tile("Avg / Reported Day", S.sp_avg_day,
+        ui.kpi_tile("Avg per reported day", S.sp_avg_day,
                     compact=S.sp_avg_day_compact,
                     exact=S.sp_avg_day_exact),
         columns=rx.breakpoints(initial="2", md="3"),
@@ -71,16 +71,18 @@ def _pace_chart() -> rx.Component:
 
 
 def _status_cell(status, color, tag="", tip="") -> rx.Component:
-    return ui.td(rx.hstack(ui.status_chip(status, color),
-                           ui.early_tag(tag, tip), spacing="1"))
+    # chips may wrap so Level / Achievement / Status fit on phones
+    return ui.td(rx.hstack(ui.status_chip(status, color, wrap=True),
+                           ui.early_tag(tag, tip), spacing="1",
+                           wrap="wrap"), wrap=True)
 
 
 def _ladder_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text(row["level"], weight="medium")),
-        ui.td(row["target"], numeric=True),
+        ui.td(row["target"], numeric=True, wide_only=True),
         ui.td(row["achievement"], numeric=True),
-        ui.td(row["gap"], numeric=True),
+        ui.td(row["gap"], numeric=True, wide_only=True),
         _status_cell(row["status"], row["color"], row["early_tag"],
                      row["early_tip"]),
     )
@@ -88,10 +90,10 @@ def _ladder_row(row) -> rx.Component:
 
 def _comparison_row(row) -> rx.Component:
     return rx.el.tr(
-        ui.td(rx.text(row["label"], weight="medium")),
-        ui.td("—", numeric=True),
+        ui.td(rx.text(row["label"], weight="medium"), wrap=True),
+        ui.td("—", numeric=True, wide_only=True),
         ui.td(row["growth"], numeric=True),
-        ui.td("—", numeric=True),
+        ui.td("—", numeric=True, wide_only=True),
         _status_cell(row["status"], row["color"], row["early_tag"],
                      row["early_tip"]),
     )
@@ -100,11 +102,13 @@ def _comparison_row(row) -> rx.Component:
 def _target_ladder() -> rx.Component:
     return ui.section_card(
         ui.data_table(
-            ["Level", ("Target", True), ("Achievement", True),
-             ("Gap", True), "Status"],
+            ["Level", ("Target", True, True), ("Achievement", True),
+             ("Gap", True, True), "Status"],
             rx.foreach(S.sp_ladder, _ladder_row),
             rx.foreach(S.sp_comparisons, _comparison_row),
         ),
+        rx.cond(~S.sp_levels_configured,
+                ui.note("Levels 2-4: no uplift set in Monthly Setup")),
         title="Target Ladder & Comparisons",
         subtitle="Achievement and gap use the projected month-end until "
                  "every day is entered",

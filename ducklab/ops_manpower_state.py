@@ -100,17 +100,19 @@ class ManpowerState(ExpensesState):
     mp_error: str = ""
     mp_notice: str = ""
 
-    # KPI groups (preformatted strings)
-    hc_kpis: dict[str, str] = {}         # headcount
-    eff_kpis: dict[str, str] = {}        # efficiency / turnover
+    # KPI groups (preformatted strings); each figure appears once on the page
+    hc_kpis: dict[str, str] = {}         # headcount + turnover
+    eff_kpis: dict[str, str] = {}        # staffing efficiency (+ sales MTD)
     pay_kpis: dict[str, str] = {}        # payroll (restricted values)
-    prod_kpis: dict[str, str] = {}       # productivity
     leave_kpis: dict[str, str] = {}      # leave totals
-    move_kpis: dict[str, str] = {}       # movement summary
     pt_factor_label: str = "—"
 
-    # daily staffing rows
+    # daily staffing rows (unreported days collapsed)
     staff_rows: list[dict[str, str]] = []
+    staff_rows_reported: list[dict[str, str]] = []
+    staff_hidden_count: int = 0
+    staff_hidden_label: str = ""
+    staff_show_hidden: bool = False
     staffing_note: str = ""
 
     # --- monthly configuration editor -----------------------------------
@@ -139,10 +141,11 @@ class ManpowerState(ExpensesState):
         self.hc_kpis = {}
         self.eff_kpis = {}
         self.pay_kpis = {}
-        self.prod_kpis = {}
         self.leave_kpis = {}
-        self.move_kpis = {}
         self.staff_rows = []
+        self.staff_rows_reported = []
+        self.staff_hidden_count = 0
+        self.staff_hidden_label = ""
         self.staffing_note = ""
         self.pt_factor_label = "—"
         self.mp_error = ""
@@ -154,6 +157,10 @@ class ManpowerState(ExpensesState):
         self.cfg_open = False
         self.cfg_error = ""
         self.cfg_saving = False
+
+    @rx.event
+    def toggle_staff_hidden_days(self):
+        self.staff_show_hidden = not self.staff_show_hidden
 
     # ------------------------------------------------------------------
     # selector overrides: keep manpower data in sync with store/month
@@ -254,6 +261,12 @@ class ManpowerState(ExpensesState):
                          else f"{m.headcount_variance:+,}"),
             "status": m.headcount_status,
             "status_color": ds.status_color(m.headcount_status),
+            # turnover lives with headcount movement (shown once)
+            "turnover": ds.fmt_pct(m.turnover_pct),
+            "turnover_status": m.turnover_status,
+            "turnover_color": ds.status_color(m.turnover_status),
+            "turnover_sub": ("Resignations ÷ opening · threshold "
+                             + ds.fmt_pct(cfg.turnover_threshold)),
         }
         factor_missing = m.pt_factor_missing
         self.eff_kpis = {
@@ -271,7 +284,11 @@ class ManpowerState(ExpensesState):
             "turnover_status": m.turnover_status,
             "turnover_color": ds.status_color(m.turnover_status),
             "threshold": ds.fmt_pct(cfg.turnover_threshold),
+            "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
+            "completeness": (f"{s.days_entered} of {s.days_in_month} "
+                             "days reported"),
         }
+        month_complete = s.days_entered >= s.days_in_month
         # Payroll block: restricted values are never populated for
         # non-authorized roles (not merely hidden client-side).
         if self.can_view_payroll:
@@ -292,7 +309,13 @@ class ManpowerState(ExpensesState):
                 "target": ds.fmt_pct(cfg.salary_ratio_target),
                 "budget": ds.fmt_rm0(budget),
                 "variance": ds.fmt_rm0(variance),
-                "status": m.salary_ratio_status,
+                # incomplete month: the ratio uses sales to date, so the
+                # status is labelled "Month to date" (engine value as is)
+                "status": (f"Month to date: {m.salary_ratio_status}"
+                           if not month_complete and m.salary_ratio_status
+                           in (kpi.SALARY_WITHIN, kpi.SALARY_FAILURE)
+                           else m.salary_ratio_status),
+                "mtd": "" if month_complete else "1",
                 "status_color": ds.status_color(m.salary_ratio_status),
                 "ratio_bar": (f"{ratio_used_pct:.0f}"
                               if ratio_used_pct is not None else "0"),
@@ -300,20 +323,6 @@ class ManpowerState(ExpensesState):
             }
         else:
             self.pay_kpis = {"status": "Restricted", "status_color": "gray"}
-        self.prod_kpis = {
-            "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
-            "avg_effective": self.eff_kpis["avg_effective"],
-            "sales_per_staff": self.eff_kpis["sales_per_staff"],
-            "completeness": f"{s.days_entered} of {s.days_in_month} days reported",
-        }
-        self.move_kpis = {
-            "opening": self.hc_kpis["opening"],
-            "hires": self.hc_kpis["hires"],
-            "resigned": self.hc_kpis["resigned"],
-            "closing": self.hc_kpis["closing"],
-            "turnover": self.eff_kpis["turnover"],
-            "turnover_status": m.turnover_status,
-        }
 
         # --- daily staffing rows + leave totals --------------------------
         by_date = {d.date: d for d in days}
@@ -325,10 +334,15 @@ class ManpowerState(ExpensesState):
             rows.append(self._staff_row(d, by_date.get(d),
                                         cfg.part_timer_factor))
         self.staff_rows = rows
-        reported = sum(1 for r in rows if r["status"] != "unreported")
+        self.staff_rows_reported = [r for r in rows
+                                    if r["status"] != ds.DAY_NOT_REPORTED]
+        reported = len(self.staff_rows_reported)
+        self.staff_hidden_count = n_days - reported
+        self.staff_hidden_label = ds.days_not_reported_label(
+            self.staff_hidden_count)
         self.staffing_note = (
             f"{reported} of {n_days} days have staffing data. Days without "
-            "attendance are shown as unreported — never as zero staff.")
+            "attendance are not reported — never zero staff.")
         self.leave_kpis = {
             "annual": ds.fmt_num(sum(d.leave_annual or 0 for d in days)),
             "mc": ds.fmt_num(sum(d.leave_mc or 0 for d in days)),
@@ -348,8 +362,8 @@ class ManpowerState(ExpensesState):
             return {**base, "ft": "—", "pt": "—", "effective": "—",
                     "hires": "—", "resigned": "—", "leave": "—",
                     "sales": "—", "sales_per_staff": "—",
-                    "status": "unreported",
-                    "status_color": ds.status_color("unreported")}
+                    "status": ds.DAY_NOT_REPORTED,
+                    "status_color": ds.status_color(ds.DAY_NOT_REPORTED)}
         eff = kpi.effective_staff(rec.ft_working, rec.pt_working, factor)
         factor_missing = factor is None and bool(rec.pt_working)
         leave = sum(v or 0 for v in (
@@ -363,8 +377,9 @@ class ManpowerState(ExpensesState):
             rec.ft_working, rec.pt_working, rec.new_hires_ft,
             rec.resigned_ft, rec.leave_annual, rec.leave_mc,
             rec.leave_other_paid, rec.leave_unpaid))
-        status = ("complete" if filled >= 3
-                  else "partial" if filled else "unreported")
+        # same chips as every page; completeness counts staffing fields
+        status = (ds.DAY_COMPLETE if filled >= 3
+                  else ds.DAY_PARTIAL if filled else ds.DAY_NOT_REPORTED)
         return {
             **base,
             "ft": ds.fmt_num(rec.ft_working),
