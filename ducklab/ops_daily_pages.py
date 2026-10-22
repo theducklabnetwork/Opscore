@@ -7,6 +7,7 @@ from __future__ import annotations
 import reflex as rx
 
 from ducklab import design as ds
+from ducklab import ui
 from ducklab.ops_daily_state import (
     MANPOWER_FIELDS, SALES_FIELDS, DailyState,
 )
@@ -14,77 +15,72 @@ from ducklab.ops_shell import shell
 
 
 
+K = DailyState.day_kpis
+_PROJ_CHIP = (K["proj_status"], K["proj_color"])
+
+
 def _kpi_summary() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading(
-                "Monthly Summary", "chart-line",
-                extra=rx.cond(
-                    DailyState.month_finalized,
-                    rx.badge(
-                        "Finalized snapshot exists — edits affect live "
-                        "calculations only, never preserved snapshots",
-                        color_scheme="violet", variant="soft", size="1"),
-                ),
-            ),
-            rx.grid(
-                ds.kpi_card("Month-to-Date Sales", DailyState.day_kpis["mtd"],
-                            icon="banknote",
-                            sub=DailyState.day_kpis["reported_days"]),
-                ds.kpi_card("Level 1 Target", DailyState.day_kpis["target"],
-                            icon="target"),
-                ds.kpi_card("Achievement", DailyState.day_kpis["achievement"],
-                            icon="percent"),
-                ds.kpi_card("Projected Month-End",
-                            DailyState.day_kpis["projected"],
-                            icon="chart-line"),
-                ds.kpi_card("Avg Daily Sales", DailyState.day_kpis["avg_daily"]),
-                ds.kpi_card("Transactions", DailyState.day_kpis["transactions"]),
-                ds.kpi_card("Units Sold", DailyState.day_kpis["units"]),
-                ds.kpi_card("Total Loss", DailyState.day_kpis["loss"],
-                            icon="triangle-alert", accent="red"),
-                columns=rx.breakpoints(initial="2", sm="3", lg="6"),
-                spacing="3", width="100%",
-            ),
-            spacing="4", width="100%",
+    """Headline tiles. Achievement is MTD / Level 1; the projected figures
+    carry the engine's projection label (as on the Overview)."""
+    return rx.vstack(
+        rx.cond(
+            DailyState.month_finalized,
+            rx.callout(
+                "Finalized snapshot exists — edits affect live calculations "
+                "only, never preserved snapshots.",
+                icon="lock", color_scheme="violet", variant="soft",
+                width="100%"),
         ),
-        width="100%", id="daily-kpis",
+        ui.kpi_grid(
+            ui.kpi_tile("Month-to-Date Sales", K["mtd"],
+                        compact=K["mtd_compact"], exact=K["mtd"],
+                        sub=K["reported_days"], id="kpi-mtd"),
+            ui.kpi_tile("Achievement", K["achievement"],
+                        sub=K["target_sub"], id="kpi-achievement"),
+            ui.kpi_tile("Projected Month-End", K["projected"],
+                        compact=K["projected_compact"],
+                        exact=K["projected_exact"],
+                        chip=_PROJ_CHIP, tag=K["early_tag"],
+                        tag_tip=K["early_tip"], id="kpi-projected"),
+            ui.kpi_tile("Projected Achievement", K["proj_achievement"],
+                        chip=_PROJ_CHIP, tag=K["early_tag"],
+                        tag_tip=K["early_tip"],
+                        sub=K["proj_achievement_sub"],
+                        id="kpi-proj-achievement"),
+            ui.kpi_tile("Avg Daily Sales", K["avg_daily"],
+                        exact=K["avg_daily_exact"]),
+            ui.kpi_tile("Transactions", K["transactions"]),
+            ui.kpi_tile("Units Sold", K["units"]),
+            ui.kpi_tile("Total Loss", K["loss"]),
+        ),
+        spacing="4", width="100%", id="daily-kpis",
     )
 
 
-def _status_badge(row) -> rx.Component:
-    return rx.badge(
-        row["status"],
-        color_scheme=rx.match(
-            row["status"],
-            ("complete", "green"), ("partial", "amber"), "gray",
-        ),
-        variant="soft", size="1",
-    )
+_COLS = ["Date", ("Sales", True), ("Txns", True), ("Units", True),
+         ("SPR", True), ("UPT", True), ("ASP", True), ("Staff", True),
+         ("Sales/Staff", True), ("Stock Loss", True), "Status", ""]
 
 
 def _day_row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.hstack(rx.text(row["date"], weight="bold"),
-                      rx.text(row["weekday"], size="1", color=ds.TEXT_FAINT),
-                      spacing="2", align="baseline"),
-            white_space="nowrap"),
-        rx.table.cell(row["sales"], white_space="nowrap"),
-        rx.table.cell(row["transactions"]),
-        rx.table.cell(row["units"]),
-        rx.table.cell(row["spr"], white_space="nowrap"),
-        rx.table.cell(row["upt"]),
-        rx.table.cell(row["asp"], white_space="nowrap"),
-        rx.table.cell(row["staff"]),
-        rx.table.cell(row["sales_per_staff"], white_space="nowrap"),
-        rx.table.cell(
-            rx.cond(row["loss_missing"] == "1",
-                    rx.text("—", color=ds.TEXT_FAINT),
-                    row["loss"]),
-            white_space="nowrap"),
-        rx.table.cell(_status_badge(row)),
-        rx.table.cell(
+    return rx.el.tr(
+        ui.td(rx.hstack(rx.text(row["date"], weight="medium"),
+                        rx.text(row["weekday"], size="1",
+                                color=ds.TEXT_FAINT),
+                        spacing="2", align="baseline")),
+        ui.td(row["sales"], numeric=True),
+        ui.td(row["transactions"], numeric=True),
+        ui.td(row["units"], numeric=True),
+        ui.td(row["spr"], numeric=True),
+        ui.td(row["upt"], numeric=True),
+        ui.td(row["asp"], numeric=True),
+        ui.td(row["staff"], numeric=True),
+        ui.td(row["sales_per_staff"], numeric=True),
+        ui.td(rx.cond(row["loss_missing"] == "1",
+                      rx.text("—", color=ds.TEXT_FAINT), row["loss"]),
+              numeric=True),
+        ui.td(ui.status_chip(row["status"], row["status_color"])),
+        ui.td(
             rx.cond(
                 DailyState.can_write,
                 rx.button(
@@ -99,55 +95,24 @@ def _day_row(row) -> rx.Component:
                 ),
             ),
         ),
-        align="center",
     )
 
 
 def _records_table() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Daily Records", "calendar-check"),
-            rx.scroll_area(
-                rx.table.root(
-                    rx.table.header(
-                        rx.table.row(
-                            rx.table.column_header_cell("Date"),
-                            rx.table.column_header_cell("Sales"),
-                            rx.table.column_header_cell("Txns"),
-                            rx.table.column_header_cell("Units"),
-                            rx.table.column_header_cell("SPR"),
-                            rx.table.column_header_cell("UPT"),
-                            rx.table.column_header_cell("ASP"),
-                            rx.table.column_header_cell("Staff"),
-                            rx.table.column_header_cell("Sales/Staff"),
-                            rx.table.column_header_cell("Stock Loss"),
-                            rx.table.column_header_cell("Status"),
-                            rx.table.column_header_cell(""),
-                        ),
-                    ),
-                    rx.table.body(rx.foreach(DailyState.day_rows, _day_row)),
-                    variant="surface", width="100%",
-                ),
-                type="auto", scrollbars="horizontal",
-                style={"maxWidth": "100%"},
-            ),
-            rx.hstack(
-                rx.badge("complete", color_scheme="green", variant="soft",
-                         size="1"),
-                rx.badge("partial", color_scheme="amber", variant="soft",
-                         size="1"),
-                rx.badge("unreported", color_scheme="gray", variant="soft",
-                         size="1"),
-                rx.text(
-                    "Completeness reflects all entered fields, not sales "
-                    "alone. Unreported dates are calendar placeholders — no "
-                    "database rows exist for them.",
-                    size="1", color=ds.TEXT_FAINT),
-                spacing="2", align="center", wrap="wrap",
-            ),
-            spacing="3", width="100%",
+    return ui.section_card(
+        ui.data_table(
+            _COLS,
+            *ui.day_rows(DailyState.day_rows, DailyState.day_rows_reported,
+                         DailyState.hidden_count, DailyState.hidden_label,
+                         DailyState.show_hidden,
+                         DailyState.toggle_hidden_days, _day_row, len(_COLS),
+                         toggle_id="daily-hidden-toggle"),
         ),
-        width="100%", id="daily-table",
+        ui.status_legend(
+            note="Status reflects all entered fields, not sales alone. "
+                 "Unreported days have no saved record; show them to "
+                 "enter data."),
+        title="Daily Records", id="daily-table",
     )
 
 
@@ -400,10 +365,6 @@ def daily_page() -> rx.Component:
     return shell(
         "Daily Operations",
         rx.vstack(
-            rx.text(
-                "Record daily sales, staffing, and stock losses. Saving "
-                "recalculates the live KPIs immediately.",
-                size="2", color=ds.TEXT_MUTED),
             rx.cond(
                 DailyState.save_notice != "",
                 rx.callout(DailyState.save_notice, icon="circle-check",
@@ -428,12 +389,14 @@ def daily_page() -> rx.Component:
                 rx.vstack(
                     _kpi_summary(),
                     _records_table(),
-                    spacing="5", width="100%",
+                    spacing=ui.GAP, width="100%",
                 ),
             ),
             _entry_dialog(),
-            spacing="4", width="100%",
+            spacing=ui.GAP, width="100%",
         ),
         on_store=DailyState.select_store,
         on_month=DailyState.select_month,
+        description="Record daily sales, staffing and stock losses. "
+                    "Saving recalculates the live KPIs immediately.",
     )

@@ -59,6 +59,25 @@ def fmt_rm0(cents, dash="—") -> str:
     return f"RM {round(cents / 100):,}"
 
 
+def fmt_rm_compact(cents, dash="—", whole_below: bool = False) -> str:
+    """Compact money for tight spaces: 'RM 23.5k', 'RM 1.2M'; below
+    RM 10,000 the exact value ('RM 7,066.66'), or whole ringgit
+    ('RM 7,067') with ``whole_below``. Always pair with the exact value
+    (tooltip)."""
+    if cents is None:
+        return dash
+    rm = cents / 100
+    sign = "-" if rm < 0 else ""
+    a = abs(rm)
+    if a >= 1_000_000:
+        return f"{sign}RM {a / 1_000_000:.1f}M"
+    if a >= 10_000:
+        return f"{sign}RM {a / 1_000:.1f}k"
+    if whole_below:
+        return fmt_rm0(cents, dash)
+    return f"{sign}RM {a:,.2f}"
+
+
 def fmt_pct(ratio, dash="—") -> str:
     """Decimal ratio -> '68.2%'. None stays a dash."""
     if ratio is None:
@@ -171,7 +190,9 @@ STATUS_COLOR: dict[str, str] = {
     "No sales recorded": "amber",
     # manpower: part-timers worked without a configured factor
     "Factor not set": "amber",
-    # day-row display statuses
+    # day statuses (one wording on every page: see day_status below)
+    "Complete": "green", "Partial": "amber", "Zero sales": "blue",
+    # legacy lowercase day statuses (kept for older callers)
     "complete": "green", "partial": "amber", "unreported": "gray",
     "Not reported": "gray", "Zero": "green", "Loss": "red",
     "Net negative": "blue", "No sales": "amber",
@@ -187,6 +208,43 @@ STATUS_COLOR: dict[str, str] = {
 def status_color(status: str, default: str = "gray") -> str:
     """The single status -> color lookup keyed by kpi.py's exact strings."""
     return STATUS_COLOR.get(status, default)
+
+
+# ---------------------------------------------------------------------------
+# Day status — the same four chips on every page (Daily, Sales, ...).
+# ---------------------------------------------------------------------------
+DAY_COMPLETE = "Complete"
+DAY_PARTIAL = "Partial"
+DAY_NOT_REPORTED = "Not reported"
+DAY_ZERO_SALES = "Zero sales"
+DAY_STATUSES = (DAY_COMPLETE, DAY_PARTIAL, DAY_NOT_REPORTED, DAY_ZERO_SALES)
+
+_DAY_FIELDS = ("sales_cents", "transactions", "units", "ft_working",
+               "pt_working", "new_hires_ft", "resigned_ft", "leave_annual",
+               "leave_mc", "leave_other_paid", "leave_unpaid")
+
+
+def day_status(rec) -> str:
+    """Display status of one day's record (None = no row saved).
+
+    Not reported: nothing entered. Zero sales: sales explicitly entered as
+    0. Complete: at least three values entered (fields + stock codes).
+    Partial: one or two values entered.
+    """
+    if rec is None:
+        return DAY_NOT_REPORTED
+    filled = sum(getattr(rec, f, None) is not None for f in _DAY_FIELDS) \
+        + len(getattr(rec, "stock_losses", None) or {})
+    if filled == 0:
+        return DAY_NOT_REPORTED
+    if rec.sales_cents == 0:
+        return DAY_ZERO_SALES
+    return DAY_COMPLETE if filled >= 3 else DAY_PARTIAL
+
+
+def days_not_reported_label(n: int) -> str:
+    """'29 days not reported' / '1 day not reported'."""
+    return f"{n} day{'' if n == 1 else 's'} not reported"
 
 
 # ---------------------------------------------------------------------------
