@@ -205,7 +205,9 @@ def _staff_row(row) -> rx.Component:
         ui.td(row["sales"], numeric=True),
         ui.td(row["sales_per_staff"], numeric=True),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
-        ui.td(rx.button(rx.icon("pencil", size=13), "Edit staffing",
+        ui.td(rx.button(rx.icon("pencil", size=13, class_name="ph-hide"),
+                        "Edit",
+                        rx.el.span("staffing", class_name="ph-hide"),
                         size="1", variant="soft",
                         on_click=M.edit_day(row["iso"]))),
     )
@@ -220,6 +222,7 @@ def _staffing_table() -> rx.Component:
                          M.staff_show_hidden, M.toggle_staff_hidden_days,
                          _staff_row, len(_STAFF_COLS),
                          toggle_id="staff-hidden-toggle"),
+            phone=("Date", "Effective", "Status", ""),
         ),
         ui.status_legend((ds.DAY_COMPLETE, ds.DAY_PARTIAL,
                           ds.DAY_NOT_REPORTED), note=M.staffing_note),
@@ -245,7 +248,7 @@ def _config_dialog() -> rx.Component:
             ui.form_grid(
                 ui.form_field("Opening FT headcount",
                               _input("c_opening", "c-opening", "numeric"),
-                              "Blank = leave unchanged."),
+                              "Leave blank to keep the saved value."),
                 ui.form_field("Budgeted headcount",
                               _input("c_budget", "c-budget", "numeric")),
                 ui.form_field("Part-time conversion factor",
@@ -266,7 +269,7 @@ def _config_dialog() -> rx.Component:
                 ui.form_field("Basic salary + allowances",
                               _input("p_salary", "p-salary",
                                      placeholder="e.g. 13275.75"),
-                              "Blank = awaiting payroll (NULL)."),
+                              "Leave blank until payroll closes."),
                 ui.form_field("Overtime",
                               _input("p_overtime", "p-overtime",
                                      placeholder="e.g. 4198.50")),
@@ -282,9 +285,9 @@ def _config_dialog() -> rx.Component:
         open=M.cfg_open,
         on_open_change=lambda v: M.close_config(),
         title="Monthly Configuration & Payroll",
-        subtitle="Only changed staffing fields are saved; blank payroll "
-                 "fields explicitly clear to awaiting-payroll (NULL), never "
-                 "RM 0.",
+        subtitle="Only changed staffing fields are saved. Leave payroll "
+                 "blank until it closes: it then shows as awaiting payroll, "
+                 "never RM 0.",
         close_id="cfg-close",
         notices=[
             rx.cond(M.mp_finalized, rx.callout(

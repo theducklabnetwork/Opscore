@@ -325,13 +325,14 @@ def composition(items: Sequence[dict], dark: bool,
 
 # --- overview-only compact formatting (module pages keep exact values) ---
 def fmt_money_compact(cents: Optional[float]) -> str:
-    """Overview-only compact money: RM 191.3k / RM 660 / — for blank.
+    """Overview-only compact money: RM 191.3k / RM 6,774 / — for blank.
 
-    Values < 10,000 are shown exact; >= 10,000 rounded to 0.1k (>= 1M as
-    M). The exact value is always available via fmt_rm for tooltips.
+    Values < 10,000 in whole ringgit; >= 10,000 rounded to 0.1k (>= 1M as
+    M) — one format for tiles and panels alike. The exact value is always
+    available via fmt_rm for tooltips.
     """
     from ducklab.design import fmt_rm_compact
-    return fmt_rm_compact(cents)
+    return fmt_rm_compact(cents, whole_below=True)
 
 
 def fmt_pct1(ratio: Optional[float]) -> str:

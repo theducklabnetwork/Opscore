@@ -23,7 +23,7 @@ CARD_BG = ds.SURFACE
 CARD_BORDER = rx.color("slate", 5)      # soft card / header rule
 ROW_BORDER = rx.color("slate", 4)       # even softer row separators
 RADIUS = "14px"
-CARD_PADDING = ["1em", "1.25em", "1.5em"]
+CARD_PADDING = ["0.875em", "1.25em", "1.5em"]
 GAP = "5"                               # spacing between page sections
 
 # responsive display: [initial, xs(480), sm(768), md(992), lg(1280)]
@@ -123,14 +123,17 @@ def _value(value, compact=None, exact=None, size_wide="7",
 
 def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
          tag=None, tag_tip="", id=None, size="7",
-         chip_id=None) -> rx.Component:
+         chip_id=None, size_narrow="6") -> rx.Component:
     """Label + big value (+ chips, + sub-line). No border: use inside a
-    section_card, or kpi_tile for a standalone tile."""
+    section_card, or kpi_tile for a standalone tile. ``size_narrow`` is the
+    value size below 1280px (smaller where exact money sits two-up on a
+    phone)."""
     # below 992px labels get room for two lines, so values in a row line
     # up and tiles keep one height even when a label wraps
     items = [rx.text(label, size="2", color=ds.TEXT_MUTED, weight="medium",
                      min_height=rx.breakpoints(initial="2.6em", md="0")),
-             _value(value, compact, exact, size_wide=size)]
+             _value(value, compact, exact, size_wide=size,
+                    size_narrow=size_narrow)]
     if chip is not None or tag is not None:
         chips = []
         if chip is not None:
@@ -179,13 +182,20 @@ def kpi_grid(*tiles, columns=None, id=None) -> rx.Component:
 
 
 # --- tables ----------------------------------------------------------------------
-# Narrow screens never drop columns: the table scrolls sideways inside its
-# own container. Tables whose last column is the row action (Edit) pin that
-# column to the right edge with a rule + soft shadow, so Edit is always in
-# view; other tables get a fade at the right edge (see data_table).
+# Phones (< 640px) show each table's phone column set (data_table ``phone``)
+# so the useful columns come first; the rest stay on wider screens and in
+# the row's dialog. Wider than that, a table that does not fit scrolls
+# sideways inside its own container. Tables whose last column is the row
+# action (Edit) pin that column to the right edge with a rule + soft
+# shadow, so Edit is always in view; other tables get a fade at the right
+# edge (see data_table).
+PHONE = "@media (max-width: 639px)"
 _ACT = "&.has-act tr:not(.collapsed-row) > :last-child"
 _TABLE_STYLE = {
     "width": "100%",
+    # cell content shown only on phones (e.g. the category under an expense
+    # description) / hidden on phones (e.g. the weekday next to a date)
+    "& .ph-only": {"display": "none"},
     # xl-only columns (secondary detail, also in the row's dialog) hide on
     # tablet/desktop widths below 1536px so Edit stays in view there; phones
     # scroll and show them
@@ -227,6 +237,18 @@ _TABLE_STYLE = {
     "& tbody tr:last-child td": {"borderBottom": "none"},
     "& tbody tr:hover td": {"background": ds.SURFACE_HOVER},
     "& tr.collapsed-row td": {"color": ds.TEXT_MUTED},
+    # last, so it wins over the wider breakpoints above: tighter cells so a
+    # phone column set fits 390px without sideways scroll
+    PHONE: {
+        "& .ph-only": {"display": "block"},
+        "& .ph-hide": {"display": "none"},
+        "& th, & td": {"paddingLeft": "5px", "paddingRight": "5px"},
+        "& td": {"fontSize": "13px"},
+        # a long word hyphenates (or, failing that, breaks) rather than
+        # push a phone column off-screen
+        "& td.wrap": {"hyphens": "auto", "overflowWrap": "anywhere"},
+        _ACT: {"paddingLeft": "6px", "paddingRight": "2px"},
+    },
 }
 
 
@@ -259,7 +281,19 @@ _FADE_STYLE = {
 }
 
 
-def data_table(columns, *body, id=None, hidden_note=None) -> rx.Component:
+def _phone_style(columns, phone) -> dict:
+    """Hide (below 640px) every column not in ``phone`` (labels kept)."""
+    labels = [c if isinstance(c, str) else c[0] for c in columns]
+    unknown = set(phone) - set(labels)
+    if unknown:
+        raise ValueError(f"phone columns not in the table: {unknown}")
+    hide = {f"& tr:not(.collapsed-row) > :nth-child({i})": {"display": "none"}
+            for i, label in enumerate(labels, 1) if label not in phone}
+    return {PHONE: {**_TABLE_STYLE[PHONE], **hide}}
+
+
+def data_table(columns, *body, id=None, hidden_note=None,
+               phone=None, phone_labels=None) -> rx.Component:
     """Detail table. Grows with its rows and scrolls with the page (no
     fixed-height inner scroll); on narrow screens it scrolls sideways
     inside its own container (never hides columns there). (A sticky header
@@ -271,12 +305,26 @@ def data_table(columns, *body, id=None, hidden_note=None) -> rx.Component:
     ``hidden_note`` then says where their values are. A last column
     labelled "" is the row action (Edit/View): it stays pinned to the
     right edge while the table scrolls.
+    ``phone``: the column labels shown below 640px (include "" to keep
+    Edit); the others hide there and a phone-only line says so.
+    ``phone_labels``: shorter header text on phones ({"Incurred": "Date"}).
     ``body``: row components (``rx.el.tr`` built with ``td``)."""
-    heads = [th(c) if isinstance(c, str) else th(*c) for c in columns]
+    def head(label):
+        short = (phone_labels or {}).get(label)
+        if short is None:
+            return label
+        return rx.fragment(rx.el.span(label, class_name="ph-hide"),
+                           rx.el.span(short, class_name="ph-only"))
+
+    heads = [th(head(c)) if isinstance(c, str) else th(head(c[0]), *c[1:])
+             for c in columns]
     has_act = columns[-1] == ""
+    style = _TABLE_STYLE
+    if phone is not None:
+        style = {**_TABLE_STYLE, **_phone_style(columns, phone)}
     table = rx.box(
         rx.el.table(rx.el.thead(rx.el.tr(*heads)), rx.el.tbody(*body),
-                    style=_TABLE_STYLE,
+                    style=style,
                     class_name="has-act" if has_act else ""),
         width="100%", max_width="100%", overflow_x="auto",
     )
@@ -287,6 +335,12 @@ def data_table(columns, *body, id=None, hidden_note=None) -> rx.Component:
         items.append(rx.box(note(hidden_note),
                             display=rx.breakpoints(initial="none", sm="block",
                                                    xl="none")))
+    if phone is not None and len(phone) < len(columns):
+        more = ("More columns on a wider screen and in each row's Edit."
+                if "" in phone else "More columns on a wider screen.")
+        items.append(rx.box(note(more), class_name="ph-note",
+                            style={"display": "none",
+                                   PHONE: {"display": "block"}}))
     return rx.vstack(*items, id=id, spacing="2", width="100%",
                      min_width="0", align="stretch")
 

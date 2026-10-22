@@ -26,13 +26,13 @@ class CompactMoneyTests(unittest.TestCase):
     def test_compact_money(self):
         f = ops_charts.fmt_money_compact
         self.assertEqual(f(19130000), "RM 191.3k")      # 191,300 -> 191.3k
-        self.assertEqual(f(66000), "RM 660.00")         # 660 exact (2dp)
+        self.assertEqual(f(66000), "RM 660")            # whole ringgit (V5)
         self.assertEqual(f(-19130000), "\u2212RM 191.3k")    # negatives
-        self.assertEqual(f(-500), "\u2212RM 5.00")
+        self.assertEqual(f(-500), "\u2212RM 5")
         self.assertEqual(f(None), "—")
         self.assertEqual(f(123456789), "RM 1.2M")
         self.assertEqual(f(9999900), "RM 100.0k")   # 99,999 RM
-        self.assertEqual(f(123456), "RM 1,234.56")
+        self.assertEqual(f(123456), "RM 1,235")
 
     def test_pct1(self):
         self.assertEqual(ops_charts.fmt_pct1(Decimal("0.91095")), "91.1%")

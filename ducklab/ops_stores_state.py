@@ -298,9 +298,9 @@ class StoresState(StockState):
             self.setup_original = dict(vals)
             levels = kpi.sales_target_levels_cents(cfg)
             self.setup_levels = [
-                {"level": name.capitalize(),
-                 "value": ds.fmt_rm(levels.get(name))}
-                for name in ("level1", "level2", "level3", "level4")
+                {"level": f"Level {n}",
+                 "value": ds.fmt_rm(levels.get(f"level{n}"))}
+                for n in (1, 2, 3, 4)
             ]
         # expense budgets (rows always shown when categories exist)
         self.budget_rows = [

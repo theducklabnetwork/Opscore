@@ -16,6 +16,7 @@ import reflex as rx
 
 from ducklab import design as ds
 from ducklab import kpi
+from ducklab import store_ops_db
 from ducklab.auth_pages import AuthState, app_service
 from ducklab.auth_service import AuthenticationError, AuthorizationError, User
 from ducklab.operations_repository import (
@@ -117,7 +118,10 @@ class OpsState(AuthState):
             "sales": ("amber" if sales.startswith("Projected: ")
                       else ds.status_color(sales)),
             "manpower": ds.status_color(
-                str(self.report.get("manpower", {}).get("ratio_status", ""))),
+                str(self.report.get("manpower", {}).get("ratio_status", ""))
+                .removeprefix("Month to date: ")),
+            "expenses": ds.status_color(
+                str(self.report.get("expenses", {}).get("hq_status", ""))),
             "stock": ds.status_color(
                 str(self.report.get("stock", {}).get("status", ""))),
         }
@@ -377,6 +381,54 @@ def _payroll_gated(values: dict, user) -> dict:
             "ratio_support": "Restricted", "ratio_status": "Restricted"}
 
 
+_SIGNS = {code: sign for code, _name, sign in store_ops_db.STOCK_LOSS_CODES}
+
+
+def _report_codes(totals: dict) -> list[dict]:
+    """Report stock rows: the treatment label from the code's contribution
+    sign (EXTRA reduces total loss: "Offset", never "Included")."""
+    rows = []
+    for code, total in sorted(totals.items()):
+        if not total:
+            continue
+        sign = _SIGNS.get(code, 0)
+        label = ds.TREATMENT[sign]
+        rows.append({"code": code, "total": ds.fmt_rm(total),
+                     "counts": "1" if sign else "0", "treatment": label,
+                     "treatment_color": ds.status_color(label)})
+    return rows
+
+
+def _report_expenses(paid, incurred, open_, budget, share, paid_count,
+                     incurred_count) -> dict:
+    """Report expense figures with the Expenses page's empty states
+    (engine counts): no Paid lines -> "No payments yet"; nothing incurred
+    -> "Not reported yet"; pending is a genuine amount (RM 0.00 = zero).
+    Counts are None for snapshots taken before they were recorded: the
+    amounts then show as before."""
+    no_paid = paid_count == 0
+    no_incurred = incurred_count == 0
+    # the state reads as the figure's sub-line under a dash (a long text
+    # value would not fit a two-column phone tile)
+    return {
+        "paid": "—" if no_paid else ds.fmt_rm(paid),
+        "paid_note": "No payments yet" if no_paid else "",
+        "incurred": "—" if no_incurred else ds.fmt_rm(incurred),
+        "incurred_note": "Not reported yet" if no_incurred else "",
+        "pending": ds.fmt_rm(open_),
+        "budget": ds.fmt_rm(budget),
+        "share": "—" if no_paid else ds.fmt_pct(share),
+    }
+
+
+def _salary_status(status: str, complete: bool) -> str:
+    """Same wording as the Manpower page: while the month is incomplete
+    the ratio uses sales to date, so the status reads "Month to date: …"."""
+    if not complete and status in (kpi.SALARY_WITHIN, kpi.SALARY_FAILURE):
+        return f"Month to date: {status}"
+    return status
+
+
 def _projection_card_labels(pstate: str) -> dict:
     """Report card labels for projection-derived figures."""
     return {
@@ -430,11 +482,9 @@ def _serialize_live(rep, user=None) -> dict:
             "complete": s.days_entered == s.days_in_month,
         },
         "expenses": {
-            "paid": ds.fmt_rm(e.paid_cents),
-            "incurred": ds.fmt_rm(e.incurred_cents),
-            "pending": ds.fmt_rm(e.open_cents),
-            "budget": ds.fmt_rm(e.total_budget_cents),
-            "share": ds.fmt_pct(e.expense_share_of_sales),
+            **_report_expenses(e.paid_cents, e.incurred_cents, e.open_cents,
+                               e.total_budget_cents, e.expense_share_of_sales,
+                               e.paid_count, e.incurred_count),
             "budget_control_status": e.budget_control_status,
             "hq_status": e.total_expenses_status,
             "validation": dict(e.validation_counts),
@@ -453,7 +503,9 @@ def _serialize_live(rep, user=None) -> dict:
             "salary": ds.fmt_rm(m.total_salary_cents),
             "ratio": ds.fmt_pct(m.salary_ratio_store),
             "ratio_support": ds.fmt_pct(m.salary_ratio_incl_support),
-            "ratio_status": m.salary_ratio_status,
+            "ratio_status": _salary_status(
+                m.salary_ratio_status, s.days_entered == s.days_in_month),
+            "ratio_mtd": "" if s.days_entered == s.days_in_month else "1",
             "turnover": ds.fmt_pct(m.turnover_pct),
             "turnover_status": m.turnover_status,
             "leave_days": ds.fmt_num(m.leave_days),
@@ -468,13 +520,7 @@ def _serialize_live(rep, user=None) -> dict:
             "status": kpi.stock_status_label(
                 st.total_loss_cents, s.sales_mtd_cents,
                 rep.config.stock_loss_target, s.days_entered),
-            "codes": [
-                {"code": code, "total": ds.fmt_rm(total),
-                 "counts": "1" if code in {"DMO", "DMC", "DMP", "MISSING",
-                                           "EXTRA"} else "0"}
-                for code, total in sorted(st.totals_by_code.items())
-                if total
-            ],
+            "codes": _report_codes(st.totals_by_code),
         },
         "actions": {
             # engine counts: total = kpi.action_counts "total"; open =
@@ -499,11 +545,7 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
     store = rep.get("store", {})
     store_label = (f"{store['code']} — {store['name']}"
                    if isinstance(store, dict) and "code" in store else "")
-    codes = [{"code": code, "total": ds.fmt_rm(total),
-              "counts": "1" if code in {"DMO", "DMC", "DMP", "MISSING",
-                                        "EXTRA"} else "0"}
-             for code, total in sorted(st.get("totals_by_code", {}).items())
-             if total]
+    codes = _report_codes(st.get("totals_by_code", {}))
     # Same display rules as live: a finalized complete month is "actual"
     # (Month-End), partial months are labelled projected/early estimate.
     entered = s.get("days_entered") or 0
@@ -550,11 +592,12 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
             "complete": s.get("days_entered") == s.get("days_in_month"),
         },
         "expenses": {
-            "paid": ds.fmt_rm(e.get("paid_cents")),
-            "incurred": ds.fmt_rm(e.get("incurred_cents")),
-            "pending": ds.fmt_rm(e.get("open_cents")),
-            "budget": ds.fmt_rm(e.get("total_budget_cents")),
-            "share": ds.fmt_pct(e.get("expense_share_of_sales")),
+            **_report_expenses(e.get("paid_cents"), e.get("incurred_cents"),
+                               e.get("open_cents"),
+                               e.get("total_budget_cents"),
+                               e.get("expense_share_of_sales"),
+                               e.get("paid_count"), e.get("incurred_count")),
+            "hq_status": e.get("total_expenses_status", ""),
             "validation": dict(e.get("validation_counts", {})),
             "categories": [
                 {"name": c["name"], "paid": ds.fmt_rm(c.get("paid_mtd_cents")),
@@ -571,7 +614,9 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
             "salary": ds.fmt_rm(m.get("total_salary_cents")),
             "ratio": ds.fmt_pct(m.get("salary_ratio_store")),
             "ratio_support": ds.fmt_pct(m.get("salary_ratio_incl_support")),
-            "ratio_status": m.get("salary_ratio_status", ""),
+            "ratio_status": _salary_status(
+                m.get("salary_ratio_status", ""), entered == dim),
+            "ratio_mtd": "" if entered == dim else "1",
             "turnover": ds.fmt_pct(m.get("turnover_pct")),
             "turnover_status": m.get("turnover_status", ""),
             "leave_days": ds.fmt_num(m.get("leave_days")),

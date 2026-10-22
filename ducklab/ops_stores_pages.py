@@ -53,6 +53,7 @@ def _stores_table() -> rx.Component:
                 ["Code", "Name", "Concept", "Zone", "Zone PIC",
                  "Branch manager", "Status", "Actions"],
                 rx.foreach(S.store_rows, _store_row),
+                phone=("Code", "Status", "Actions"),
             ),
             ui.empty_state("No stores", "Create your first store to begin.",
                            icon="store"),
@@ -238,7 +239,9 @@ def _setup_section() -> rx.Component:
                     ui.note("No expense categories configured for this "
                             "store.")),
             ),
-            ui.form_section("Month-end inputs", _setup_grid(SETUP_PAYROLL)),
+            ui.form_section("Month-end inputs", _setup_grid(SETUP_PAYROLL),
+                            hint="Leave blank until payroll closes: it then "
+                                 "shows as awaiting payroll, never RM 0."),
         ),
         rx.hstack(
             rx.button(
@@ -252,9 +255,9 @@ def _setup_section() -> rx.Component:
             border_top=f"1px solid {ui.CARD_BORDER}", padding_top="1em",
         ),
         title="Monthly setup",
-        subtitle="Blank = not set (stored as NULL). An explicit 0 is stored "
-                 "as 0. Targets and budgets feed the Stock, Manpower, "
-                 "Expenses and Monthly Report pages.",
+        subtitle="Leave a field blank if it is not set; enter 0 only for a "
+                 "genuine zero. Targets and budgets feed the Stock, "
+                 "Manpower, Expenses and Monthly Report pages.",
         id="setup-section",
     )
 

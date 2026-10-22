@@ -158,22 +158,32 @@ def _hero_card(title, pill, href, spark=None, bar=None) -> rx.Component:
     )
 
 
-def _spark(dark_fig, light_fig) -> rx.Component:
-    return rx.box(rx.cond(O.is_dark, ops_charts.sparkline_chart(dark_fig),
-                          ops_charts.sparkline_chart(light_fig)),
-                  width="100%")
+def _spark(ready, dark_fig, light_fig) -> rx.Component:
+    """Sparkline once 3 days are reported; before that a small note
+    (a 1-2 day sparkline is only a sliver)."""
+    return rx.cond(
+        ready,
+        rx.box(rx.cond(O.is_dark, ops_charts.sparkline_chart(dark_fig),
+                       ops_charts.sparkline_chart(light_fig)),
+               width="100%"),
+        rx.hstack(rx.icon("chart-line", size=14, color=ds.TEXT_FAINT),
+                  ui.note("Not enough data yet"),
+                  spacing="2", align="center", padding_y="0.25em"),
+    )
 
 
 def _hero_row() -> rx.Component:
     return rx.grid(
         _hero_card("Sales MTD", O.pill_sales, "/ops/sales",
-                   spark=_spark(O.spark_sales_dark, O.spark_sales_light),
+                   spark=_spark(O.spark_sales_ready, O.spark_sales_dark,
+                                O.spark_sales_light),
                    bar=_sales_bar(O.pill_sales)),
         _hero_card("Expenses paid MTD", O.pill_expenses, "/ops/expenses"),
         _hero_card("Manpower — salary ratio", O.pill_manpower,
                    "/ops/manpower"),
         _hero_card("Stock loss % of sales", O.pill_stock, "/ops/stock",
-                   spark=_spark(O.spark_stock_dark, O.spark_stock_light)),
+                   spark=_spark(O.spark_stock_ready, O.spark_stock_dark,
+                                O.spark_stock_light)),
         columns=rx.breakpoints(initial="1", sm="2", lg="4"),
         spacing="4", width="100%", id="pillar-strip",
     )
@@ -306,6 +316,12 @@ def _bottom_row() -> rx.Component:
 R = OpsState
 
 
+def _stat(label, value, **kw) -> rx.Component:
+    """Report figure: exact values, a size smaller on phones so two-up
+    money ("RM 210,000.00") fits its column."""
+    return ui.stat(label, value, size_narrow="5", **kw)
+
+
 def _mode_controls() -> rx.Component:
     return rx.hstack(
         rx.segmented_control.root(
@@ -342,30 +358,37 @@ def _grid(*stats, columns) -> rx.Component:
 _COLS5 = rx.breakpoints(initial="2", md="5")
 
 
+def _proj_label(label: str):
+    """Projection-derived figure label: "(projected)" until the month is
+    complete; the early-estimate state shows once, as the section chip."""
+    return rx.cond(R.sales["projection_state"] == "actual", label,
+                   label + " (projected)")
+
+
 def _sales_section() -> rx.Component:
     sales = R.sales
     return ui.section_card(
         _grid(
-            ui.stat("Monthly sales (MTD)", sales["mtd"], size="6"),
-            ui.stat(rx.cond(sales["projection_state"] == "actual",
+            _stat("Monthly sales (MTD)", sales["mtd"], size="6"),
+            _stat(rx.cond(sales["projection_state"] == "actual",
                             "Month-end sales (actual)",
                             "Projected month-end"),
                     sales["projected"], size="6"),
-            ui.stat("Level 1 target", sales["target_l1"], size="6"),
-            ui.stat(sales["achievement_label"], sales["achievement_l1"],
-                    size="6", sub=sales["early_estimate_tag"]),
+            _stat("Level 1 target", sales["target_l1"], size="6"),
+            _stat(_proj_label("Achievement vs target"),
+                    sales["achievement_l1"], size="6"),
             columns=rx.breakpoints(initial="2", md="4"),
         ),
         rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%"),
         _grid(
-            ui.stat(sales["growth_year_label"], sales["growth_year"],
-                    size="5", sub=sales["early_estimate_tag"]),
-            ui.stat(sales["growth_month_label"], sales["growth_month"],
-                    size="5", sub=sales["early_estimate_tag"]),
-            ui.stat("SPR", sales["spr"], size="5", sub="Sales per receipt"),
-            ui.stat("UPT", sales["upt"], size="5",
+            _stat(_proj_label("Growth vs last year"),
+                    sales["growth_year"], size="5"),
+            _stat(_proj_label("Growth vs last month"),
+                    sales["growth_month"], size="5"),
+            _stat("SPR", sales["spr"], size="5", sub="Sales per receipt"),
+            _stat("UPT", sales["upt"], size="5",
                     sub="Units per transaction"),
-            ui.stat("ASP", sales["asp"], size="5",
+            _stat("ASP", sales["asp"], size="5",
                     sub="Average selling price"),
             columns=_COLS5,
         ),
@@ -386,11 +409,13 @@ def _expenses_section() -> rx.Component:
     exp = R.expenses
     return ui.section_card(
         _grid(
-            ui.stat("Paid expenses", exp["paid"], size="6"),
-            ui.stat("Incurred expenses", exp["incurred"], size="6"),
-            ui.stat("Pending / open", exp["pending"], size="6"),
-            ui.stat("Total budget", exp["budget"], size="6"),
-            ui.stat("Share of sales", exp["share"], size="6"),
+            _stat("Paid expenses", exp["paid"], size="6",
+                    sub=exp["paid_note"]),
+            _stat("Incurred expenses", exp["incurred"], size="6",
+                    sub=exp["incurred_note"]),
+            _stat("Pending / open", exp["pending"], size="6"),
+            _stat("Total budget", exp["budget"], size="6"),
+            _stat("Share of sales", exp["share"], size="6"),
             columns=_COLS5,
         ),
         rx.cond(
@@ -404,9 +429,13 @@ def _expenses_section() -> rx.Component:
                     ui.td(c["budget"], numeric=True),
                     ui.td(ui.status_chip(c["status"], c["color"])),
                 )),
+                phone=("Category", "Paid (MTD)", "Status"),
             ),
         ),
         title="Expenses management",
+        extra=rx.cond(exp["hq_status"] != "",
+                      ui.status_chip(exp["hq_status"],
+                                     R.report_colors["expenses"])),
         id="expenses-section",
     )
 
@@ -415,25 +444,30 @@ def _manpower_section() -> rx.Component:
     mp = R.manpower
     return ui.section_card(
         _grid(
-            ui.stat("Opening headcount", mp["opening"], size="6"),
-            ui.stat("Hires", mp["hires"], size="6"),
-            ui.stat("Resigned", mp["resigned"], size="6"),
-            ui.stat("Closing headcount", mp["closing"], size="6"),
-            ui.stat("Effective staff", mp["effective_staff"], size="6",
+            _stat("Opening headcount", mp["opening"], size="6"),
+            _stat("Hires", mp["hires"], size="6"),
+            _stat("Resigned", mp["resigned"], size="6"),
+            _stat("Closing headcount", mp["closing"], size="6"),
+            _stat("Effective staff", mp["effective_staff"], size="6",
                     sub=mp["pt_factor_label"]),
             columns=_COLS5,
         ),
         rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%"),
         _grid(
-            ui.stat("Salary cost", mp["salary"], size="6",
-                    sub="— = awaiting payroll"),
-            ui.stat("Salary ratio", mp["ratio"], size="6"),
-            ui.stat("Ratio incl. support", mp["ratio_support"], size="6"),
-            ui.stat("Turnover", mp["turnover"], size="6",
+            _stat("Salary cost", mp["salary"], size="6",
+                    sub=rx.cond(mp["salary"] == "—",
+                                "Awaiting payroll", "")),
+            _stat("Salary ratio", mp["ratio"], size="6"),
+            _stat("Ratio incl. support", mp["ratio_support"], size="6"),
+            _stat("Turnover", mp["turnover"], size="6",
                     sub=mp["turnover_status"]),
-            ui.stat("Leave days", mp["leave_days"], size="6"),
+            _stat("Leave days", mp["leave_days"], size="6"),
             columns=_COLS5,
         ),
+        rx.cond((mp["ratio_mtd"] == "1") & (mp["ratio"] != "Restricted"),
+                ui.note("Month to date: the ratio uses sales entered so far "
+                        "and is only final once the month's sales are "
+                        "complete.")),
         title="Manpower efficiency",
         extra=ui.status_chip(mp["ratio_status"],
                              R.report_colors["manpower"]),
@@ -445,20 +479,19 @@ def _stock_section() -> rx.Component:
     st = R.stock
     return ui.section_card(
         _grid(
-            ui.stat("Total loss", st["total_loss"], size="6"),
-            ui.stat("Loss % of sales", st["loss_pct"], size="6"),
+            _stat("Total loss", st["total_loss"], size="6"),
+            _stat("Loss % of sales", st["loss_pct"], size="6"),
             columns=rx.breakpoints(initial="2", md="4"),
         ),
         rx.cond(
             R.report_stock_codes.length() > 0,
             ui.data_table(
-                ["Code", ("Total", True), "Counts toward loss"],
+                ["Code", ("Total", True), "Treatment"],
                 rx.foreach(R.report_stock_codes, lambda c: rx.el.tr(
                     ui.td(rx.text(c["code"], weight="medium")),
                     ui.td(c["total"], numeric=True),
-                    ui.td(rx.cond(c["counts"] == "1",
-                                  ui.status_chip("Included"),
-                                  ui.status_chip("Info only"))),
+                    ui.td(ui.status_chip(c["treatment"],
+                                         c["treatment_color"])),
                 )),
             ),
         ),
@@ -472,12 +505,12 @@ def _actions_section() -> rx.Component:
     act = R.actions
     return ui.section_card(
         _grid(
-            ui.stat("Total actions", act["total"], size="6"),
-            ui.stat("Open", act["open"], size="6"),
-            ui.stat("In progress", act["in_progress"], size="6"),
-            ui.stat("Blocked", act["blocked"], size="6"),
-            ui.stat("Completed", act["done"], size="6"),
-            ui.stat("Overdue", act["overdue"], size="6"),
+            _stat("Total actions", act["total"], size="6"),
+            _stat("Open", act["open"], size="6"),
+            _stat("In progress", act["in_progress"], size="6"),
+            _stat("Blocked", act["blocked"], size="6"),
+            _stat("Completed", act["done"], size="6"),
+            _stat("Overdue", act["overdue"], size="6"),
             columns=rx.breakpoints(initial="2", sm="3", lg="6"),
         ),
         title="Action tracker summary",

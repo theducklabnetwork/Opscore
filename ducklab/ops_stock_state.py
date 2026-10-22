@@ -36,7 +36,7 @@ from ducklab.ops_state import (
 )
 
 # All status colors: ds.status_color (design.py shared map)
-TREATMENT = {1: "Included", -1: "Offset", 0: "Info only"}
+TREATMENT = ds.TREATMENT
 
 
 def _prev_month(month: str) -> str:
