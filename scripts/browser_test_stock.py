@@ -85,7 +85,7 @@ def main() -> int:
         check("page renders (KPI section)", True)
         check("Total Loss seeded",
               "RM 660.00" in page.locator("#stock-kpi-section").inner_text())
-        check("status badge", "Within Target"
+        check("status badge", "Within target"
               in page.locator("#stock-status").inner_text())
 
         cat = page.locator("#category-section").inner_text()

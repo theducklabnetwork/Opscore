@@ -24,7 +24,7 @@ from ducklab.operations_write_repository import (
     RecordNotFoundError, WriteError,
 )
 from ducklab.ops_stores_state import StoresState
-from ducklab.ops_state import OpsState
+from ducklab.ops_state import OpsState, parse_client_id
 
 OPEN_STATUSES = ("Open", "In progress", "Blocked")
 
@@ -299,17 +299,15 @@ class ActionsState(StoresState):
                 remarks=self.a_remarks or None)
         except ValidationError as exc:
             self.form_error = str(exc)
-            self.saving = False
             return
         except (AuthenticationError, AuthorizationError):
             self.form_error = "Session expired or insufficient permission."
-            self.saving = False
             return
         except (WriteError, RecordNotFoundError) as exc:
             self.form_error = f"Could not save: {exc}"
-            self.saving = False
             return
-        self.saving = False
+        finally:
+            self.saving = False
         self.form_open = False
         self.notice = "Action saved."
         yield
@@ -330,14 +328,7 @@ def _pdate(s: str, label: str) -> Optional[date]:
 
 def _editing_id(s: str) -> Optional[int]:
     """Action id being edited ('' = new action)."""
-    s = (s or "").strip()
-    if not s:
-        return None
-    try:
-        return int(s)
-    except ValueError:
-        raise ValidationError(
-            "Unknown action — reopen it from the list.") from None
+    return parse_client_id(s, "action")
 
 
 def actions_summary(all_actions, month: str, today: date):

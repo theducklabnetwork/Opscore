@@ -22,6 +22,34 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, InvalidMonthError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_snapshots import SnapshotNotFoundError
+from ducklab.operations_write_repository import ValidationError
+
+
+SESSION_EXPIRED = "Your session has expired. Please sign in again."
+ACCESS_DENIED = "You do not have access to this store."
+
+
+def auth_message(exc: Exception) -> str:
+    """User message for an auth failure raised inside a page handler."""
+    if isinstance(exc, AuthenticationError):
+        return SESSION_EXPIRED
+    return ACCESS_DENIED
+
+
+def parse_client_id(raw, what: str, required: bool = False) -> Optional[int]:
+    """Parse an id sent over the socket ('' -> None unless ``required``).
+    Anything that is not a positive whole number is rejected with
+    ValidationError before any state changes."""
+    s = str(raw if raw is not None else "").strip()
+    if not s and not required:
+        return None
+    try:
+        value = int(s)
+    except ValueError:
+        value = 0
+    if value <= 0:
+        raise ValidationError(f"Unknown {what} — reopen it from the list.")
+    return value
 
 
 def month_label(month: str) -> str:
@@ -219,6 +247,15 @@ class OpsState(AuthState):
         self.report_status = "loading"
         yield
         try:
+            self._load_report(user, store_id, month, version_rows)
+        finally:
+            if self.report_status == "loading":  # unexpected failure
+                self.report_status = "error"
+                self.error_message = "Report unavailable."
+
+    def _load_report(self, user, store_id: int, month: str,
+                     version_rows: list[dict]) -> None:
+        try:
             if self.report_mode == "finalized":
                 if not version_rows:
                     raise SnapshotNotFoundError(
@@ -321,6 +358,24 @@ def _payroll_gated(values: dict, user) -> dict:
             "ratio_support": "Restricted", "ratio_status": "Restricted"}
 
 
+def _projection_card_labels(pstate: str) -> dict:
+    """Report card labels for projection-derived figures."""
+    return {
+        "achievement_label": ds.projection_label(pstate,
+                                                 "Achievement vs Target"),
+        "growth_year_label": ds.projection_label(pstate,
+                                                 "Growth vs Last Year"),
+        "growth_month_label": ds.projection_label(pstate,
+                                                  "Growth vs Last Month"),
+    }
+
+
+def _effective_staff_display(value, factor_missing: bool) -> str:
+    if factor_missing:
+        return kpi.PT_FACTOR_NOT_SET
+    return ds.fmt_num(float(value) if value is not None else None)
+
+
 def _serialize_live(rep, user=None) -> dict:
     s, e, m, st, a = (rep.sales, rep.expenses, rep.manpower, rep.stock,
                       rep.actions)
@@ -342,6 +397,7 @@ def _serialize_live(rep, user=None) -> dict:
             "early_estimate_tag": (
                 f"Early estimate: {s.days_entered} of {s.days_in_month} days"
                 if s.projection_state == "early_estimate" else ""),
+            **_projection_card_labels(s.projection_state),
             "growth_year": ds.fmt_pct(s.growth_last_year),
             "growth_year_status": ds.projection_style(
                 s.projection_state, s.growth_status_last_year)[0],
@@ -382,14 +438,17 @@ def _serialize_live(rep, user=None) -> dict:
             "turnover": ds.fmt_pct(m.turnover_pct),
             "turnover_status": m.turnover_status,
             "leave_days": ds.fmt_num(m.leave_days),
-            "effective_staff": ds.fmt_num(
-                float(m.average_effective_staff)
-                if m.average_effective_staff is not None else None),
+            "effective_staff": _effective_staff_display(
+                m.average_effective_staff, m.pt_factor_missing),
+            "pt_factor_label": ds.pt_factor_label(
+                rep.config.part_timer_factor),
         }, user),
         "stock": {
             "total_loss": ds.fmt_rm(st.total_loss_cents),
             "loss_pct": ds.fmt_pct(st.loss_pct_of_sales),
-            "status": st.status,
+            "status": kpi.stock_status_label(
+                st.total_loss_cents, s.sales_mtd_cents,
+                rep.config.stock_loss_target, s.days_entered),
             "codes": [
                 {"code": code, "total": ds.fmt_rm(total),
                  "counts": "1" if code in {"DMO", "DMC", "DMP", "MISSING",
@@ -417,6 +476,7 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
     s, e, m, st, a = (rep["sales"], rep["expenses"], rep["manpower"],
                       rep["stock"], rep["actions"])
     counts = a.get("counts", {})
+    cfg = rep.get("config") or {}
     store = rep.get("store", {})
     store_label = (f"{store['code']} — {store['name']}"
                    if isinstance(store, dict) and "code" in store else "")
@@ -453,6 +513,7 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
             "early_estimate_tag": (
                 f"Early estimate: {entered} of {dim} days"
                 if pstate == "early_estimate" else ""),
+            **_projection_card_labels(pstate),
             "growth_year": ds.fmt_pct(s.get("growth_last_year")),
             "growth_year_status": ds.projection_style(
                 pstate, growth_year_status)[0],
@@ -495,14 +556,19 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
             "turnover": ds.fmt_pct(m.get("turnover_pct")),
             "turnover_status": m.get("turnover_status", ""),
             "leave_days": ds.fmt_num(m.get("leave_days")),
-            "effective_staff": ds.fmt_num(
-                float(m["average_effective_staff"])
-                if m.get("average_effective_staff") is not None else None),
+            "effective_staff": _effective_staff_display(
+                m.get("average_effective_staff"),
+                m.get("pt_factor_missing", False)),
+            "pt_factor_label": ds.pt_factor_label(
+                cfg.get("part_timer_factor")),
         }, user),
         "stock": {
             "total_loss": ds.fmt_rm(st.get("total_loss_cents")),
             "loss_pct": ds.fmt_pct(st.get("loss_pct_of_sales")),
-            "status": st.get("status", ""),
+            "status": (kpi.stock_status_label(
+                st.get("total_loss_cents") or 0, s.get("sales_mtd_cents"),
+                cfg.get("stock_loss_target"), entered)
+                if cfg else st.get("status", "")),
             "codes": codes,
         },
         "actions": {

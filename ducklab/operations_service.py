@@ -72,7 +72,7 @@ class ExpensesSection:
     budget_control_status: str  # Expense Monitor total row H25
     paid_count: int      # Paid lines with paid date in month (E40 basis)
     incurred_count: int  # valid non-cancelled lines incurred in month
-    pending_count: int   # valid Pending lines on the register
+    pending_count: int   # valid Pending lines incurred by month end
     validation_counts: dict[str, int]
     categories: list[ExpenseCategoryRow] = field(default_factory=list)
 
@@ -95,6 +95,9 @@ class ManpowerSection:
     turnover_pct: Optional[Decimal]
     turnover_status: str
     leave_days: int
+    # part-timers worked but no factor is set: effective staff and sales
+    # per staff are None ("Factor not set"), never FT-only
+    pt_factor_missing: bool = False
 
 
 @dataclass
@@ -233,7 +236,7 @@ def assemble_month(
         paid_count=kpi.paid_count_in_month(exp_inputs, month, store_id),
         incurred_count=kpi.incurred_count_in_month(exp_inputs, month,
                                                    store_id),
-        pending_count=kpi.pending_count(exp_inputs, store_id),
+        pending_count=kpi.pending_count(exp_inputs, month, store_id),
         total_expenses_status=kpi.total_expenses_status(
             exp_inputs, month, store_id, totals["paid"], total_budget),
         budget_control_status=kpi.budget_control_status(
@@ -265,6 +268,7 @@ def assemble_month(
         turnover_status=kpi.turnover_status(
             resigned, cfg.opening_headcount_ft, cfg.turnover_threshold),
         leave_days=kpi.leave_days(days),
+        pt_factor_missing=kpi.pt_factor_missing(days, cfg.part_timer_factor),
     )
 
     # --- Stock ---

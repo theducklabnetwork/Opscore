@@ -5,8 +5,6 @@ here. Identity from the server-side session; cleared on store/month switch.
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 import plotly.graph_objects as go
 import reflex as rx
 
@@ -15,6 +13,7 @@ from ducklab import kpi
 from ducklab import ops_charts
 from ducklab.auth_service import AuthenticationError, AuthorizationError
 from ducklab.auth_pages import app_service
+from ducklab.operations_repository import RepositoryError
 from ducklab.ops_stores_state import StoresState
 
 # Status colors come from the shared map in design.py (ds.status_color).
@@ -130,7 +129,7 @@ class SalesState(StoresState):
             self.sp_error = (str(exc) if not isinstance(exc, AuthenticationError)
                              else "Your session has expired. Please sign in again.")
             return
-        except Exception as exc:  # repository errors -> inline panel
+        except RepositoryError as exc:  # repository errors -> inline panel
             self.sp_error = str(exc)
             return
 
@@ -234,9 +233,8 @@ class SalesState(StoresState):
                     if reported and d.units else None
             else:
                 spr = upt = asp = None
-            vs = None
-            if reported and budget is not None:
-                vs = Decimal(d.sales_cents) - budget
+            vs = (kpi.daily_vs_run_rate_cents(d.sales_cents, budget)
+                  if reported else None)
             status = ("Not reported" if not reported
                       else "Zero sales" if d.sales_cents == 0 else "Reported")
             rows.append({
@@ -260,25 +258,5 @@ class SalesState(StoresState):
         return rows
 
     def _pace_chart(self, days, dim: int, level1) -> list[dict]:
-        budget = kpi.required_daily_run_rate(level1, dim)
-        entered = {d.date.day: d.sales_cents for d in days
-                   if d.sales_cents is not None}
-        last_reported = max(entered, default=0)
-        cum = 0
-        cumulative = {}
-        for day in sorted(entered):
-            cum += entered[day]
-            cumulative[day] = cum
-        out = []
-        running = 0
-        for day in range(1, dim + 1):
-            if day in cumulative:
-                running = cumulative[day]
-            out.append({
-                "day": day,
-                "budget": int(budget * day) if budget is not None else None,
-                # actual line stops at the last reported day (no extension)
-                "actual": running if day <= last_reported and last_reported
-                          else None,
-            })
-        return out
+        """Cumulative pace points (kpi.pace_series; shared with Overview)."""
+        return kpi.pace_series(days, dim, level1)

@@ -9,7 +9,6 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from ducklab import kpi
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
 
@@ -147,19 +146,23 @@ class TestSalesRules(SalesFixture):
         self.assertIsNone(s3.needed_per_remaining_day)
 
     def test_required_run_rate(self):
+        # Level 1 RM 200,000 / 31 days = 645,161.29... cents per day
         s = self.preview()
         self.assertEqual(s.required_daily_run_rate,
-                         Decimal(rm(200000)) / 31)
+                         Decimal("645161.2903225806451612903226"))
 
-    def test_parity_with_kpi_module(self):
+    def test_hand_computed_month_figures(self):
+        # 3 days x RM 6,000 (100 tx, 300 units each), October = 31 days
         for d in (1, 2, 4):
             self.rec(d, sales_cents=rm(6000), transactions=100, units=300)
-        days = self.app.get_daily_records(self.admin, self.sa, "2026-10")
         s = self.preview()
-        self.assertEqual(s.days_entered, kpi.days_with_sales_entered(days))
-        self.assertEqual(s.sales_mtd_cents, kpi.sales_mtd_cents(days))
-        self.assertEqual(s.month_end_sales_cents,
-                         kpi.month_end_sales_cents(days, 31))
+        self.assertEqual(s.days_entered, 3)
+        self.assertEqual(s.sales_mtd_cents, 1800000)          # RM 18,000
+        # projection 18,000 / 3 x 31 = RM 186,000 exactly
+        self.assertEqual(s.month_end_sales_cents, Decimal(18600000))
+        self.assertEqual(s.spr, Decimal(6000))                # RM 60 / tx
+        self.assertEqual(s.upt, Decimal(3))
+        self.assertEqual(s.asp, Decimal(2000))                # RM 20 / unit
 
 
 class TestSalesRbac(SalesFixture):

@@ -191,8 +191,8 @@ class Fixture(unittest.TestCase):
         d5 = self.app.get_daily_records(self.admin, self.sid, self.month)[0]
         d6 = self.app.get_daily_records(self.admin, self.sid, self.month)[1]
         signs = self.app.read_repo.get_contribution_signs()
-        self.assertEqual(kpi.total_loss_cents(d5.stock_losses, signs),
-                         kpi.total_loss_cents(d6.stock_losses, signs))
+        self.assertEqual(kpi.total_loss_cents(d5.stock_losses, signs), 0)
+        self.assertEqual(kpi.total_loss_cents(d6.stock_losses, signs), 0)
 
     # 7 ------------------------------------------------------------------
     def test_negative_stock_amount_rejected(self):

@@ -27,10 +27,13 @@ from ducklab import ops_charts
 from ducklab.auth_service import AuthenticationError, AuthorizationError
 from ducklab.auth_pages import app_service
 from ducklab.operations_repository import (
-    ConfigNotFoundError, RepositoryError, StoreNotFoundError,
+    ConfigNotFoundError, InvalidMonthError, RepositoryError,
+    StoreNotFoundError,
 )
 from ducklab.ops_manpower_state import ManpowerState
-from ducklab.ops_state import OpsState, month_label
+from ducklab.ops_state import (
+    ACCESS_DENIED, SESSION_EXPIRED, OpsState, auth_message, month_label,
+)
 
 # All status colors: ds.status_color (design.py shared map)
 TREATMENT = {1: "Included", -1: "Offset", 0: "Info only"}
@@ -189,18 +192,18 @@ class StockState(ManpowerState):
         try:
             user = self._actor()
         except AuthenticationError:
-            self.error_message = "Your session has expired. Please sign in again."
+            self.error_message = self.st_error = SESSION_EXPIRED
             self.report_status = "error"
             return
 
         try:
-            self.st_finalized = bool(
+            finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
-        except Exception:
-            self.st_finalized = False
-
-        try:
             cfg = app_service.get_month_config(user, store_id, month)
+        except AuthenticationError:
+            self.st_config_exists = False
+            self.st_error = SESSION_EXPIRED
+            return
         except ConfigNotFoundError:
             self.st_config_exists = False
             self.st_error = (
@@ -210,14 +213,19 @@ class StockState(ManpowerState):
             return
         except (AuthorizationError, StoreNotFoundError):
             self.st_config_exists = False
-            self.st_error = "You do not have access to this store."
+            self.st_error = ACCESS_DENIED
             return
+        self.st_finalized = finalized
 
         try:
             rep = app_service.preview_month(user, store_id, month)
             days = app_service.get_daily_records(user, store_id, month)
             codes = app_service.list_stock_loss_codes(user)
-        except (AuthorizationError, StoreNotFoundError, RepositoryError) as exc:
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.st_error = auth_message(exc)
+            return
+        except RepositoryError as exc:
             self.st_error = str(exc)
             return
         self.st_loaded = True
@@ -235,16 +243,9 @@ class StockState(ManpowerState):
         self.kpi_extra = ds.fmt_rm(st.totals_by_code.get("EXTRA", 0))
         days_with_loss = sum(1 for d in days if d.stock_losses)
         self.kpi_days = f"{days_with_loss} / {s.days_in_month}"
-        if s.days_entered == 0 and not days:
-            self.st_status = "Awaiting Data"
-        elif not sales_mtd:
-            self.st_status = "No Sales Recorded"
-        elif target is None:
-            self.st_status = "No Target"
-        elif ratio is not None and ratio <= target:
-            self.st_status = "Within Target"
-        else:
-            self.st_status = "Above Target"
+        # One status for Stock, Report and Overview (kpi.py)
+        self.st_status = kpi.stock_status_label(
+            st.total_loss_cents, sales_mtd, target, s.days_entered)
         self.st_status_color = ds.status_color(self.st_status)
         if target is None:
             self.kpi_target = "No target set"
@@ -254,7 +255,7 @@ class StockState(ManpowerState):
             if ratio is None:
                 self.kpi_variance = "—"
             else:
-                var_pp = (ratio - target) * 100
+                var_pp = (ratio - kpi.to_decimal(target)) * 100
                 self.kpi_variance = f"{float(var_pp):+.1f} pp"
 
         # --- category breakdown ------------------------------------------
@@ -376,6 +377,12 @@ class StockState(ManpowerState):
                 flags.append(f"{month_label(month)}: {s.days_entered} of "
                              f"{s.days_in_month} days reported")
             self.cmp_incomplete = " · ".join(flags)
-        except Exception:
+        except (ConfigNotFoundError, InvalidMonthError):
+            # previous month not configured: no comparison to show
             self.cmp_rows = []
             self.cmp_incomplete = ""
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.cmp_rows = []
+            self.cmp_incomplete = ""
+            self.st_error = auth_message(exc)

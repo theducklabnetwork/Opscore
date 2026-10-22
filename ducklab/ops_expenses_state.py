@@ -30,7 +30,9 @@ from ducklab.operations_write_repository import (
 )
 from ducklab.operations_write_repository import RecordNotFoundError
 from ducklab.ops_daily_state import DailyState, _parse_money
-from ducklab.ops_state import OpsState
+from ducklab.ops_state import (
+    SESSION_EXPIRED, OpsState, auth_message, parse_client_id,
+)
 
 PERIOD_OPTIONS = [
     ("incurred", "Incurred this month"),
@@ -42,6 +44,10 @@ PERIOD_OPTIONS = [
 MAX_ROWS = 100
 
 # All status colors: ds.status_color (design.py shared map)
+
+# "Clear saved value" ticked while an amount is typed (also used by
+# Monthly Setup, ops_stores_state._parse_budget_rows).
+BUDGET_CLEAR_CONFLICT = "Untick 'Clear saved value' to set an amount"
 
 
 class ExpensesState(DailyState):
@@ -129,12 +135,11 @@ class ExpensesState(DailyState):
             "e_verification", "e_recorded_by", "e_remarks")}
 
     def _category_id(self, name: str) -> Optional[int]:
-        try:
-            user = self._actor()
-            cats = app_service.get_expense_categories(
-                user, self._selected_store_id())
-        except Exception:
-            return None
+        """Category id by name in the selected store. Authentication /
+        authorization errors propagate to the calling handler."""
+        user = self._actor()
+        cats = app_service.get_expense_categories(
+            user, self._selected_store_id())
         for c in cats:
             if c.name == name:
                 return c.id
@@ -229,8 +234,14 @@ class ExpensesState(DailyState):
             return
         try:
             user = self._actor()
-        except AuthenticationError:
-            self.error_message = "Your session has expired. Please sign in again."
+            finalized = bool(
+                app_service.list_report_versions(user, store_id, month))
+            cats = app_service.get_expense_categories(user, store_id)
+            records = app_service.get_expense_transactions(user, store_id)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.can_write_expenses = self.can_manage_budgets = False
+            self.error_message = auth_message(exc)
             self.report_status = "error"
             return
         # Deactivated stores are read-only: hide every write control
@@ -239,15 +250,9 @@ class ExpensesState(DailyState):
                                    and self.selected_store_active)
         self.can_manage_budgets = (authz.can_manage_config(user)
                                    and self.selected_store_active)
-        try:
-            self.exp_month_finalized = bool(
-                app_service.list_report_versions(user, store_id, month))
-        except Exception:
-            self.exp_month_finalized = False
-        cats = app_service.get_expense_categories(user, store_id)
+        self.exp_month_finalized = finalized
         self.has_categories = bool(cats)
         self.category_names = [c.name for c in cats]
-        records = app_service.get_expense_transactions(user, store_id)
         cat_names = {c.id: c.name for c in cats}
         known_ids = set(cat_names)
         self.all_expense_rows = [
@@ -258,12 +263,9 @@ class ExpensesState(DailyState):
         try:
             rep = app_service.preview_month(user, store_id, month)
             e = rep.expenses
-            util = ""
-            if e.total_budget_cents:
-                util = f"{100.0 * e.paid_cents / e.total_budget_cents:.1f}%"
-            variance = None
-            if e.total_budget_cents is not None:
-                variance = e.total_budget_cents - e.paid_cents
+            util = kpi.budget_utilization(e.paid_cents, e.total_budget_cents)
+            variance = kpi.budget_variance_cents(e.total_budget_cents,
+                                                 e.paid_cents)
             # Each card decides from its own data (engine counts):
             # Paid: no Paid lines in month -> "No payments yet".
             # Incurred: no valid lines incurred in month -> "Not reported
@@ -279,7 +281,7 @@ class ExpensesState(DailyState):
                 # Total budget None -> "—" (NULL), never RM 0.00
                 "budget": ("—" if e.total_budget_cents is None
                            else ds.fmt_rm(e.total_budget_cents)),
-                "utilization": util or "—",
+                "utilization": ds.fmt_pct(util),
                 "variance": ds.fmt_rm(variance),
                 # Expense Monitor total row H25, labelled to distinguish
                 # it from the Overview's HQ status (Summary!E40).
@@ -298,20 +300,17 @@ class ExpensesState(DailyState):
             self.budget_rows = []
             for c in e.categories:
                 paid = c.paid_mtd_cents
-                util_pct = (100.0 * paid / c.budget_cents
-                            if c.budget_cents else None)
-                remaining = (c.budget_cents - paid
-                             if c.budget_cents is not None else None)
+                util = kpi.budget_utilization(paid, c.budget_cents)
+                remaining = kpi.budget_variance_cents(c.budget_cents, paid)
                 self.budget_rows.append({
                     "category_id": str(c.category_id),
                     "name": c.name,
                     "budget": ds.fmt_rm(c.budget_cents),
                     "paid": ds.fmt_rm(paid),
                     "remaining": ds.fmt_rm(remaining),
-                    "util": (f"{util_pct:.1f}%" if util_pct is not None
-                             else "—"),
-                    "bar": (f"{min(util_pct, 100):.0f}"
-                            if util_pct is not None else "0"),
+                    "util": ds.fmt_pct(util),
+                    "bar": (f"{min(float(util) * 100, 100):.0f}"
+                            if util is not None else "0"),
                     "status": c.budget_status,
                     "color": ds.status_color(c.budget_status),
                 })
@@ -323,7 +322,15 @@ class ExpensesState(DailyState):
                 names, budgets, paid, dark=True)
             self.budget_fig_light = ops_charts.budget_vs_actual(
                 names, budgets, paid, dark=False)
-        except (ConfigNotFoundError, AuthorizationError, StoreNotFoundError):
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.error_message = auth_message(exc)
+            self.report_status = "error"
+            self.exp_kpis = {}
+            self.budget_rows = []
+            self.budget_fig_dark = go.Figure()
+            self.budget_fig_light = go.Figure()
+        except ConfigNotFoundError:
             self.exp_kpis = {}
             self.budget_rows = []
             self.budget_fig_dark = go.Figure()
@@ -364,30 +371,42 @@ class ExpensesState(DailyState):
     # ------------------------------------------------------------------
     @rx.event
     def open_expense_form(self, expense_id: str = "") -> None:
+        # Validate the client-sent id and load the record BEFORE touching
+        # any editing state; failures leave the dialog closed.
+        try:
+            wanted = parse_client_id(expense_id, "transaction")
+            user = self._actor()
+            store_id = self._selected_store_id()
+            rec, cat_names = None, {}
+            if wanted is not None:
+                rec = next((r for r in app_service.get_expense_transactions(
+                    user, store_id) if r.id == wanted), None)
+                if rec is None:
+                    raise ValidationError(
+                        "Unknown transaction — reopen it from the list.")
+                cat_names = {c.id: c.name for c in
+                             app_service.get_expense_categories(
+                                 user, store_id)}
+        except ValidationError as exc:
+            self.exp_form_error = str(exc)
+            return
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.exp_form_error = auth_message(exc)
+            return
         self.exp_form_error = ""
         self.exp_notice = ""
-        self.editing_id = expense_id
+        self.editing_id = str(wanted) if wanted is not None else ""
         values = {a: "" for a in self._exp_form_values()}
         values["e_status"] = "Pending"
         values["e_verification"] = "Unverified"
-        if expense_id:
-            try:
-                user = self._actor()
-                records = app_service.get_expense_transactions(
-                    user, self._selected_store_id())
-                rec = next((r for r in records
-                            if str(r.id) == expense_id), None)
-            except Exception:
-                rec = None
-            if rec is None:
-                self.exp_form_error = "Transaction not found in this store."
-                return
+        if rec is not None:
             e = rec.input
             values.update({
                 "e_incurred": e.incurred_date.isoformat()
                     if e.incurred_date else "",
                 "e_paid": e.paid_date.isoformat() if e.paid_date else "",
-                "e_category": self._cat_name(e.category_id),
+                "e_category": cat_names.get(e.category_id, ""),
                 "e_description": e.description or "",
                 "e_amount": (f"{e.amount_cents / 100:.2f}"
                              if e.amount_cents is not None else ""),
@@ -399,11 +418,7 @@ class ExpensesState(DailyState):
                 "e_remarks": rec.remarks or "",
             })
         else:
-            try:
-                user = self._actor()
-                values["e_recorded_by"] = user.display_name
-            except Exception:
-                pass
+            values["e_recorded_by"] = user.display_name
             month = self._selected_month()
             if month:
                 values["e_incurred"] = f"{month}-01"
@@ -411,19 +426,6 @@ class ExpensesState(DailyState):
             setattr(self, a, v)
         self.exp_original = dict(values)
         self.exp_form_open = True
-
-    def _cat_name(self, cid: Optional[int]) -> str:
-        if cid is None:
-            return ""
-        try:
-            user = self._actor()
-            for c in app_service.get_expense_categories(
-                    user, self._selected_store_id()):
-                if c.id == cid:
-                    return c.name
-        except Exception:
-            pass
-        return ""
 
     @rx.event
     def close_expense_form(self) -> None:
@@ -438,8 +440,16 @@ class ExpensesState(DailyState):
         self.filter_category = "" if v == "All categories" else v
     @rx.event
     def set_filter_category_name(self, name: str):
-        self.filter_category = "" if name == "All categories" else \
-            str(self._category_id(name) or "")
+        if name == "All categories":
+            self.filter_category = ""
+            return
+        try:
+            self.filter_category = str(self._category_id(name) or "")
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.filter_category = ""
+            self.error_message = auth_message(exc)
+            self.report_status = "error"
     @rx.event
     def set_filter_status(self, v: str):
         self.filter_status = "" if v == "All statuses" else v
@@ -503,48 +513,50 @@ class ExpensesState(DailyState):
             return
         # parse (blank -> None; incomplete drafts are allowed by design)
         try:
+            editing = parse_client_id(self.editing_id, "transaction")
             fields = self._parse_expense_form()
-        except ValueError as exc:
+            user = self._actor()
+        except (ValueError, ValidationError) as exc:
             self.exp_form_error = str(exc)
             self.exp_form_open = True
             return
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            self.exp_form_error = "Your session has expired. Please sign in again."
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.exp_form_error = auth_message(exc)
             self.exp_form_open = True
             return
         self.exp_saving = True
         yield
         try:
-            if self.editing_id:
+            if editing is not None:
                 # partial update: only changed fields are written
                 changed = self._changed_fields(fields)
                 if not changed:
-                    self.exp_saving = False
                     self.exp_notice = "No changes to save."
                     yield ExpensesState.load_expenses_data()
                     return
                 app_service.update_expense(
-                    user, store_id, int(self.editing_id), **changed)
+                    user, store_id, editing, **changed)
             else:
                 app_service.record_expense(user, store_id, **fields)
+        except AuthenticationError:
+            self.exp_form_error = SESSION_EXPIRED
+            self.exp_form_open = True
+            return
         except AuthorizationError:
-            self.exp_saving = False
             self.exp_form_error = "Your role cannot modify expenses."
             self.exp_form_open = True
             return
         except (ValidationError, RecordNotFoundError) as exc:
-            self.exp_saving = False
             self.exp_form_error = str(exc)
             self.exp_form_open = True
             return
         except (RepositoryError, StoreNotFoundError) as exc:
-            self.exp_saving = False
             self.exp_form_error = f"Save failed: {exc}"
             self.exp_form_open = True
             return
-        self.exp_saving = False
+        finally:
+            self.exp_saving = False
         verb = "updated" if self.editing_id else "recorded"
         self.exp_notice = (f"Expense {verb} and persisted. KPIs and budgets "
                            f"recalculated live.")
@@ -625,7 +637,13 @@ class ExpensesState(DailyState):
         if not self.b_category:
             self.b_error = "Choose a category."
             return
-        category_id = self._category_id(self.b_category)
+        try:
+            user = self._actor()
+            category_id = self._category_id(self.b_category)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.b_error = auth_message(exc)
+            return
         if category_id is None:
             self.b_error = f"Unknown category: {self.b_category!r}"
             return
@@ -634,30 +652,26 @@ class ExpensesState(DailyState):
         except ValueError as exc:
             self.b_error = str(exc)
             return
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            self.b_error = "Your session has expired. Please sign in again."
-            return
         self.b_saving = True
         yield
         try:
             app_service.set_expense_budget(user, store_id, month,
                                            category_id, cents)
+        except AuthenticationError:
+            self.b_error = SESSION_EXPIRED
+            return
         except AuthorizationError:
-            self.b_saving = False
             self.b_error = ("Only super admins and administrators can "
                             "manage budgets.")
             return
         except (ValidationError, RecordNotFoundError) as exc:
-            self.b_saving = False
             self.b_error = str(exc)
             return
         except (RepositoryError, StoreNotFoundError) as exc:
-            self.b_saving = False
             self.b_error = f"Save failed: {exc}"
             return
-        self.b_saving = False
+        finally:
+            self.b_saving = False
         self.b_clear = False
         self.b_notice = (f"Budget for {self.b_category} cleared "
                          f"(No budget for {month})." if cents is None else
@@ -669,8 +683,11 @@ class ExpensesState(DailyState):
 
 def _budget_save_value(amount: str, clear: bool) -> Optional[int]:
     """Budget form -> cents to save. A ticked "Clear saved value" -> None
-    (NULL = "No budget", never 0); otherwise an amount is required."""
+    (NULL = "No budget", never 0); ticking it while an amount is typed is
+    rejected; otherwise an amount is required."""
     if clear:
+        if amount.strip():
+            raise ValueError(BUDGET_CLEAR_CONFLICT)
         return None
     if not amount.strip():
         raise ValueError(

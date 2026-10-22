@@ -208,9 +208,9 @@ class StatusColorMapTests(unittest.TestCase):
             # actions + priorities
             "Open", "In progress", "Blocked", "Done",
             "Low", "Medium", "High", "Critical",
-            # stock / day display strings
-            "Within Target", "Above Target", "No Target", "Awaiting Data",
-            "No Sales Recorded", "Not reported", "Zero", "Loss",
+            # stock (kpi.stock_status_label) / day display strings
+            "No sales recorded", "Factor not set",
+            "Not reported", "Zero", "Loss",
             "Net negative", "No sales",
             "complete", "partial", "unreported",
             # misc

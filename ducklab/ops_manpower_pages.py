@@ -544,6 +544,15 @@ def manpower_page() -> rx.Component:
                            width="100%", id="mp-notice"),
             ),
             rx.cond(
+                ~ManpowerState.cfg_open & (ManpowerState.cfg_error != ""),
+                ds.error_callout(ManpowerState.cfg_error),
+            ),
+            rx.cond(
+                ManpowerState.mp_config_exists
+                & (ManpowerState.mp_error != ""),
+                ds.error_callout(ManpowerState.mp_error),
+            ),
+            rx.cond(
                 ~ManpowerState.mp_config_exists,
                 ds.empty_state("Monthly configuration required",
                                ManpowerState.mp_error, icon="settings"),

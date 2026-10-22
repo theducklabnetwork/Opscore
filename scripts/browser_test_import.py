@@ -106,8 +106,8 @@ def main() -> int:
         body = page.locator("body").inner_text()
         check("stock: total loss RM 1,595.00", "RM 1,595.00" in body)
         check("stock: ratio 0.45%", "0.45%" in body or "0.5%" in body)
-        check("stock: Within Target",
-              page.locator("#stock-status").inner_text() == "Within Target")
+        check("stock: Within target",
+              page.locator("#stock-status").inner_text() == "Within target")
 
         # --- Expenses ---
         page.goto(f"{BASE}/ops/expenses")

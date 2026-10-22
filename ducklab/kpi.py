@@ -22,7 +22,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -42,6 +42,12 @@ SALARY_FAILURE = "Failure: over target"
 TURNOVER_HIGH = "HIGH TURNOVER"
 STOCK_WITHIN = "Within target"
 STOCK_OVER_TARGET = "Over target"
+# Stock display states before the workbook status (Summary!E63) applies.
+STOCK_AWAITING_DATA = "Awaiting data"
+STOCK_NO_SALES = "No sales recorded"
+STOCK_NO_TARGET = "No target"
+# Part-timers worked but no conversion factor is configured.
+PT_FACTOR_NOT_SET = "Factor not set"
 
 
 def kl_today() -> date:
@@ -162,9 +168,15 @@ def month_bounds(month: str) -> tuple[date, date, int]:
     return date(y, m, 1), date(y, m, days), days
 
 
+# Input bounds: anything larger is a typo and would overflow SQLite INTEGER.
+MAX_AMOUNT_RM = Decimal("100000000.00")   # RM 100,000,000.00
+MAX_COUNT = 1_000_000
+
+
 def parse_money_cents(raw: str) -> int:
     """Shared money parser for all data-entry pages: '350819' or
-    '350,819.00' -> integer cents. Rejects sub-cent input, inf and nan.
+    '350,819.00' -> integer cents. Rejects sub-cent input, inf, nan and
+    amounts above RM 100,000,000.00 ("Amount too large").
     Negative amounts are allowed here (refunds are valid money); callers
     that forbid negatives say so themselves. Raises ValueError."""
     cleaned = raw.replace(",", "").replace("RM", "").strip()
@@ -174,6 +186,9 @@ def parse_money_cents(raw: str) -> int:
         raise ValueError(f"Invalid amount: {raw!r}")
     if not dec.is_finite():
         raise ValueError(f"Invalid amount: {raw!r}")
+    # copy_abs() is exact (no context), so huge exponents cannot overflow
+    if dec.copy_abs() > MAX_AMOUNT_RM:
+        raise ValueError("Amount too large")
     cents = int(dec * 100)
     if Decimal(cents) != dec * 100:
         raise ValueError(f"Amount has sub-cent precision: {raw!r}")
@@ -188,7 +203,23 @@ def parse_count(raw: str, label: str) -> int:
         raise ValueError(f"{label} must be a whole number")
     if value < 0:
         raise ValueError(f"{label} cannot be negative")
+    if value > MAX_COUNT:
+        raise ValueError(f"{label} is too large")
     return value
+
+
+def parse_decimal(raw: str, label: str, lo: Decimal, hi: Decimal) -> Decimal:
+    """Finite decimal within [lo, hi] (factors, percentages). "NaN" and
+    "inf" are rejected like any non-number. Raises ValueError."""
+    try:
+        d = Decimal(raw.strip())
+    except InvalidOperation:
+        raise ValueError(f"{label} must be a number")
+    if not d.is_finite():
+        raise ValueError(f"{label} must be a number")
+    if not (lo <= d <= hi):
+        raise ValueError(f"{label} must be between {lo} and {hi}")
+    return d
 
 
 def _in_month(d: Optional[date], month: str) -> bool:
@@ -278,6 +309,45 @@ def average_per_reported_day(total_cents: int, days_entered: int) -> Optional[De
     if not days_entered:
         return None
     return Decimal(total_cents) / Decimal(days_entered)
+
+
+def daily_vs_run_rate_cents(sales_cents: Optional[int],
+                            run_rate) -> Optional[Decimal]:
+    """One day's sales minus the required daily run-rate (exact)."""
+    if sales_cents is None or run_rate is None:
+        return None
+    return Decimal(sales_cents) - to_decimal(run_rate)
+
+
+def pace_series(days: list[DailyInput], days_in_month: int,
+                level1_cents) -> list[dict]:
+    """Cumulative sales pace vs the Level 1 budget pace, one entry per
+    calendar day: {"day", "actual", "budget"} in integer cents.
+
+    actual: running MTD on reported days, None after the last reported day
+    (no extension). budget: run-rate x day rounded half-up to the cent;
+    None when no Level 1 target."""
+    rate = required_daily_run_rate(level1_cents, days_in_month)
+    entered = {d.date.day: d.sales_cents for d in days
+               if d.sales_cents is not None}
+    last_reported = max(entered, default=0)
+    out, running = [], 0
+    for day in range(1, days_in_month + 1):
+        running += entered.get(day, 0)
+        out.append({
+            "day": day,
+            "actual": running if day <= last_reported else None,
+            "budget": (int((rate * day).quantize(Decimal(1), ROUND_HALF_UP))
+                       if rate is not None else None),
+        })
+    return out
+
+
+def reported_total(values) -> Optional[int]:
+    """SUM of reported values; None when nothing was reported (blank is
+    not zero)."""
+    reported = [v for v in values if v is not None]
+    return sum(reported) if reported else None
 
 
 def budget_control_status(paid_cents: int, total_budget_cents: Optional[int]) -> str:
@@ -399,13 +469,21 @@ def incurred_count_in_month(
     return n
 
 
+def _pending_in_scope(e: ExpenseInput, month_end: date) -> bool:
+    """Pending lines belong to a month when incurred on or before its end
+    (same cut-off as expense_review_counts)."""
+    return e.incurred_date is not None and e.incurred_date <= month_end
+
+
 def pending_count(
-    expenses: list[ExpenseInput], store_id: int
+    expenses: list[ExpenseInput], month: str, store_id: int
 ) -> int:
-    """COUNT of Pending, core-valid lines on this store's register (same
-    per-line rule as Register column N)."""
+    """COUNT of Pending, core-valid lines on this store's register incurred
+    on or before month end (same per-line rule as Register column N)."""
+    _, month_end, _ = month_bounds(month)
     return sum(1 for e in expenses
-               if e.store_id == store_id and pending_value_cents(e))
+               if e.store_id == store_id and pending_value_cents(e)
+               and _pending_in_scope(e, month_end))
 
 
 def expense_review_counts(
@@ -513,9 +591,11 @@ def expense_totals_cents(
 
     - paid:     sum of paid values with PAID date inside month (HQ rule).
     - incurred: sum of incurred values with INCURRED date inside month.
-    - open:     sum of pending values (this store's register only).
+    - open:     sum of pending values incurred on or before month end
+                (this store's register only).
     Rows from other stores are excluded regardless of input.
     """
+    _, month_end, _ = month_bounds(month)
     paid = incurred = open_ = 0
     for e in expenses:
         if e.store_id != store_id:
@@ -526,7 +606,8 @@ def expense_totals_cents(
         iv = incurred_value_cents(e)
         if iv and _in_month(e.incurred_date, month):
             incurred += iv
-        open_ += pending_value_cents(e)
+        if _pending_in_scope(e, month_end):
+            open_ += pending_value_cents(e)
     return {"paid": paid, "incurred": incurred, "open": open_}
 
 
@@ -555,6 +636,32 @@ def budget_status(paid_cents: int, budget_cents: Optional[int]) -> str:
     return "Within budget"
 
 
+def budget_utilization(paid_cents: int,
+                       budget_cents: Optional[int]) -> Optional[Decimal]:
+    """Paid / budget. None when no budget (NULL) or a zero budget."""
+    if not budget_cents:
+        return None
+    return Decimal(paid_cents) / Decimal(budget_cents)
+
+
+def budget_variance_cents(budget_cents: Optional[int],
+                          paid_cents: int) -> Optional[int]:
+    """Budget remaining = budget - paid (negative = overspent). None when
+    no budget is set (NULL is never treated as RM 0)."""
+    if budget_cents is None:
+        return None
+    return budget_cents - paid_cents
+
+
+def ratio_of_target(value, target) -> Optional[Decimal]:
+    """value / target (share of a target used, e.g. salary ratio vs its
+    target). None when either is missing or the target is zero."""
+    v, t = to_decimal(value), to_decimal(target)
+    if v is None or not t:
+        return None
+    return v / t
+
+
 def expense_share_of_sales(paid_cents: int, sales_cents: Optional[int]) -> Optional[Decimal]:
     """Summary!D30-40: expense line as % of sales."""
     if not sales_cents:
@@ -568,11 +675,22 @@ def expense_share_of_sales(paid_cents: int, sales_cents: Optional[int]) -> Optio
 
 def effective_staff(ft_working: Optional[int], pt_working: Optional[int],
                     pt_factor) -> Optional[Decimal]:
-    """Daily!AP: FT + PT x factor. None when BOTH attendance fields blank."""
+    """Daily!AP: FT + PT x factor. None when BOTH attendance fields blank,
+    and None when part-timers worked but no factor is configured (never
+    silently FT-only). Without part-timers the factor is not needed."""
     if ft_working is None and pt_working is None:
         return None
-    f = to_decimal(pt_factor) or Decimal(0)
-    return Decimal(ft_working or 0) + Decimal(pt_working or 0) * f
+    if not pt_working:
+        return Decimal(ft_working or 0)
+    f = to_decimal(pt_factor)
+    if f is None:
+        return None
+    return Decimal(ft_working or 0) + Decimal(pt_working) * f
+
+
+def pt_factor_missing(days: list[DailyInput], pt_factor) -> bool:
+    """True when part-timers worked on some day but no factor is set."""
+    return pt_factor is None and any(d.pt_working for d in days)
 
 
 def closing_headcount(opening: Optional[int], hires: int, resigned: int) -> Optional[int]:
@@ -625,6 +743,14 @@ def salary_ratio_status(cfg: MonthConfig, sales_cents: Optional[int],
     return SALARY_WITHIN if r <= cfg.salary_ratio_target else SALARY_FAILURE
 
 
+def salary_budget_variance_cents(budget_cents,
+                                 total_salary: Optional[int]) -> Optional[Decimal]:
+    """Salary budget - actual total salary (exact; positive = under)."""
+    if budget_cents is None or total_salary is None:
+        return None
+    return to_decimal(budget_cents) - total_salary
+
+
 def salary_budget_cents(sales_cents: Optional[int], ratio_target) -> Optional[Decimal]:
     """Setup!B43: actual sales x salary ratio target, in cents, unrounded.
 
@@ -656,7 +782,10 @@ def turnover_status(resigned: int, opening: Optional[int], threshold) -> str:
 
 
 def average_effective_staff(days: list[DailyInput], pt_factor) -> Optional[Decimal]:
-    """Summary!B52: staff-days / days with staffing entered."""
+    """Summary!B52: staff-days / days with staffing entered. None when
+    part-timers worked without a configured factor."""
+    if pt_factor_missing(days, pt_factor):
+        return None
     effs = [effective_staff(d.ft_working, d.pt_working, pt_factor) for d in days]
     reported = [e for e in effs if e is not None]
     if not reported:
@@ -673,7 +802,10 @@ def daily_sales_per_staff_cents(d: DailyInput, pt_factor) -> Optional[Decimal]:
 
 
 def sales_per_staff_cents(days: list[DailyInput], pt_factor) -> Optional[Decimal]:
-    """Summary!B54/Daily!AQ38: sales on staffed days / total effective staff-days."""
+    """Summary!B54/Daily!AQ38: sales on staffed days / total effective
+    staff-days. None when part-timers worked without a configured factor."""
+    if pt_factor_missing(days, pt_factor):
+        return None
     total_sales = 0
     total_staff = Decimal(0)
     for d in days:
@@ -736,6 +868,20 @@ def stock_loss_status(loss_cents: int, sales_cents: Optional[int], target) -> st
     if t is None or p is None:
         return ""
     return STOCK_WITHIN if p <= t else STOCK_OVER_TARGET
+
+
+def stock_status_label(loss_cents: int, sales_cents: Optional[int], target,
+                       days_entered: int) -> str:
+    """One stock status for Stock page, Report and Overview: the workbook
+    status (Summary!E63) when it applies, else why it does not yet."""
+    status = stock_loss_status(loss_cents, sales_cents, target)
+    if status:
+        return status
+    if days_entered == 0 and not loss_cents:
+        return STOCK_AWAITING_DATA  # nothing reported at all
+    if not sales_cents:
+        return STOCK_NO_SALES
+    return STOCK_NO_TARGET
 
 
 # --------------------------------------------------------------------------

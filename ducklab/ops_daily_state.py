@@ -25,7 +25,9 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import ValidationError
-from ducklab.ops_state import OpsState, month_label
+from ducklab.ops_state import (
+    SESSION_EXPIRED, OpsState, auth_message, month_label,
+)
 
 # ---------------------------------------------------------------------------
 # Field specs: (state attr, daily_records column, kind, label)
@@ -137,7 +139,10 @@ class DailyState(OpsState):
     def form_day_label(self) -> str:
         if not self.form_date:
             return ""
-        d = date.fromisoformat(self.form_date)
+        try:
+            d = date.fromisoformat(self.form_date)
+        except ValueError:
+            return ""
         return f"{calendar.day_name[d.weekday()]}, {d.day} {calendar.month_name[d.month]} {d.year}"
 
     @rx.var
@@ -148,8 +153,8 @@ class DailyState(OpsState):
             pt = _parse_count(self.f_pt_working, "pt_working")
         except ValueError:
             return "—"
-        if self.pt_factor is None:
-            return "—"
+        if self.pt_factor is None and pt:
+            return kpi.PT_FACTOR_NOT_SET
         eff = kpi.effective_staff(ft, pt, self.pt_factor)
         return f"{float(eff):,.2f}" if eff is not None else "—"
 
@@ -218,44 +223,33 @@ class DailyState(OpsState):
             return
         try:
             user = self._actor()
-        except AuthenticationError:
-            self.error_message = "Your session has expired. Please sign in again."
-            self.report_status = "error"
-            return
-        from ducklab import authz
-        self.can_write = (authz.can_write_operations(user)
-                          and self.selected_store_active)
-        if not self.stock_codes:
-            self.stock_codes = [
-                {"code": c["code"], "name": c["name"],
-                 "sign": str(c["contribution_sign"])}
-                for c in app_service.list_stock_loss_codes(user)
-            ]
-        try:
-            cfg = app_service.get_month_config(user, store_id, month)
-            self.pt_factor = (float(cfg.part_timer_factor)
-                              if cfg.part_timer_factor is not None else None)
-        except Exception:
-            self.pt_factor = None
-        try:
+            from ducklab import authz
+            self.can_write = (authz.can_write_operations(user)
+                              and self.selected_store_active)
+            if not self.stock_codes:
+                self.stock_codes = [
+                    {"code": c["code"], "name": c["name"],
+                     "sign": str(c["contribution_sign"])}
+                    for c in app_service.list_stock_loss_codes(user)
+                ]
+            try:
+                factor = app_service.get_month_config(
+                    user, store_id, month).part_timer_factor
+            except ConfigNotFoundError:
+                factor = None
             days = app_service.get_daily_records(user, store_id, month)
-        except (AuthorizationError, StoreNotFoundError):
-            self.day_rows = []
-            return
-        try:
-            signs = app_service.read_repo.get_contribution_signs()
-        except Exception:
-            signs = {}
-        try:
-            cfg = app_service.get_month_config(user, store_id, month)
-            factor = cfg.part_timer_factor
-        except ConfigNotFoundError:
-            factor = None
-        try:
             self.month_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
-        except Exception:
-            self.month_finalized = False
+            # signs from the reference codes already loaded via AppService
+            signs = {c["code"]: int(c["sign"]) for c in self.stock_codes}
+            day_kpis = self._monthly_kpis(days)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.can_write = False
+            self.error_message = auth_message(exc)
+            self.report_status = "error"
+            return
+        self.pt_factor = float(factor) if factor is not None else None
 
         by_date = {d.date: d for d in days}
         y, m = int(month[:4]), int(month[5:7])
@@ -266,7 +260,7 @@ class DailyState(OpsState):
             rec = by_date.get(d)
             rows.append(self._day_row(d, rec, signs, factor))
         self.day_rows = rows
-        self.day_kpis = self._monthly_kpis(days)
+        self.day_kpis = day_kpis
 
     def _day_row(self, d: date, rec, signs, factor) -> dict[str, str]:
         base = {
@@ -288,6 +282,7 @@ class DailyState(OpsState):
             if sales is not None and rec.units else None
         eff = kpi.effective_staff(rec.ft_working, rec.pt_working, factor)
         sps = kpi.daily_sales_per_staff_cents(rec, factor)
+        factor_missing = factor is None and bool(rec.pt_working)
         filled = sum(v is not None for v in (
             rec.sales_cents, rec.transactions, rec.units, rec.ft_working,
             rec.pt_working, rec.new_hires_ft, rec.resigned_ft,
@@ -302,20 +297,23 @@ class DailyState(OpsState):
             "spr": (f"RM {spr / 100:,.2f}" if spr is not None else "—"),
             "upt": ds.fmt_num(float(upt) if upt is not None else None),
             "asp": (f"RM {asp / 100:,.2f}" if asp is not None else "—"),
-            "staff": (f"{float(eff):,.2f}" if eff is not None else "—"),
-            "sales_per_staff": (f"RM {sps / 100:,.2f}" if sps is not None
+            "staff": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                      else f"{float(eff):,.2f}" if eff is not None else "—"),
+            "sales_per_staff": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                                else f"RM {sps / 100:,.2f}" if sps is not None
                                 else "—"),
             "loss": ds.fmt_rm(kpi.total_loss_cents(rec.stock_losses, signs)),
             "loss_missing": "0" if rec.stock_losses else "1",
         }
 
     def _monthly_kpis(self, days) -> dict[str, str]:
-        tx = sum(d.transactions or 0 for d in days)
-        units = sum(d.units or 0 for d in days)
+        """Month summary cards. Auth failures propagate to the caller."""
         month = self._selected_month()
+        # "—" when nothing was reported (blank is not zero)
         out = {
-            "transactions": ds.fmt_num(tx if days else None),
-            "units": ds.fmt_num(units if days else None),
+            "transactions": ds.fmt_num(
+                kpi.reported_total(d.transactions for d in days)),
+            "units": ds.fmt_num(kpi.reported_total(d.units for d in days)),
         }
         try:
             rep = app_service.preview_month(
@@ -329,7 +327,8 @@ class DailyState(OpsState):
                     if s.month_end_sales_cents is not None else None),
                 "loss": ds.fmt_rm(rep.stock.total_loss_cents),
             })
-        except Exception:
+        except (ConfigNotFoundError, StoreNotFoundError, RepositoryError):
+            # no month configuration yet: target-based cards stay blank
             s = None
             out.update({"target": "—", "achievement": "—",
                         "projected": "—", "loss": "—"})
@@ -382,30 +381,37 @@ class DailyState(OpsState):
     # ------------------------------------------------------------------
     @rx.event
     def open_entry(self, iso_date: str) -> None:
+        # Validate the client-sent date BEFORE touching any form state.
+        store_id = self._selected_store_id()
+        month = self._selected_month()
+        error = _entry_date_error(iso_date, month)
+        rec = None
+        if not error and store_id is not None:
+            try:
+                user = self._actor()
+                d = date.fromisoformat(iso_date)
+                days = app_service.get_daily_records(user, store_id, month)
+                rec = next((r for r in days if r.date == d), None)
+            except (AuthenticationError, AuthorizationError,
+                    StoreNotFoundError) as exc:
+                error = auth_message(exc)
+        if error:
+            self.form_error = error
+            return
         self.form_error = ""
         self.save_notice = ""
         self.form_date = iso_date
         self.form_title = "Daily Entry"
-        store_id = self._selected_store_id()
-        month = self._selected_month()
         values = {attr: "" for attr, _, _, _ in SALES_FIELDS + MANPOWER_FIELDS}
         self.stock_form = {c["code"]: "" for c in self.stock_codes}
-        if store_id is not None and month is not None:
-            try:
-                user = self._actor()
-                days = app_service.get_daily_records(user, store_id, month)
-                d = date.fromisoformat(iso_date)
-                rec = next((r for r in days if r.date == d), None)
-            except Exception:
-                rec = None
-            if rec is not None:
-                for attr, col, kind, _ in SALES_FIELDS + MANPOWER_FIELDS:
-                    v = getattr(rec, col)
-                    if v is not None:
-                        values[attr] = (f"{v / 100:.2f}" if kind == "money"
-                                        else str(v))
-                for code, cents in rec.stock_losses.items():
-                    self.stock_form[code] = f"{cents / 100:.2f}"
+        if rec is not None:
+            for attr, col, kind, _ in SALES_FIELDS + MANPOWER_FIELDS:
+                v = getattr(rec, col)
+                if v is not None:
+                    values[attr] = (f"{v / 100:.2f}" if kind == "money"
+                                    else str(v))
+            for code, cents in rec.stock_losses.items():
+                self.stock_form[code] = f"{cents / 100:.2f}"
         for attr, v in values.items():
             setattr(self, attr, v)
         self.clear_fields = {}
@@ -438,18 +444,12 @@ class DailyState(OpsState):
         if store_id is None or month is None:
             self.form_error = "Select a store and month first."
             return
-        try:
-            d = date.fromisoformat(self.form_date)
-        except ValueError:
-            self.form_error = "Invalid date."
+        error = _entry_date_error(self.form_date, month)
+        if error:
+            self.form_error = error
             self.form_open = True
             return
-        if d.strftime("%Y-%m") != month:
-            self.form_error = (
-                f"{d.isoformat()} is outside the selected month "
-                f"({month_label(month)}).")
-            self.form_open = True
-            return
+        d = date.fromisoformat(self.form_date)
 
         # parse + validate
         fields: dict = {}
@@ -491,7 +491,7 @@ class DailyState(OpsState):
         try:
             user = self._actor()
         except AuthenticationError:
-            self.form_error = "Your session has expired. Please sign in again."
+            self.form_error = SESSION_EXPIRED
             self.form_open = True
             return
         self.saving = True
@@ -503,23 +503,25 @@ class DailyState(OpsState):
             if stock_remove:
                 kwargs["stock_remove"] = stock_remove
             app_service.record_daily(user, store_id, d, **kwargs)
+        except AuthenticationError:
+            self.form_error = SESSION_EXPIRED
+            self.form_open = True
+            return
         except AuthorizationError:
-            self.saving = False
             self.form_error = "Your role cannot modify operational records."
             self.form_open = True
             return
         except ValidationError as exc:
-            self.saving = False
             self.form_error = str(exc)
             self.form_open = True
             return
         except (RepositoryError, StoreNotFoundError) as exc:
-            self.saving = False
             self.form_error = f"Save failed: {exc}"
             self.form_open = True
             return
+        finally:
+            self.saving = False
         # read-after-write: reload from persisted state
-        self.saving = False
         self.save_notice = (
             f"Saved {self.form_day_label}. KPIs recalculated live.")
         yield DailyState.load_daily_data
@@ -529,6 +531,21 @@ class DailyState(OpsState):
 # ---------------------------------------------------------------------------
 # parsing helpers (server-side; never silently blank -> 0)
 # ---------------------------------------------------------------------------
+
+def _entry_date_error(iso_date, month: Optional[str]) -> str:
+    """'' when ``iso_date`` is a real date inside the selected month;
+    otherwise the message to show (the form is not opened)."""
+    try:
+        d = date.fromisoformat(str(iso_date))
+    except ValueError:
+        return "Invalid date — choose a day from the list."
+    if month is None:
+        return "Select a store and month first."
+    if d.strftime("%Y-%m") != month:
+        return (f"{d.isoformat()} is outside the selected month "
+                f"({month_label(month)}).")
+    return ""
+
 
 # Shared parsers live in kpi.py; these thin wrappers keep existing call
 # sites (and imports from other ops_*_state modules) stable.

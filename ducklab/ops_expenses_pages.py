@@ -534,6 +534,15 @@ def expenses_page() -> rx.Component:
                            width="100%", id="exp-notice"),
             ),
             rx.cond(
+                ~ExpensesState.exp_form_open
+                & (ExpensesState.exp_form_error != ""),
+                ds.error_callout(ExpensesState.exp_form_error),
+            ),
+            rx.cond(
+                ExpensesState.report_status == "error",
+                ds.error_callout(ExpensesState.error_message),
+            ),
+            rx.cond(
                 ExpensesState.report_status == "empty",
                 ds.empty_state("No store or month selected",
                                ExpensesState.error_message, icon="store"),

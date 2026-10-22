@@ -62,7 +62,7 @@ class Fixture(unittest.TestCase):
             self.assertEqual(mp[field], "Restricted")
         self.assertNotIn("11,000", str(mp))   # salary total never leaks
         self.assertNotIn("6.82", str(mp))     # ratio never leaks
-        self.assertEqual(mp["turnover_status"], rep.manpower.turnover_status)
+        self.assertEqual(mp["turnover_status"], "Normal")  # 0 of 9 resigned
         # super admin still sees the real values
         out_admin = _serialize_live(rep, user=self.admin)
         self.assertEqual(out_admin["manpower"]["salary"], "RM 11,000.00")

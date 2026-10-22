@@ -10,7 +10,7 @@ stored as NULL; an explicit 0 is stored as 0.
 from __future__ import annotations
 
 import logging
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Optional
 
 import reflex as rx
@@ -23,13 +23,16 @@ from ducklab.auth_service import (
 )
 from ducklab.auth_pages import app_service
 from ducklab.operations_repository import (
-    RepositoryError, StoreNotFoundError,
+    ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import (
-    DuplicateRecordError, ValidationError,
+    DuplicateRecordError, RecordNotFoundError, ValidationError,
 )
+from ducklab.ops_expenses_state import BUDGET_CLEAR_CONFLICT
 from ducklab.ops_stock_state import StockState
-from ducklab.ops_state import OpsState, month_label
+from ducklab.ops_state import (
+    SESSION_EXPIRED, OpsState, auth_message, month_label, parse_client_id,
+)
 
 # Monthly setup field specs: (state attr, config field, kind, label)
 # kind: "money" (RM -> cents) | "pct" (percent -> fraction) | "count"
@@ -215,7 +218,7 @@ class StoresState(StockState):
         try:
             user = self._actor()
         except AuthenticationError:
-            self.error_message = "Your session has expired. Please sign in again."
+            self.error_message = self.stores_error = SESSION_EXPIRED
             self.report_status = "error"
             return
         self.can_manage_stores = authz.can_manage_users(user)
@@ -248,16 +251,22 @@ class StoresState(StockState):
         if store_id is None or month is None:
             return
         try:
-            cfg = app_service.get_month_config(user, store_id, month)
-            found = True
-        except Exception:
-            found = False
-        try:
+            try:
+                cfg = app_service.get_month_config(user, store_id, month)
+            except ConfigNotFoundError:
+                cfg = None
             self.setup_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
-        except Exception:
-            self.setup_finalized = False
-        if found:
+            cats = app_service.get_expense_categories(user, store_id)
+            budgets = app_service.get_expense_budgets(user, store_id, month)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            # never show blank setup fields for an auth failure
+            self._clear_setup()
+            self.can_edit_setup = False
+            self.setup_error = auth_message(exc)
+            return
+        if cfg is not None:
             # Payroll values (salary/overtime/support/ratio target) enter
             # state ONLY when the user may edit setup (can_edit_setup,
             # which is gated on authz.can_manage_config).
@@ -294,30 +303,35 @@ class StoresState(StockState):
                 for name in ("level1", "level2", "level3", "level4")
             ]
         # expense budgets (rows always shown when categories exist)
-        try:
-            cats = app_service.get_expense_categories(user, store_id)
-            budgets = app_service.get_expense_budgets(user, store_id, month)
-            self.budget_rows = [
-                {"id": str(c.id), "name": c.name,
-                 "value": _money_str(budgets.get(c.id)),
-                 "original": _money_str(budgets.get(c.id)),
-                 "clear": ""}
-                for c in cats
-            ]
-        except Exception:
-            self.budget_rows = []
+        self.budget_rows = [
+            {"id": str(c.id), "name": c.name,
+             "value": _money_str(budgets.get(c.id)),
+             "original": _money_str(budgets.get(c.id)),
+             "clear": ""}
+            for c in cats
+        ]
 
     # ------------------------------------------------------------------
     # store form events
     # ------------------------------------------------------------------
     @rx.event
     def open_store_form(self, store_id: str = "") -> None:
+        try:
+            sid = parse_client_id(store_id, "store")
+        except ValidationError as exc:
+            self.stores_error = str(exc)
+            return
+        row = None
+        if sid is not None:
+            row = next((r for r in self.store_rows if r["id"] == str(sid)),
+                       None)
+            if row is None:
+                self.stores_error = "Unknown store — reopen it from the list."
+                return
         self.sf_open = True
         self.sf_error = ""
-        self.sf_editing = store_id
-        if store_id:
-            row = next((r for r in self.store_rows if r["id"] == store_id),
-                       None)
+        self.sf_editing = str(sid) if sid is not None else ""
+        if sid is not None:
             if row:
                 self.sf_code = row["code"]
                 self.sf_name = row["name"]
@@ -341,6 +355,7 @@ class StoresState(StockState):
         self.sf_saving = True
         yield
         try:
+            editing = parse_client_id(self.sf_editing, "store")
             user = self._actor()
             details = {
                 k: (v.strip() or None)
@@ -349,10 +364,9 @@ class StoresState(StockState):
                              ("zone_pic", self.sf_zone_pic),
                              ("branch_manager", self.sf_branch_manager))
             }
-            if self.sf_editing:
+            if editing is not None:
                 app_service.update_store_details(
-                    user, int(self.sf_editing),
-                    name=self.sf_name.strip(), **details)
+                    user, editing, name=self.sf_name.strip(), **details)
             else:
                 if not self.sf_code.strip() or not self.sf_name.strip():
                     raise ValidationError("Store code and name are required")
@@ -363,9 +377,13 @@ class StoresState(StockState):
             self.stores_notice = "Store saved."
         except DuplicateRecordError:
             self.sf_error = f"Store code '{self.sf_code.strip()}' already exists."
+        except (StoreNotFoundError, RecordNotFoundError):
+            self.sf_error = "This store no longer exists."
         except (ValidationError, AuthorizationError, AuthenticationError) as exc:
             self.sf_error = str(exc) if not isinstance(
                 exc, AuthenticationError) else "Session expired — sign in again."
+        except RepositoryError as exc:
+            self.sf_error = f"Save failed: {exc}"
         finally:
             self.sf_saving = False
         yield StoresState.load_page_data()
@@ -373,18 +391,20 @@ class StoresState(StockState):
     @rx.event
     def toggle_store_active(self, store_id: str) -> None:
         try:
+            sid = parse_client_id(store_id, "store", required=True)
             user = self._actor()
-            row = next((r for r in self.store_rows if r["id"] == store_id),
+            row = next((r for r in self.store_rows if r["id"] == str(sid)),
                        None)
             if row is None:
-                return
-            if row["active"] == "1":
-                app_service.set_store_active(user, int(store_id), False)
-            else:
-                app_service.set_store_active(user, int(store_id), True)
+                raise ValidationError("Unknown store — reopen it from the list.")
+            app_service.set_store_active(user, sid, row["active"] != "1")
             self.stores_notice = (
                 f"Store {row['code']} "
                 + ("deactivated." if row["active"] == "1" else "activated."))
+        except ValidationError as exc:
+            self.stores_error = str(exc)
+        except (StoreNotFoundError, RecordNotFoundError):
+            self.stores_error = "This store no longer exists."
         except (AuthorizationError, AuthenticationError) as exc:
             self.stores_error = str(exc) if not isinstance(
                 exc, AuthenticationError) else "Session expired — sign in again."
@@ -395,7 +415,12 @@ class StoresState(StockState):
     # ------------------------------------------------------------------
     @rx.event
     def open_assign(self, store_id: str) -> None:
-        self.assign_store_id = store_id
+        try:
+            sid = parse_client_id(store_id, "store")
+        except ValidationError as exc:
+            self.stores_error = str(exc)
+            return
+        self.assign_store_id = str(sid) if sid is not None else ""
         self.assign_selected = ""
         yield StoresState.load_assign_rows()
 
@@ -407,7 +432,7 @@ class StoresState(StockState):
             return
         try:
             user = self._actor()
-            sid = int(self.assign_store_id)
+            sid = parse_client_id(self.assign_store_id, "store")
             authz.require_store_grantable(user, sid)
             users = app_service.list_users(user)
             self._assign_all = [
@@ -428,6 +453,8 @@ class StoresState(StockState):
                 for u in self._assign_all
                 if u["is_active"] and sid not in u["stores"]
             ]
+        except ValidationError as exc:
+            self.stores_error = str(exc)
         except (AuthorizationError, AuthenticationError) as exc:
             self.stores_error = str(exc) if not isinstance(
                 exc, AuthenticationError) else "Session expired — sign in again."
@@ -440,7 +467,8 @@ class StoresState(StockState):
     def assign_user(self) -> None:
         try:
             user = self._actor()
-            sid = int(self.assign_store_id)
+            sid = parse_client_id(self.assign_store_id, "store",
+                                  required=True)
             target = next((u for u in self._assign_all
                            if f"{u['email']} — {u['name']} ({u['roles']})"
                            == self.assign_selected), None)
@@ -450,6 +478,8 @@ class StoresState(StockState):
             app_service.assign_store(user, target["id"], sid)
             self.stores_notice = f"Assigned {target['email']}."
             self.assign_selected = ""
+        except ValidationError as exc:
+            self.stores_error = str(exc)
         except (AuthorizationError, AuthenticationError) as exc:
             self.stores_error = str(exc) if not isinstance(
                 exc, AuthenticationError) else "Session expired — sign in again."
@@ -459,9 +489,13 @@ class StoresState(StockState):
     def unassign_user(self, user_id: str) -> None:
         try:
             user = self._actor()
-            sid = int(self.assign_store_id)
-            app_service.revoke_store(user, int(user_id), sid)
+            sid = parse_client_id(self.assign_store_id, "store",
+                                  required=True)
+            uid = parse_client_id(user_id, "user", required=True)
+            app_service.revoke_store(user, uid, sid)
             self.stores_notice = "User unassigned."
+        except ValidationError as exc:
+            self.stores_error = str(exc)
         except (AuthorizationError, AuthenticationError) as exc:
             self.stores_error = str(exc) if not isinstance(
                 exc, AuthenticationError) else "Session expired — sign in again."
@@ -497,16 +531,12 @@ class StoresState(StockState):
                 elif kind == "count":
                     out[field] = kpi.parse_count(raw, label)
                 elif kind == "factor":
-                    d = Decimal(raw)
-                    if not d.is_finite() or not (0 <= d <= 2):
-                        raise ValueError("range")
-                    out[field] = float(d)
-                else:  # pct -> fraction
-                    d = Decimal(raw)
-                    if not d.is_finite() or d < 0:
-                        raise ValueError("range")
-                    out[field] = float(d / 100)
-            except (InvalidOperation, ValueError):
+                    out[field] = float(kpi.parse_decimal(
+                        raw, label, Decimal(0), Decimal(2)))
+                else:  # pct -> fraction (repository range 0..10 = 1000%)
+                    out[field] = float(kpi.parse_decimal(
+                        raw, label, Decimal(0), Decimal(1000)) / 100)
+            except ValueError:
                 errors.append(
                     f"{label}: enter a non-negative number (or leave blank)")
         return out, errors
@@ -670,15 +700,22 @@ def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
 
     updates = {category_id: cents | None} only for rows the user changed.
     A ticked "Clear saved value" writes NULL ("No budget"), never 0.
-    Untouched rows send nothing. Blanking a saved budget WITHOUT ticking
-    the checkbox is rejected (a missing budget is distinct from RM 0)."""
+    Ticking it AND typing a different amount is rejected (nothing saved
+    for that row). Untouched rows send nothing. Blanking a saved budget
+    WITHOUT ticking the checkbox is rejected (a missing budget is distinct
+    from RM 0)."""
     updates: dict[int, Optional[int]] = {}
     errors: list[str] = []
     for row in rows:
-        if row.get("clear") and row.get("original", ""):
-            updates[int(row["id"])] = None
-            continue
         raw = row["value"].strip()
+        if row.get("clear"):
+            if raw and raw != row.get("original", ""):
+                errors.append(f"Budget for {row['name']}: "
+                              f"{BUDGET_CLEAR_CONFLICT}")
+                continue
+            if row.get("original", ""):
+                updates[int(row["id"])] = None
+                continue
         if raw == row.get("original", ""):
             continue
         if raw == "":

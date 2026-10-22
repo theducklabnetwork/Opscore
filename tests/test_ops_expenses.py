@@ -291,17 +291,27 @@ class TestCrossMonthAccounting(ExpenseFixture):
         self.assertEqual(oct_.expenses.paid_cents, rm(100))
         self.assertEqual(oct_.expenses.incurred_cents, 0)
 
-    def test_open_pending_counts_regardless_of_month(self):
+    def test_open_pending_cut_off_at_month_end(self):
+        # Pending RM 40 incurred 15 Sep: counts for Sep and later months
+        # (still open), never for a month that ended before it was incurred.
         self.app.record_expense(
             self.admin, self.sa, incurred_date=date(2026, 9, 15),
             category_id=self.cat_a, description="pending", amount_cents=rm(40),
             status="Pending", recorded_by="M")
+        for month in ("2026-08", "2026-09", "2026-10"):
+            self.app.configure_month(self.admin, self.sa, month)
+        aug = self.app.preview_month(self.admin, self.sa, "2026-08",
+                                     as_of=date(2026, 8, 31))
         sep = self.app.preview_month(self.admin, self.sa, "2026-09",
                                      as_of=date(2026, 9, 30))
         oct_ = self.app.preview_month(self.admin, self.sa, "2026-10",
                                       as_of=date(2026, 10, 31))
-        self.assertEqual(sep.expenses.open_cents, rm(40))
-        self.assertEqual(oct_.expenses.open_cents, rm(40))
+        self.assertEqual(aug.expenses.open_cents, 0)
+        self.assertEqual(aug.expenses.pending_count, 0)
+        self.assertEqual(sep.expenses.open_cents, 4000)
+        self.assertEqual(sep.expenses.pending_count, 1)
+        self.assertEqual(oct_.expenses.open_cents, 4000)
+        self.assertEqual(oct_.expenses.pending_count, 1)
 
     def test_kpi_recalculation_after_expense_write(self):
         r1 = self.app.preview_month(self.admin, self.sa, "2026-10",

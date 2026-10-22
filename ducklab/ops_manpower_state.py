@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import calendar
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Optional
 
 import reflex as rx
@@ -36,19 +36,21 @@ from ducklab.operations_repository import (
 from ducklab.operations_write_repository import ValidationError
 from ducklab.ops_daily_state import _parse_count, _parse_money
 from ducklab.ops_expenses_state import ExpensesState
-from ducklab.ops_state import OpsState, month_label
+from ducklab.ops_state import (
+    ACCESS_DENIED, SESSION_EXPIRED, OpsState, auth_message, month_label,
+)
 
 # All status colors: ds.status_color (design.py shared map)
 
 
-def _parse_decimal(raw: str, label: str, lo: Decimal, hi: Decimal) -> Decimal:
-    try:
-        d = Decimal(raw.strip())
-    except (InvalidOperation, ValueError):
-        raise ValueError(f"{label} must be a number")
-    if not (lo <= d <= hi):
-        raise ValueError(f"{label} must be between {lo} and {hi}")
-    return d
+# Shared kpi parser: rejects "NaN"/"inf" (is_finite) like Monthly Setup.
+_parse_decimal = kpi.parse_decimal
+
+PAYROLL_LABELS = {
+    "p_salary": "Basic salary + allowances",
+    "p_overtime": "Overtime",
+    "p_support": "Support team cost",
+}
 
 
 def _pct_str(value) -> str:
@@ -197,20 +199,18 @@ class ManpowerState(ExpensesState):
         try:
             user = self._actor()
         except AuthenticationError:
-            self.error_message = "Your session has expired. Please sign in again."
+            self.error_message = self.mp_error = SESSION_EXPIRED
             self.report_status = "error"
             return
-        self.can_view_payroll = authz.can_manage_config(user)
-        self.can_manage_manpower = authz.can_manage_config(user)
-        try:
-            self.mp_finalized = bool(
-                app_service.list_report_versions(user, store_id, month))
-        except Exception:
-            self.mp_finalized = False
-
         # Month configuration is required for manpower monitoring.
         try:
+            finalized = bool(
+                app_service.list_report_versions(user, store_id, month))
             cfg = app_service.get_month_config(user, store_id, month)
+        except AuthenticationError:
+            self.mp_config_exists = False
+            self.mp_error = SESSION_EXPIRED
+            return
         except ConfigNotFoundError:
             self.mp_config_exists = False
             self.mp_error = (
@@ -221,8 +221,11 @@ class ManpowerState(ExpensesState):
             return
         except (AuthorizationError, StoreNotFoundError):
             self.mp_config_exists = False
-            self.mp_error = "You do not have access to this store."
+            self.mp_error = ACCESS_DENIED
             return
+        self.can_view_payroll = authz.can_manage_config(user)
+        self.can_manage_manpower = authz.can_manage_config(user)
+        self.mp_finalized = finalized
         self.pt_factor_label = (
             f"{float(cfg.part_timer_factor):g}"
             if cfg.part_timer_factor is not None else "not configured")
@@ -230,7 +233,12 @@ class ManpowerState(ExpensesState):
         # Live assembled month: every figure from the verified KPI engine.
         try:
             rep = app_service.preview_month(user, store_id, month)
-        except (AuthorizationError, StoreNotFoundError, RepositoryError) as exc:
+            days = app_service.get_daily_records(user, store_id, month)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.mp_error = auth_message(exc)
+            return
+        except RepositoryError as exc:
             self.mp_error = str(exc)
             return
         m = rep.manpower
@@ -247,13 +255,18 @@ class ManpowerState(ExpensesState):
             "status": m.headcount_status,
             "status_color": ds.status_color(m.headcount_status),
         }
+        factor_missing = m.pt_factor_missing
         self.eff_kpis = {
-            "avg_effective": ds.fmt_num(
-                float(m.average_effective_staff)
-                if m.average_effective_staff is not None else None),
-            "sales_per_staff": ds.fmt_rm(
-                int(m.sales_per_staff)
-                if m.sales_per_staff is not None else None),
+            "avg_effective": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                              else ds.fmt_num(
+                                  float(m.average_effective_staff)
+                                  if m.average_effective_staff is not None
+                                  else None)),
+            "sales_per_staff": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                                else ds.fmt_rm(
+                                    int(m.sales_per_staff)
+                                    if m.sales_per_staff is not None
+                                    else None)),
             "turnover": ds.fmt_pct(m.turnover_pct),
             "turnover_status": m.turnover_status,
             "turnover_color": ds.status_color(m.turnover_status),
@@ -264,15 +277,11 @@ class ManpowerState(ExpensesState):
         if self.can_view_payroll:
             budget = m.salary_budget_cents
             total = m.total_salary_cents
-            variance = None
-            if budget is not None and total is not None:
-                variance = int(budget) - total
-            ratio_used_pct = None
-            if (m.salary_ratio_incl_support is not None
-                    and cfg.salary_ratio_target):
-                ratio_used_pct = min(
-                    float(m.salary_ratio_incl_support
-                          / cfg.salary_ratio_target) * 100, 100.0)
+            variance = kpi.salary_budget_variance_cents(budget, total)
+            used = kpi.ratio_of_target(m.salary_ratio_incl_support,
+                                       cfg.salary_ratio_target)
+            ratio_used_pct = (min(float(used) * 100, 100.0)
+                              if used is not None else None)
             self.pay_kpis = {
                 "basic": ds.fmt_rm(cfg.salary_basic_allowance_cents),
                 "overtime": ds.fmt_rm(cfg.overtime_cents),
@@ -281,8 +290,7 @@ class ManpowerState(ExpensesState):
                 "ratio": ds.fmt_pct(m.salary_ratio_store),
                 "ratio_support": ds.fmt_pct(m.salary_ratio_incl_support),
                 "target": ds.fmt_pct(cfg.salary_ratio_target),
-                "budget": ds.fmt_rm0(int(budget)
-                                     if budget is not None else None),
+                "budget": ds.fmt_rm0(budget),
                 "variance": ds.fmt_rm0(variance),
                 "status": m.salary_ratio_status,
                 "status_color": ds.status_color(m.salary_ratio_status),
@@ -308,10 +316,6 @@ class ManpowerState(ExpensesState):
         }
 
         # --- daily staffing rows + leave totals --------------------------
-        try:
-            days = app_service.get_daily_records(user, store_id, month)
-        except (AuthorizationError, StoreNotFoundError):
-            days = []
         by_date = {d.date: d for d in days}
         y, mo = int(month[:4]), int(month[5:7])
         n_days = calendar.monthrange(y, mo)[1]
@@ -347,6 +351,7 @@ class ManpowerState(ExpensesState):
                     "status": "unreported",
                     "status_color": ds.status_color("unreported")}
         eff = kpi.effective_staff(rec.ft_working, rec.pt_working, factor)
+        factor_missing = factor is None and bool(rec.pt_working)
         leave = sum(v or 0 for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
             rec.leave_unpaid))
@@ -364,13 +369,16 @@ class ManpowerState(ExpensesState):
             **base,
             "ft": ds.fmt_num(rec.ft_working),
             "pt": ds.fmt_num(rec.pt_working),
-            "effective": (f"{float(eff):,.2f}" if eff is not None else "—"),
+            "effective": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                          else f"{float(eff):,.2f}" if eff is not None
+                          else "—"),
             "hires": ds.fmt_num(rec.new_hires_ft),
             "resigned": ds.fmt_num(rec.resigned_ft),
             "leave": (ds.fmt_num(leave) if leave_reported else "—"),
             "sales": ds.fmt_rm(rec.sales_cents),
-            "sales_per_staff": (f"RM {sps / 100:,.2f}"
-                                if sps is not None else "—"),
+            "sales_per_staff": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                                else f"RM {sps / 100:,.2f}" if sps is not None
+                                else "—"),
             "status": status,
             "status_color": ds.status_color(status),
         }
@@ -403,8 +411,14 @@ class ManpowerState(ExpensesState):
                 can_payroll = authz.can_manage_config(user)
                 cfg = app_service.get_month_config(user, store_id, month)
                 values.update(_config_form_values(cfg, can_payroll))
-            except Exception:
-                pass
+            except ConfigNotFoundError:
+                pass  # save_config explains that setup must come first
+            except (AuthenticationError, AuthorizationError,
+                    StoreNotFoundError) as exc:
+                # never open an empty dialog for an auth failure
+                self.cfg_open = False
+                self.cfg_error = auth_message(exc)
+                return
         for a, v in values.items():
             setattr(self, a, v)
         self.cfg_original = dict(values)
@@ -456,7 +470,7 @@ class ManpowerState(ExpensesState):
         try:
             user = self._actor()
         except AuthenticationError:
-            self.cfg_error = "Your session has expired. Please sign in again."
+            self.cfg_error = SESSION_EXPIRED
             return
         # Server-side: payroll/config writes require can_manage_config,
         # even when this event is invoked directly over the socket.
@@ -474,8 +488,11 @@ class ManpowerState(ExpensesState):
                 "Month setup (sales targets etc.) must be completed first; "
                 "manpower editing never creates hidden defaults.")
             return
-        except AuthorizationError:
-            self.cfg_error = "You do not have access to this store."
+        except (AuthorizationError, StoreNotFoundError):
+            self.cfg_error = ACCESS_DENIED
+            return
+        except AuthenticationError:
+            self.cfg_error = SESSION_EXPIRED
             return
         if not fields:
             self.cfg_open = False
@@ -486,21 +503,22 @@ class ManpowerState(ExpensesState):
         try:
             result = app_service.configure_month(
                 user, store_id, month, **fields)
+        except AuthenticationError:
+            self.cfg_error = SESSION_EXPIRED
+            return
         except AuthorizationError:
-            self.cfg_saving = False
             self.cfg_error = (
                 "Only super admins and administrators can manage monthly "
                 "configuration and payroll.")
             return
         except ValidationError as exc:
-            self.cfg_saving = False
             self.cfg_error = str(exc)
             return
         except (RepositoryError, StoreNotFoundError) as exc:
-            self.cfg_saving = False
             self.cfg_error = f"Save failed: {exc}"
             return
-        self.cfg_saving = False
+        finally:
+            self.cfg_saving = False
         self.cfg_open = False
         note = ("Configuration saved and persisted. KPIs, salary ratios and "
                 "live Monthly Reports recalculated.")
@@ -566,5 +584,8 @@ class ManpowerState(ExpensesState):
             raw = getattr(self, attr)
             if raw == orig.get(attr, ""):
                 continue
-            fields[col] = _parse_money(raw) if raw.strip() else None
+            cents = _parse_money(raw) if raw.strip() else None
+            if cents is not None and cents < 0:
+                raise ValueError(f"{PAYROLL_LABELS[attr]} cannot be negative")
+            fields[col] = cents
         return fields

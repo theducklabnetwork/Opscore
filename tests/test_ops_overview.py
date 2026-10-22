@@ -12,7 +12,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from ducklab import design as ds
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
 from ducklab.ops_overview_state import compute_overview
@@ -93,29 +92,25 @@ class OverviewFixture(unittest.TestCase):
 
     # 1 ------------------------------------------------------------------
     def test_values_equal_assemble_month(self):
+        # Hand-computed: 20 days x RM 100 = RM 2,000 MTD; one paid bill
+        # RM 150; loss 20 x RM 10 DMO = RM 200 -> 200 / 2,000 = 10.0%.
         ov = self.overview()
-        rep = self.app.preview_month(self.admin, self.sa, self.month,
-                                     as_of=TODAY)
-        self.assertEqual(ov["cc"]["sales_mtd"],
-                         ds.fmt_rm(rep.sales.sales_mtd_cents))
-        self.assertEqual(ov["cc"]["paid"], ds.fmt_rm(rep.expenses.paid_cents))
-        self.assertEqual(ov["pill_stock"]["title"],
-                         ds.fmt_pct(rep.stock.loss_pct_of_sales))
-        self.assertEqual(ov["cc"]["days"],
-                         f"{rep.sales.days_entered} / "
-                         f"{rep.sales.days_in_month}")
+        self.assertEqual(ov["cc"]["sales_mtd"], "RM 2,000.00")
+        self.assertEqual(ov["cc"]["paid"], "RM 150.00")
+        self.assertEqual(ov["pill_stock"]["title"], "10.0%")
+        self.assertEqual(ov["cc"]["days"], "20 / 31")
         self.assertEqual(ov["cc"]["actions_overdue"], "1")
 
     # 2 ------------------------------------------------------------------
     def test_statuses_passed_through_unchanged(self):
+        # projection RM 2,000 / 20 x 31 = RM 3,100 < Level 1 RM 200,000;
+        # loss 10.0% > 1.5% target; turnover 5 / 9 = 55.6% > 5%.
         ov = self.overview()
-        rep = self.app.preview_month(self.admin, self.sa, self.month,
-                                     as_of=TODAY)
-        self.assertIn(rep.sales.status_by_level["level1"],
-                      ov["pill_sales"]["status"])  # "Projected:" prefix ok
-        self.assertEqual(ov["pill_stock"]["status"], rep.stock.status)
-        self.assertIn(rep.manpower.turnover_status,
-                      ov["pill_manpower"]["context"])
+        self.assertEqual(ov["pill_sales"]["status"],
+                         "Projected: Below target")
+        self.assertEqual(ov["pill_stock"]["status"], "Over target")
+        self.assertEqual(ov["pill_manpower"]["context"],
+                         "Target 6.8% · turnover 55.6% (HIGH TURNOVER)")
 
     # 3 ------------------------------------------------------------------
     def test_payroll_hidden_without_permission(self):

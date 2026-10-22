@@ -144,7 +144,7 @@ def main() -> int:
         page.wait_for_timeout(2500)
         status = page.locator("#stock-status").inner_text()
         check(f"stock page shows target status (got '{status}')",
-              status in ("Within Target", "Above Target"))
+              status in ("Within target", "Over target"))
         page.screenshot(path=str(OUT / "stock-target-status.png"))
         print("  -> stock-target-status.png")
 

@@ -77,6 +77,29 @@ def _check_budget_cents(category_id: int, cents) -> None:
             f"Budget for category {category_id} cannot be negative")
 
 
+# Config fields that hold money (cents) or headcounts: never negative.
+_NON_NEGATIVE_CONFIG = (
+    "min_rtm_target_cents", "level1_base_cents", "sales_last_year_cents",
+    "sales_last_month_cents", "salary_basic_allowance_cents",
+    "overtime_cents", "support_team_cost_cents", "budget_headcount",
+    "opening_headcount_ft",
+)
+
+
+def _check_config_values(fields: dict) -> None:
+    """Range checks shared by both config writers (Manpower + Setup)."""
+    for name in _NON_NEGATIVE_CONFIG:
+        v = fields.get(name)
+        if v is not None and v < 0:
+            raise ValidationError(f"{name} cannot be negative")
+    for pct in ("level2_pct", "level3_pct", "level4_pct",
+                "salary_ratio_target", "turnover_threshold",
+                "stock_loss_target", "part_timer_factor"):
+        v = fields.get(pct)
+        if v is not None and not (0 <= float(v) <= 10):
+            raise ValidationError(f"{pct} out of range: {v}")
+
+
 def _iso(d: Optional[date]) -> Optional[str]:
     return d.isoformat() if d is not None else None
 
@@ -184,12 +207,7 @@ class OperationsWriteRepository:
         bad = set(fields) - set(self._CONFIG_FIELDS)
         if bad:
             raise ValidationError(f"Unknown config fields: {sorted(bad)}")
-        for pct in ("level2_pct", "level3_pct", "level4_pct",
-                    "salary_ratio_target", "turnover_threshold",
-                    "stock_loss_target", "part_timer_factor"):
-            v = fields.get(pct)
-            if v is not None and not (0 <= float(v) <= 10):
-                raise ValidationError(f"{pct} out of range: {v}")
+        _check_config_values(fields)
         conn = self._connect()
         try:
             self._require_store(conn, store_id)
@@ -298,12 +316,7 @@ class OperationsWriteRepository:
         bad = set(fields) - set(self._CONFIG_FIELDS)
         if bad:
             raise ValidationError(f"Unknown config fields: {sorted(bad)}")
-        for pct in ("level2_pct", "level3_pct", "level4_pct",
-                    "salary_ratio_target", "turnover_threshold",
-                    "stock_loss_target", "part_timer_factor"):
-            v = fields.get(pct)
-            if v is not None and not (0 <= float(v) <= 10):
-                raise ValidationError(f"{pct} out of range: {v}")
+        _check_config_values(fields)
         for cat_id, cents in budgets.items():
             _check_budget_cents(cat_id, cents)
         conn = self._connect()

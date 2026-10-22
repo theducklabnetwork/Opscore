@@ -342,7 +342,10 @@ class ClearBudgetTests(Fixture):
     def test_budget_save_value(self):
         from ducklab.ops_expenses_state import _budget_save_value
         self.assertIsNone(_budget_save_value("", True))
-        self.assertIsNone(_budget_save_value("3200.00", True))
+        with self.assertRaises(ValueError) as clash:
+            _budget_save_value("3200.00", True)
+        self.assertEqual(str(clash.exception),
+                         "Untick 'Clear saved value' to set an amount")
         self.assertEqual(_budget_save_value("3200.00", False), 320000)
         with self.assertRaises(ValueError) as ctx:
             _budget_save_value("  ", False)

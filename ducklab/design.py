@@ -167,9 +167,10 @@ STATUS_COLOR: dict[str, str] = {
     "Done": "green",
     # headcount variance (Summary!D51/E51)
     "Vacancy": "amber", "On budget": "green",
-    # stock page (display strings)
-    "Within Target": "green", "Above Target": "red", "No Target": "gray",
-    "Awaiting Data": "gray", "No Sales Recorded": "amber",
+    # stock (kpi.stock_status_label pre-status states)
+    "No sales recorded": "amber",
+    # manpower: part-timers worked without a configured factor
+    "Factor not set": "amber",
     # day-row display statuses
     "complete": "green", "partial": "amber", "unreported": "gray",
     "Not reported": "gray", "Zero": "green", "Loss": "red",
@@ -204,6 +205,24 @@ def projection_style(state: str, status: str) -> tuple[str, str, str]:
     if status in ("Awaiting data", "No target"):
         return status, "gray", tag
     return f"Projected: {status}", "amber", tag
+
+
+def projection_label(state: str, label: str) -> str:
+    """Card label for a figure derived from the month-end projection:
+    unchanged when the month is complete, else marked projected / early
+    estimate (same rule as projection_style)."""
+    if state == "actual":
+        return label
+    if state == "early_estimate":
+        return f"{label} (early estimate)"
+    return f"{label} (projected)"
+
+
+def pt_factor_label(factor) -> str:
+    """Effective-staff formula with the configured part-timer factor."""
+    if factor is None:
+        return "Factor not set"
+    return f"FT + {float(factor):g} × PT"
 
 
 EARLY_ESTIMATE_TIP = ("Based on only {n} of {m} days; projections "

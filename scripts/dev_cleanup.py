@@ -4,7 +4,8 @@
   scripts/dev_cleanup.py            # dry run: list what would be removed
   scripts/dev_cleanup.py --apply    # delete, in ONE transaction
 
-Targets ONLY <checkout>/.devdata/dev.db (refuses any other path).
+Targets ONLY <checkout>/.devdata/dev.db (refuses any other path, and
+refuses a dev.db that is a symlink).
 
 Removes:
   - every store whose code is not in KEEP_STORE_CODES (Debug*, "Task Seven
@@ -52,7 +53,10 @@ USER_TABLES = (
 
 
 def resolve_target(path) -> Path:
-    """Only the checkout's dev DB is accepted."""
+    """Only the checkout's dev DB is accepted — never through a symlink
+    (resolve() would follow it to another database)."""
+    if DEV_DB.is_symlink() or Path(path).is_symlink():
+        raise ValueError(f"Refusing {DEV_DB}: dev.db is a symlink")
     p = Path(path).resolve()
     if p != DEV_DB.resolve():
         raise ValueError(f"Refusing {p}: dev_cleanup only targets {DEV_DB}")

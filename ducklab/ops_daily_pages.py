@@ -410,6 +410,16 @@ def daily_page() -> rx.Component:
                            color_scheme="green", variant="soft",
                            width="100%", id="save-notice"),
             ),
+            # errors raised while the entry dialog is closed (bad date,
+            # session/access) and data-load failures
+            rx.cond(
+                ~DailyState.form_open & (DailyState.form_error != ""),
+                ds.error_callout(DailyState.form_error),
+            ),
+            rx.cond(
+                DailyState.report_status == "error",
+                ds.error_callout(DailyState.error_message),
+            ),
             rx.cond(
                 DailyState.report_status == "empty",
                 ds.empty_state("No store or month selected",

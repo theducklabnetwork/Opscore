@@ -162,6 +162,11 @@ class OverviewState(ActionsState):
         self.loaded = True
 
 
+def _bar(fraction) -> float:
+    """Progress-bar width (0..1) for an engine fraction; 0 when None."""
+    return min(float(fraction), 1.0) if fraction is not None else 0.0
+
+
 def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     """Pure overview computation (testable without a Reflex runtime).
 
@@ -200,9 +205,6 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     l1 = s.targets.get("level1")
     out = {}
 
-    def proj_ach_of(cents, target):
-        return kpi.achievement(cents, target) if cents is not None else None
-
     needs_review = sum(v for k, v in e.validation_counts.items()
                        if k != "OK")
     if entered == 0:
@@ -213,11 +215,15 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         completion = "In progress"
     # Sales hero: MTD, progress vs Level 1 with projected marker; the
     # status chip is prefixed "Projected:" while the month is incomplete.
-    proj_cents = (int(s.month_end_sales_cents)
-                  if s.month_end_sales_cents is not None else None)
+    # Exact engine values (no int() truncation): projection, MTD and
+    # projected achievement come straight from assemble_month.
+    proj_cents = s.month_end_sales_cents
+    proj_ach = s.achievement_by_level.get("level1")
     sales_reported = entered > 0
-    mtd_pct = float(s.sales_mtd_cents / l1) if l1 and sales_reported else 0.0
-    proj_pct = float(proj_cents / l1) if l1 and proj_cents else 0.0
+    mtd_pct = (float(s.mtd_achievement_l1)
+               if sales_reported and s.mtd_achievement_l1 is not None
+               else 0.0)
+    proj_pct = float(proj_ach) if proj_ach is not None else 0.0
     over = proj_pct > 1.0
     # projected statuses are not results: neutral (amber) until complete;
     # an "Early estimate" tag appears when fewer than 7 days are entered.
@@ -243,7 +249,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "status_label": "", "status_tip": "", "tooltip": "",
         "context": ("Projected "
                     + ops_charts.fmt_money_compact(proj_cents)
-                    + " · " + ops_charts.fmt_pct1(proj_ach_of(proj_cents, l1))
+                    + " · " + ops_charts.fmt_pct1(proj_ach)
                     + " of Level 1"),
     }
     exp_status = e.total_expenses_status
@@ -257,8 +263,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "reported": "1" if exp_reported else "",
         "value": ops_charts.fmt_money_compact(e.paid_cents),
         "title": ds.fmt_rm(e.paid_cents),
-        "progress": (min(float(e.paid_cents / e.total_budget_cents), 1.0)
-                     if e.total_budget_cents else 0.0),
+        "progress": _bar(kpi.budget_utilization(e.paid_cents,
+                                                e.total_budget_cents)),
         "marker": 0.0,
         "progress_color": ("red" if exp_status == kpi.TOTAL_OVER_BUDGET
                            else "green"),
@@ -283,8 +289,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
             "reported": "1" if ratio is not None else "",
             "value": ops_charts.fmt_pct1(ratio),
             "title": ds.fmt_pct(ratio),
-            "progress": (min(float(ratio / target), 1.0)
-                         if ratio is not None and target else 0.0),
+            "progress": _bar(kpi.ratio_of_target(ratio, target)),
             "marker": 0.0,
             "progress_color": ("red" if m.salary_ratio_status
                                == kpi.SALARY_FAILURE else "green"),
@@ -314,19 +319,20 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                         + " (" + m.turnover_status + ")"),
         }
     stock_reported = st.total_loss_cents != 0 or sales_reported
+    stock_status = kpi.stock_status_label(
+        st.total_loss_cents, s.sales_mtd_cents, cfg.stock_loss_target,
+        entered)
     out["pill_stock"] = {
         "reported": "1" if stock_reported else "",
         "value": ops_charts.fmt_pct1(st.loss_pct_of_sales),
         "title": ds.fmt_pct(st.loss_pct_of_sales),
-        "progress": (min(float(st.loss_pct_of_sales / cfg.stock_loss_target),
-                         1.0)
-                     if st.loss_pct_of_sales is not None
-                     and cfg.stock_loss_target else 0.0),
+        "progress": _bar(kpi.ratio_of_target(st.loss_pct_of_sales,
+                                             cfg.stock_loss_target)),
         "marker": 0.0,
         "progress_color": ("red" if st.status == kpi.STOCK_OVER_TARGET
                            else "green"),
-        "status": st.status,
-        "status_color": ds.status_color(st.status),
+        "status": stock_status,
+        "status_color": ds.status_color(stock_status),
         "early_tag": "", "early_tip": "",
         "status_label": "", "status_tip": "", "tooltip": "",
         "context": ("Target " + ops_charts.fmt_pct1(cfg.stock_loss_target)
@@ -347,10 +353,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["targets"] = [
         {"label": f"Level {i}",
          "target": ops_charts.fmt_money_compact(t),
-         "pct": ops_charts.fmt_pct1(
-             kpi.achievement(proj_cents, t)),
-         "progress": (min(float(kpi.achievement(proj_cents, t)), 1.0)
-                      if kpi.achievement(proj_cents, t) is not None else 0.0),
+         "pct": ops_charts.fmt_pct1(s.achievement_by_level.get(name)),
+         "progress": _bar(s.achievement_by_level.get(name)),
          "status": s.status_by_level.get(name, "Awaiting data"),
          "status_color": (ds.status_color(s.status_by_level.get(name, ""))
                           if complete else
@@ -362,10 +366,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         for t in [s.targets.get(name)]
     ]
     # run-rate / needed per remaining day live in the targets panel
-    rr = int(s.required_daily_run_rate) \
-        if s.required_daily_run_rate is not None else None
-    nd = int(s.needed_per_remaining_day) \
-        if s.needed_per_remaining_day is not None else None
+    rr = s.required_daily_run_rate
+    nd = s.needed_per_remaining_day
     out["targets_extra"] = [
         {"label": "Required daily run-rate",
          "value": ops_charts.fmt_money_compact(rr),
@@ -380,7 +382,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     actions = app_service.get_actions(user, store_id)
     visible = kpi.actions_in_month_scope(actions, month)
     acounts = kpi.action_counts([a.input for a in visible], as_of=as_of)
-    avg = int(s.average_per_day) if s.average_per_day is not None else None
+    avg = s.average_per_day
     glance_pairs = [
         ("Average per reported day",
          ops_charts.fmt_money_compact(avg), ds.fmt_rm0(avg), "/ops/sales"),
@@ -406,7 +408,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["cc"] = {  # kept for backward-compat with existing tests
         "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
         "achievement": ds.fmt_pct(s.mtd_achievement_l1),
-        "proj_achievement": ds.fmt_pct(proj_ach_of(proj_cents, l1)),
+        "proj_achievement": ds.fmt_pct(proj_ach),
         "paid": ds.fmt_rm(e.paid_cents),
         "days": f"{entered} / {dim}",
         "completion": completion,
@@ -457,23 +459,11 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
 
     # --- pace chart (same computation as /ops/sales) --------------------
     days = app_service.get_daily_records(user, store_id, month)
-    budget = kpi.required_daily_run_rate(l1, dim)
-    entered_map = {d.date.day: d.sales_cents for d in days
-                   if d.sales_cents is not None}
-    last_reported = max(entered_map, default=0)
-    cum, cumulative = 0, {}
-    for day in sorted(entered_map):
-        cum += entered_map[day]
-        cumulative[day] = cum
-    p_days, p_actual, p_budget, running = [], [], [], 0
-    for day in range(1, dim + 1):
-        if day in cumulative:
-            running = cumulative[day]
-        p_days.append(day)
-        p_budget.append(int(budget * day) if budget is not None else None)
-        p_actual.append(running if day <= last_reported and last_reported
-                        else None)
-    out["pace_has_data"] = last_reported > 0
+    pace = kpi.pace_series(days, dim, l1)
+    p_days = [p["day"] for p in pace]
+    p_actual = [p["actual"] for p in pace]
+    p_budget = [p["budget"] for p in pace]
+    out["pace_has_data"] = any(v is not None for v in p_actual)
     out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=True)
     out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=False)
 
