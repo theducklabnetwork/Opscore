@@ -64,6 +64,10 @@ def choose(page, trigger, option_text, wait_selector, timeout=25000):
 def open_expenses(page) -> None:
     page.goto(f"{BASE}/ops/expenses")
     page.wait_for_selector("#expense-register", timeout=20000)
+    # the section shells render before the chained data load; wait for
+    # register rows and a money KPI so callers assert on loaded data
+    page.wait_for_selector("#expense-register tbody tr", timeout=20000)
+    page.wait_for_selector("#expense-kpis >> text=RM", timeout=20000)
 
 
 def select_option(page, select_id, option_text):

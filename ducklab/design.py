@@ -45,18 +45,28 @@ def status_badge(text: str, **kw) -> rx.Component:
 
 
 # --- Formatting helpers (pure Python; never float money) -------------------
+# One negative money format everywhere: the minus sign (U+2212) goes before
+# "RM" — "−RM 9,898" — never "RM -9,898".
+MINUS = "\u2212"
+
+
+def _sign(cents) -> str:
+    return MINUS if cents < 0 else ""
+
+
 def fmt_rm(cents, dash="—") -> str:
-    """Integer cents -> 'RM 350,819.00'. None stays a dash (missing != 0)."""
+    """Integer cents -> 'RM 350,819.00' / '−RM 85.00'. None stays a dash
+    (missing != 0)."""
     if cents is None:
         return dash
-    return f"RM {cents / 100:,.2f}"
+    return f"{_sign(cents)}RM {abs(cents) / 100:,.2f}"
 
 
 def fmt_rm0(cents, dash="—") -> str:
-    """Whole-ringgit display for large figures: 'RM 350,819'."""
+    """Whole-ringgit display for large figures: 'RM 350,819' / '−RM 9,898'."""
     if cents is None:
         return dash
-    return f"RM {round(cents / 100):,}"
+    return f"{_sign(cents)}RM {round(abs(cents) / 100):,}"
 
 
 def fmt_rm_compact(cents, dash="—", whole_below: bool = False) -> str:
@@ -66,9 +76,8 @@ def fmt_rm_compact(cents, dash="—", whole_below: bool = False) -> str:
     (tooltip)."""
     if cents is None:
         return dash
-    rm = cents / 100
-    sign = "-" if rm < 0 else ""
-    a = abs(rm)
+    sign = _sign(cents)
+    a = abs(cents / 100)
     if a >= 1_000_000:
         return f"{sign}RM {a / 1_000_000:.1f}M"
     if a >= 10_000:
@@ -181,6 +190,9 @@ STATUS_COLOR: dict[str, str] = {
     "Disputed": "red", "Unverified": "amber", "Verified": "green",
     # expense transaction status
     "Paid": "green", "Pending": "amber", "Cancelled": "gray",
+    # stock-loss code treatment (neutral / semantic, never the accent;
+    # matches the composition chart: offsets green, info-only muted)
+    "Included": "orange", "Offset": "green", "Info only": "gray",
     # actions
     "Open": "blue", "In progress": "amber", "Blocked": "red",
     "Done": "green",

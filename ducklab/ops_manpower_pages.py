@@ -88,7 +88,8 @@ def _payroll_section() -> rx.Component:
         ),
         rx.box(
             rx.box(width=PAY["ratio_bar"] + "%", height="100%",
-                   background=ds.ACCENT, border_radius="3px"),
+                   background=rx.color(PAY["bar_color"], 9),
+                   border_radius="3px", id="ratio-bar"),
             width="100%", height="6px", background=ui.ROW_BORDER,
             border_radius="3px", overflow="hidden",
         ),

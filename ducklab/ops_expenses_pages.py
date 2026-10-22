@@ -7,6 +7,7 @@ import reflex as rx
 
 from ducklab import design as ds
 from ducklab import ops_charts
+from ducklab import ui
 from ducklab.ops_expenses_state import (
     ExpensesState, PAYMENT_SOURCES, PAYMENT_STATUSES, VERIFICATIONS,
 )
@@ -15,339 +16,233 @@ from ducklab.ops_shell import shell
 SORT_OPTIONS = ["incurred", "paid", "amount"]
 
 
+E = ExpensesState
+K = E.exp_kpis
+
+
+# ---------------------------------------------------------------------------
+# 1. KPI tiles
+# ---------------------------------------------------------------------------
+
 def _kpi_cards() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading(
-                "Monthly Expense KPIs", "wallet",
-                extra=rx.cond(
-                    ExpensesState.exp_month_finalized,
-                    rx.badge(
-                        "Finalized snapshot exists — expense edits affect "
-                        "live calculations only, never preserved snapshots",
-                        color_scheme="violet", variant="soft", size="1"),
-                ),
-            ),
-            rx.grid(
-                ds.kpi_card("Paid (paid-date basis)",
-                            ExpensesState.exp_kpis["paid"], icon="banknote"),
-                ds.kpi_card("Incurred (incurred-date basis)",
-                            ExpensesState.exp_kpis["incurred"], icon="receipt"),
-                ds.kpi_card("Pending / Outstanding",
-                            ExpensesState.exp_kpis["open"],
-                            icon="clock", accent="amber"),
-                ds.kpi_card("Total Budget", ExpensesState.exp_kpis["budget"],
-                            icon="target"),
-                ds.kpi_card("Budget Utilization",
-                            ExpensesState.exp_kpis["utilization"],
-                            icon="percent"),
-                ds.kpi_card("Budget Variance",
-                            ExpensesState.exp_kpis["variance"],
-                            icon="scale"),
-                rx.card(
-                    rx.vstack(
-                        rx.text(ExpensesState.exp_kpis["status_label"],
-                                size="1", color=ds.TEXT_MUTED),
-                        rx.tooltip(
-                            rx.badge(ExpensesState.exp_kpis["status"],
-                                 color_scheme=ExpensesState.exp_kpis["status_color"],
-                                 size="2", variant="soft"),
-                            content=ExpensesState.exp_kpis["status_tip"]),
-                        spacing="1", align="start"),
-                    id="kpi-warning"),
-                columns=rx.breakpoints(initial="1", sm="2", lg="4", xl="7"),
-                spacing="3", width="100%",
-            ),
-            rx.hstack(
-                rx.icon("shield-check", size=13, color=ds.TEXT_FAINT),
-                rx.text(ExpensesState.validation_summary, size="1",
-                        color=ds.TEXT_MUTED),
-                spacing="2", align="center", wrap="wrap",
-            ),
-            spacing="3", width="100%",
+    return rx.vstack(
+        rx.cond(
+            E.exp_month_finalized,
+            rx.callout(
+                "Finalized snapshot exists — expense edits affect live "
+                "calculations only, never preserved snapshots.",
+                icon="lock", color_scheme="violet", variant="soft",
+                width="100%"),
         ),
-        width="100%", id="expense-kpis",
+        ui.kpi_grid(
+            ui.kpi_tile("Paid", K["paid"], compact=K["paid_compact"],
+                        exact=K["paid"], sub="Paid-date basis"),
+            ui.kpi_tile("Incurred", K["incurred"],
+                        compact=K["incurred_compact"], exact=K["incurred"],
+                        sub="Incurred-date basis"),
+            ui.kpi_tile("Pending / outstanding", K["open"],
+                        compact=K["open_compact"], exact=K["open"]),
+            ui.kpi_tile("Total budget", K["budget"],
+                        compact=K["budget_compact"], exact=K["budget"]),
+            rx.box(ui.kpi_tile("Budget utilization", K["utilization"],
+                               chip=(K["status"], K["status_color"]),
+                               sub=K["status_label"]),
+                   id="kpi-warning", height="100%"),
+            ui.kpi_tile("Budget variance", K["variance"],
+                        compact=K["variance_compact"], exact=K["variance"],
+                        sub="Total budget − paid"),
+            columns=rx.breakpoints(initial="2", md="3"),
+        ),
+        rx.hstack(
+            rx.icon("shield-check", size=13, color=ds.TEXT_FAINT),
+            ui.note(E.validation_summary),
+            spacing="2", align="center", wrap="wrap",
+        ),
+        spacing="3", width="100%", id="expense-kpis",
     )
 
 
+# ---------------------------------------------------------------------------
+# 2. Category budget monitor: chart + table + budget editor, one section
+# ---------------------------------------------------------------------------
+
 def _budget_row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(row["name"], white_space="nowrap"),
-        rx.table.cell(row["budget"], white_space="nowrap"),
-        rx.table.cell(row["paid"], white_space="nowrap"),
-        rx.table.cell(row["remaining"], white_space="nowrap"),
-        rx.table.cell(
+    return rx.el.tr(
+        ui.td(rx.text(row["name"], weight="medium")),
+        ui.td(row["budget"], numeric=True, wide_only=True),
+        ui.td(row["paid"], numeric=True),
+        ui.td(row["remaining"], numeric=True, wide_only=True),
+        ui.td(rx.hstack(
+            rx.box(
+                rx.box(width=row["bar"] + "%", height="100%",
+                       background=rx.color(row["color"], 9),
+                       border_radius="3px"),
+                width="80px", height="6px", background=ui.ROW_BORDER,
+                border_radius="3px", overflow="hidden",
+            ),
+            rx.text(row["util"], size="1", color=ds.TEXT_MUTED),
+            spacing="2", align="center"), wide_only=True),
+        ui.td(ui.status_chip(row["status"], row["color"])),
+    )
+
+
+def _budget_editor() -> rx.Component:
+    return rx.cond(
+        E.can_manage_budgets & E.has_categories,
+        rx.vstack(
+            rx.divider(),
+            rx.text("Update monthly budget", size="2", weight="medium"),
             rx.hstack(
-                rx.box(
-                    rx.box(
-                        width=row["bar"] + "%",
-                        height="100%",
-                        background=ds.ACCENT,
-                        border_radius="4px",
-                    ),
-                    width="90px", height="8px",
-                    background=ds.BORDER,
-                    border_radius="4px",
-                    overflow="hidden",
-                ),
-                rx.text(row["util"], size="1"),
-                spacing="2", align="center"),
+                rx.select(E.category_names, value=E.b_category,
+                          on_change=E.set_b_category,
+                          placeholder="Select category", id="b-category"),
+                rx.input(value=E.b_amount, on_change=E.set_b_amount,
+                         placeholder="Monthly budget (RM)",
+                         input_mode="decimal", id="b-amount",
+                         disabled=E.b_clear, width="12em"),
+                rx.checkbox("Clear saved value", checked=E.b_clear,
+                            on_change=E.set_b_clear, size="1",
+                            id="b-clear"),
+                rx.button(
+                    rx.cond(E.b_saving, rx.spinner(size="1"),
+                            rx.icon("save", size=14)),
+                    "Save budget", on_click=E.save_budget,
+                    disabled=E.b_saving, id="b-save"),
+                spacing="3", align="center", wrap="wrap", width="100%",
+            ),
+            rx.cond(E.b_error != "", ds.error_callout(E.b_error)),
+            rx.cond(
+                E.b_notice != "",
+                rx.callout(E.b_notice, icon="circle-check",
+                           color_scheme="green", variant="soft",
+                           id="b-notice")),
+            spacing="3", align="start", width="100%",
         ),
-        rx.table.cell(
-            rx.badge(row["status"],
-                     color_scheme=row["color"], variant="soft", size="1")),
-        align="center",
     )
 
 
 def _budget_monitor() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Category Budget Monitor", "chart-bar"),
-            rx.cond(
-                ExpensesState.has_categories,
-                rx.cond(ExpensesState.is_dark,
-                        ops_charts.chart(ExpensesState.budget_fig_dark),
-                        ops_charts.chart(ExpensesState.budget_fig_light)),
-            ),
-            rx.cond(
-                ExpensesState.has_categories,
-                rx.scroll_area(
-                    rx.table.root(
-                        rx.table.header(rx.table.row(
-                            rx.table.column_header_cell("Category"),
-                            rx.table.column_header_cell("Budget"),
-                            rx.table.column_header_cell("Paid"),
-                            rx.table.column_header_cell("Remaining"),
-                            rx.table.column_header_cell("Utilization"),
-                            rx.table.column_header_cell("Status"),
-                        )),
-                        rx.table.body(
-                            rx.foreach(ExpensesState.budget_rows,
-                                       _budget_row)),
-                        variant="surface", width="100%",
-                    ),
-                    type="auto", scrollbars="horizontal",
-                    style={"maxWidth": "100%"},
+    return ui.section_card(
+        rx.cond(
+            E.has_categories,
+            rx.vstack(
+                rx.cond(E.is_dark, ops_charts.chart(E.budget_fig_dark),
+                        ops_charts.chart(E.budget_fig_light)),
+                ui.data_table(
+                    ["Category", ("Budget", True, True), ("Paid", True),
+                     ("Remaining", True, True), ("Utilization", False, True),
+                     "Status"],
+                    rx.foreach(E.budget_rows, _budget_row),
                 ),
-                ds.empty_state(
-                    "No expense categories configured",
-                    "An administrator must set up expense categories and "
-                    "monthly budgets before monitoring is available.",
-                    icon="folders"),
+                spacing="4", width="100%",
             ),
-            rx.cond(
-                ExpensesState.can_manage_budgets & ExpensesState.has_categories,
-                rx.vstack(
-                    rx.divider(),
-                    rx.text("Update monthly budget", size="2", weight="bold"),
-                    rx.grid(
-                        rx.vstack(
-                            rx.text("Category", size="1", color=ds.TEXT_MUTED),
-                            rx.select(
-                                ExpensesState.category_names,
-                                value=ExpensesState.b_category,
-                                on_change=ExpensesState.set_b_category,
-                                placeholder="Select category",
-                                id="b-category"),
-                            spacing="1", align="start", width="100%"),
-                        rx.vstack(
-                            rx.text("Monthly budget (RM)", size="1",
-                                    color=ds.TEXT_MUTED),
-                            rx.input(
-                                value=ExpensesState.b_amount,
-                                on_change=ExpensesState.set_b_amount,
-                                placeholder="e.g. 3200.00",
-                                input_mode="decimal", id="b-amount",
-                                disabled=ExpensesState.b_clear),
-                            rx.checkbox(
-                                "Clear saved value",
-                                checked=ExpensesState.b_clear,
-                                on_change=ExpensesState.set_b_clear,
-                                size="1", id="b-clear"),
-                            spacing="1", align="start", width="100%"),
-                        rx.vstack(
-                            rx.text("\u00a0", size="1"),
-                            rx.button(
-                                rx.cond(ExpensesState.b_saving,
-                                        rx.spinner(size="1"),
-                                        rx.icon("save", size=14)),
-                                "Save Budget", color_scheme="indigo",
-                                on_click=ExpensesState.save_budget,
-                                disabled=ExpensesState.b_saving,
-                                id="b-save"),
-                            spacing="1", align="start"),
-                        columns=rx.breakpoints(initial="1", sm="3"),
-                        spacing="3", width="100%",
-                    ),
-                    rx.cond(ExpensesState.b_error != "",
-                            ds.error_callout(ExpensesState.b_error)),
-                    rx.cond(
-                        ExpensesState.b_notice != "",
-                        rx.callout(ExpensesState.b_notice, icon="circle-check",
-                                   color_scheme="green", variant="soft",
-                                   id="b-notice")),
-                    spacing="3", align="start", width="100%",
-                ),
-            ),
-            rx.text(
-                "Budgets belong to the selected store and month. Paid "
-                "figures use the workbook's paid-date basis. Watch ≥ 80%; "
-                "OVER BUDGET when paid exceeds budget; a missing budget is "
-                "distinct from RM 0.",
-                size="1", color=ds.TEXT_FAINT),
-            spacing="3", width="100%",
+            ui.empty_state(
+                "No expense categories configured",
+                "An administrator must set up expense categories and monthly "
+                "budgets before monitoring is available.", icon="folders"),
         ),
-        width="100%", id="budget-monitor",
+        _budget_editor(),
+        ui.note("Budgets belong to the selected store and month. Paid uses "
+                "the paid-date basis. Watch ≥ 80%; OVER BUDGET when paid "
+                "exceeds budget; a missing budget is not RM 0."),
+        title="Category budget monitor",
+        subtitle="Budget vs paid per category (RM)",
+        id="budget-monitor",
     )
 
 
+# ---------------------------------------------------------------------------
+# 3. Transaction register: filters in one row + kit table
+# ---------------------------------------------------------------------------
+
+def _filters() -> rx.Component:
+    return rx.hstack(
+        rx.select(E.period_options, value=E.filter_period_label,
+                  on_change=E.set_filter_period_label, id="filter-period"),
+        rx.select(E.filter_category_options,
+                  on_change=E.set_filter_category_name,
+                  placeholder="All categories", id="filter-category"),
+        rx.select(["All statuses", *PAYMENT_STATUSES],
+                  on_change=E.set_filter_status, placeholder="All statuses",
+                  id="filter-status"),
+        rx.select(["All verifications", *VERIFICATIONS],
+                  on_change=E.set_filter_verification,
+                  placeholder="All verifications",
+                  id="filter-verification"),
+        rx.input(rx.input.slot(rx.icon("search", size=14)),
+                 value=E.search_text, on_change=E.set_search_text,
+                 placeholder="Search description / receipt",
+                 id="filter-search", min_width="14em", flex="1"),
+        rx.hstack(
+            rx.text("Sort", size="2", color=ds.TEXT_MUTED),
+            rx.select(SORT_OPTIONS, value="incurred",
+                      on_change=E.set_sort_key, id="filter-sort"),
+            rx.icon_button(
+                rx.cond(E.sort_desc, rx.icon("arrow-down", size=14),
+                        rx.icon("arrow-up", size=14)),
+                variant="soft", on_click=E.toggle_sort_dir, id="sort-dir"),
+            spacing="2", align="center"),
+        spacing="3", align="center", wrap="wrap", width="100%",
+    )
+
+
+# Paid by / Receipt ref / Recorded by only on very wide screens (all in
+# the dialog),
+# so the Edit button stays in view at desktop widths
+_REG_COLS = ["Incurred", "Paid", "Category", "Description", ("Amount", True),
+             ("Paid by", False, True, True), "Status",
+             ("Receipt ref", False, True, True), "Verification",
+             ("Recorded by", False, True, True), "Data check", ""]
+
+
 def _register_row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(row["incurred"], white_space="nowrap"),
-        rx.table.cell(row["paid"], white_space="nowrap"),
-        rx.table.cell(row["category"], white_space="nowrap"),
-        rx.table.cell(
-            rx.text(row["description"], size="2",
-                    style={"maxWidth": "220px", "overflow": "hidden",
-                           "textOverflow": "ellipsis"}),
-            title=row["description"]),
-        rx.table.cell(row["amount"], white_space="nowrap"),
-        rx.table.cell(row["paid_by"], white_space="nowrap"),
-        rx.table.cell(rx.badge(row["status"],
-                               color_scheme=row["status_color"],
-                               variant="soft", size="1")),
-        rx.table.cell(row["receipt"], white_space="nowrap"),
-        rx.table.cell(rx.badge(row["verification"],
-                               color_scheme=row["ver_color"],
-                               variant="soft", size="1")),
-        rx.table.cell(row["recorded_by"], white_space="nowrap"),
-        rx.table.cell(
-            rx.tooltip(
-                rx.badge(row["validation"],
-                         color_scheme=row["vcolor"], variant="soft", size="1"),
-                content=row["remarks"])),
-        rx.table.cell(
-            rx.cond(
-                ExpensesState.can_write_expenses,
-                rx.button(rx.icon("pencil", size=13), "Edit", size="1",
-                          variant="soft",
-                          on_click=ExpensesState.open_expense_form(row["id"])),
-                rx.button(rx.icon("eye", size=13), "View", size="1",
-                          variant="ghost",
-                          on_click=ExpensesState.open_expense_form(row["id"])),
-            ),
-        ),
-        align="center",
+    return rx.el.tr(
+        ui.td(row["incurred"]),
+        ui.td(row["paid"]),
+        ui.td(row["category"]),
+        ui.td(rx.text(row["description"], size="2"), wrap=True,
+              title=row["description"],
+              style={"minWidth": "140px", "maxWidth": "220px"}),
+        ui.td(row["amount"], numeric=True),
+        ui.td(row["paid_by"], wide_only=True, xl_only=True),
+        ui.td(ui.status_chip(row["status"], row["status_color"])),
+        ui.td(row["receipt"], wide_only=True, xl_only=True),
+        ui.td(ui.status_chip(row["verification"], row["ver_color"])),
+        ui.td(row["recorded_by"], wide_only=True, xl_only=True),
+        ui.td(rx.tooltip(ui.status_chip(row["validation"], row["vcolor"]),
+                         content=row["remarks"])),
+        ui.td(rx.cond(
+            E.can_write_expenses,
+            rx.button(rx.icon("pencil", size=13), "Edit", size="1",
+                      variant="soft",
+                      on_click=E.open_expense_form(row["id"])),
+            rx.button(rx.icon("eye", size=13), "View", size="1",
+                      variant="ghost",
+                      on_click=E.open_expense_form(row["id"])),
+        )),
     )
 
 
 def _register() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            rx.hstack(
-                ds.section_heading("Transaction Register", "list"),
-                rx.spacer(),
-                rx.cond(
-                    ExpensesState.can_write_expenses,
-                    rx.button(rx.icon("plus", size=14), "Add Expense",
-                              color_scheme="indigo",
-                              on_click=ExpensesState.open_expense_form(""),
-                              id="add-expense"),
-                ),
-                width="100%", align="center",
-            ),
-            rx.grid(
-                rx.vstack(
-                    rx.text("Period view", size="1", color=ds.TEXT_MUTED),
-                    rx.select(
-                        ExpensesState.period_options,
-                        value=ExpensesState.filter_period_label,
-                        on_change=ExpensesState.set_filter_period_label,
-                        id="filter-period"),
-                    spacing="1", align="start"),
-                rx.vstack(
-                    rx.text("Category", size="1", color=ds.TEXT_MUTED),
-                    rx.select(
-                        ExpensesState.filter_category_options,
-                        on_change=ExpensesState.set_filter_category_name,
-                        id="filter-category"),
-                    spacing="1", align="start"),
-                rx.vstack(
-                    rx.text("Status", size="1", color=ds.TEXT_MUTED),
-                    rx.select(
-                        ["All statuses", *PAYMENT_STATUSES],
-                        on_change=ExpensesState.set_filter_status,
-                        id="filter-status"),
-                    spacing="1", align="start"),
-                rx.vstack(
-                    rx.text("Verification", size="1", color=ds.TEXT_MUTED),
-                    rx.select(
-                        ["All verifications", *VERIFICATIONS],
-                        on_change=ExpensesState.set_filter_verification,
-                        id="filter-verification"),
-                    spacing="1", align="start"),
-                rx.vstack(
-                    rx.text("Search description / receipt", size="1",
-                            color=ds.TEXT_MUTED),
-                    rx.input(
-                        value=ExpensesState.search_text,
-                        on_change=ExpensesState.set_search_text,
-                        placeholder="Search…", id="filter-search"),
-                    spacing="1", align="start"),
-                rx.vstack(
-                    rx.text("Sort", size="1", color=ds.TEXT_MUTED),
-                    rx.hstack(
-                        rx.select(
-                            SORT_OPTIONS, value="incurred",
-                            on_change=ExpensesState.set_sort_key,
-                            id="filter-sort"),
-                        rx.icon_button(
-                            rx.cond(ExpensesState.sort_desc,
-                                    rx.icon("arrow-down", size=14),
-                                    rx.icon("arrow-up", size=14)),
-                            variant="soft",
-                            on_click=ExpensesState.toggle_sort_dir,
-                            id="sort-dir"),
-                        spacing="1"),
-                    spacing="1", align="start"),
-                columns=rx.breakpoints(initial="2", sm="3", lg="6"),
-                spacing="3", width="100%",
-            ),
-            rx.scroll_area(
-                rx.table.root(
-                    rx.table.header(rx.table.row(
-                        rx.table.column_header_cell("Incurred"),
-                        rx.table.column_header_cell("Paid"),
-                        rx.table.column_header_cell("Category"),
-                        rx.table.column_header_cell("Description"),
-                        rx.table.column_header_cell("Amount"),
-                        rx.table.column_header_cell("Paid By"),
-                        rx.table.column_header_cell("Status"),
-                        rx.table.column_header_cell("Receipt Ref"),
-                        rx.table.column_header_cell("Verification"),
-                        rx.table.column_header_cell("Recorded By"),
-                        rx.table.column_header_cell("Data Check"),
-                        rx.table.column_header_cell(""),
-                    )),
-                    rx.table.body(rx.foreach(ExpensesState.expense_rows,
-                                             _register_row)),
-                    variant="surface", width="100%",
-                ),
-                type="auto", scrollbars="horizontal",
-                style={"maxWidth": "100%"},
-            ),
-            rx.text(ExpensesState.rows_note, size="1", color=ds.TEXT_FAINT),
-            rx.cond(
-                ExpensesState.total_rows == "0",
-                ds.empty_state(
-                    "No expense transactions yet",
-                    "Use Add Expense to record the first transaction for "
-                    "this store.", icon="receipt"),
-            ),
-            spacing="3", width="100%",
+    return ui.section_card(
+        _filters(),
+        rx.cond(
+            E.total_rows == "0",
+            ui.empty_state(
+                "No expense transactions yet",
+                "Use Add expense to record the first transaction for this "
+                "store.", icon="receipt"),
+            ui.data_table(_REG_COLS,
+                          rx.foreach(E.expense_rows, _register_row)),
         ),
-        width="100%", id="expense-register",
+        ui.note(E.rows_note),
+        title="Transaction register",
+        extra=rx.cond(
+            E.can_write_expenses,
+            rx.button(rx.icon("plus", size=14), "Add expense",
+                      on_click=E.open_expense_form(""), id="add-expense"),
+        ),
+        id="expense-register",
     )
 
 
@@ -522,40 +417,35 @@ def expenses_page() -> rx.Component:
     return shell(
         "Expenses Management",
         rx.vstack(
-            rx.text(
-                "Record expenses, track payment and verification, and "
-                "monitor category budgets. Paid figures use the workbook's "
-                "paid-date basis; incurred figures use the incurred date.",
-                size="2", color=ds.TEXT_MUTED),
             rx.cond(
-                ExpensesState.exp_notice != "",
-                rx.callout(ExpensesState.exp_notice, icon="circle-check",
+                E.exp_notice != "",
+                rx.callout(E.exp_notice, icon="circle-check",
                            color_scheme="green", variant="soft",
                            width="100%", id="exp-notice"),
             ),
             rx.cond(
-                ~ExpensesState.exp_form_open
-                & (ExpensesState.exp_form_error != ""),
-                ds.error_callout(ExpensesState.exp_form_error),
+                ~E.exp_form_open & (E.exp_form_error != ""),
+                ds.error_callout(E.exp_form_error),
             ),
+            rx.cond(E.report_status == "error",
+                    ds.error_callout(E.error_message)),
             rx.cond(
-                ExpensesState.report_status == "error",
-                ds.error_callout(ExpensesState.error_message),
-            ),
-            rx.cond(
-                ExpensesState.report_status == "empty",
-                ds.empty_state("No store or month selected",
-                               ExpensesState.error_message, icon="store"),
+                E.report_status == "empty",
+                ui.empty_state("No store or month selected",
+                               E.error_message, icon="store"),
                 rx.vstack(
                     _kpi_cards(),
                     _budget_monitor(),
                     _register(),
-                    spacing="5", width="100%",
+                    spacing=ui.GAP, width="100%",
                 ),
             ),
             _expense_dialog(),
-            spacing="4", width="100%",
+            spacing=ui.GAP, width="100%",
         ),
-        on_store=ExpensesState.select_store,
-        on_month=ExpensesState.select_month,
+        on_store=E.select_store,
+        on_month=E.select_month,
+        description="Record expenses, track payment and verification, and "
+                    "monitor category budgets. Paid uses the paid date; "
+                    "incurred uses the incurred date.",
     )

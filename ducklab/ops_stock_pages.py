@@ -61,24 +61,28 @@ _NOT_ENOUGH = ("Charts appear once 3 days have stock entries. Unreported "
                "days stay as gaps, never zero.")
 
 
-def _trend_section() -> rx.Component:
-    return ui.chart_card(
-        "Daily total loss",
-        rx.cond(S.is_dark, ops_charts.chart(S.chart_fig_dark),
-                ops_charts.chart(S.chart_fig_light)),
-        ready=S.st_chart_ready, subtitle="RM per day with stock entries",
-        detail=_NOT_ENOUGH, id="trend-section",
-    )
-
-
-def _composition_section() -> rx.Component:
-    return ui.chart_card(
-        "Loss composition by category",
-        rx.cond(S.is_dark, ops_charts.chart(S.comp_fig_dark),
-                ops_charts.chart(S.comp_fig_light)),
-        ready=S.st_chart_ready,
-        subtitle="In total loss, offsets and info-only codes (RM)",
-        detail=_NOT_ENOUGH, id="stock-composition",
+def _charts() -> rx.Component:
+    """Trend + composition when there is enough data; otherwise ONE compact
+    "Not enough data yet" card instead of two stacked empty ones."""
+    return rx.cond(
+        S.st_chart_ready,
+        rx.vstack(
+            ui.section_card(
+                rx.cond(S.is_dark, ops_charts.chart(S.chart_fig_dark),
+                        ops_charts.chart(S.chart_fig_light)),
+                title="Daily total loss",
+                subtitle="RM per day with stock entries", id="trend-section"),
+            ui.section_card(
+                rx.cond(S.is_dark, ops_charts.chart(S.comp_fig_dark),
+                        ops_charts.chart(S.comp_fig_light)),
+                title="Loss composition by category",
+                subtitle="In total loss, offsets and info-only codes (RM)",
+                id="stock-composition"),
+            spacing=ui.GAP, width="100%",
+        ),
+        ui.section_card(ui.not_enough_data(_NOT_ENOUGH),
+                        title="Loss trend and composition",
+                        id="trend-section"),
     )
 
 
@@ -97,7 +101,7 @@ def _category_row(row) -> rx.Component:
             spacing="1", align="center")),
         ui.td(row["name"], wide_only=True),
         ui.td(row["total"], numeric=True),
-        ui.td(row["share"], numeric=True),
+        ui.td(row["share"], numeric=True, wide_only=True),
         ui.td(row["days"], numeric=True, wide_only=True),
         ui.td(ui.status_chip(row["treatment"], row["treatment_color"])),
     )
@@ -145,7 +149,8 @@ def _category_section() -> rx.Component:
     return ui.section_card(
         ui.data_table(
             ["Code", ("Description", False, True), ("Monthly total", True),
-             ("Share of loss", True), ("Days", True, True), "Treatment"],
+             ("Share of loss", True, True), ("Days", True, True),
+             "Treatment"],
             rx.foreach(S.cat_rows, _category_row),
         ),
         _investigation(),
@@ -161,20 +166,21 @@ def _category_section() -> rx.Component:
 # 4. Daily table (unreported days collapsed)
 # ---------------------------------------------------------------------------
 
-_DAY_COLS = ["Date", "Day", ("Sales", True), ("Total loss", True),
-             ("Ratio", True), ("Missing", True), ("Extra", True), "Status",
-             ""]
+# phones keep Date, Total loss, Ratio, Status and Edit
+_DAY_COLS = [("Date", False), ("Day", False, True), ("Sales", True, True),
+             ("Total loss", True), ("Ratio", True), ("Missing", True, True),
+             ("Extra", True, True), "Status", ""]
 
 
 def _day_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text(row["label"], weight="medium")),
-        ui.td(rx.text(row["weekday"], color=ds.TEXT_MUTED)),
-        ui.td(row["sales"], numeric=True),
+        ui.td(rx.text(row["weekday"], color=ds.TEXT_MUTED), wide_only=True),
+        ui.td(row["sales"], numeric=True, wide_only=True),
         ui.td(row["loss"], numeric=True),
         ui.td(row["ratio"], numeric=True),
-        ui.td(row["missing"], numeric=True),
-        ui.td(row["extra"], numeric=True),
+        ui.td(row["missing"], numeric=True, wide_only=True),
+        ui.td(row["extra"], numeric=True, wide_only=True),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
         ui.td(rx.link("Edit", href="/ops/daily?date=" + row["date"],
                       size="2")),
@@ -240,8 +246,7 @@ def stock_page() -> rx.Component:
                 S.st_loaded,
                 rx.vstack(
                     _kpi_section(),
-                    _trend_section(),
-                    _composition_section(),
+                    _charts(),
                     _category_section(),
                     _daily_section(),
                     _comparison_section(),

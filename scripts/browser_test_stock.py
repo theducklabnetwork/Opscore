@@ -9,6 +9,7 @@ Screenshots go to docs/screenshots/phase2-task6/. Exits non-zero on failure.
 from __future__ import annotations
 
 import os
+from datetime import date
 import sys
 from pathlib import Path
 
@@ -108,9 +109,16 @@ def main() -> int:
         check("edit link deep-links to daily date",
               href is not None and href.startswith("/ops/daily?date=2026-10"))
         page.goto(f"{BASE}{href}")
-        page.wait_for_selector("text=Daily Operations", timeout=60000)
-        check("daily entry opened for the linked date",
-              "October 2026" in page.locator("body").inner_text())
+        # "text=Daily Operations" is always in the sidebar, so it matched
+        # before the page loaded; wait for the entry dialog itself and
+        # compare its date with the literal date in the link.
+        page.wait_for_selector("#f-sales", state="visible", timeout=60000)
+        page.wait_for_timeout(500)
+        linked = date.fromisoformat(href.split("date=")[1])
+        expected = f"{linked:%A}, {linked.day} {linked:%B %Y}"
+        check(f"daily entry opened for the linked date ({expected})",
+              expected in page.locator("[role='dialog']").inner_text())
+        page.keyboard.press("Escape")
         page.goto(f"{BASE}/ops/stock")
         page.wait_for_selector("#stock-kpi-section", timeout=120000)
         page.wait_for_timeout(1500)

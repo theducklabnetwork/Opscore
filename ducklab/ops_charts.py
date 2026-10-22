@@ -86,16 +86,14 @@ def _pal(dark: bool) -> dict:
 
 
 def fmt_rm(cents: Optional[float]) -> str:
-    """RM 1,234.50 with thousands separators; dash for missing."""
-    if cents is None:
-        return "—"
-    return f"RM {cents / 100:,.2f}"
+    """RM 1,234.50 / −RM 85.00 (shared design.py format); dash if missing."""
+    from ducklab.design import fmt_rm as _fmt
+    return _fmt(cents)
 
 
 def fmt_rm0(cents: Optional[float]) -> str:
-    if cents is None:
-        return "—"
-    return f"RM {cents / 100:,.0f}"
+    from ducklab.design import fmt_rm0 as _fmt
+    return _fmt(cents)
 
 
 def fmt_pct(ratio: Optional[float]) -> str:

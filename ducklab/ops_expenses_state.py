@@ -292,6 +292,16 @@ class ExpensesState(DailyState):
                                "Within budget"),
                 "status_color": ds.status_color(e.budget_control_status),
             }
+            # compact variants for narrow tiles (exact value in a tooltip);
+            # text states ("No payments yet") compact to a dash
+            for key, cents, has in (
+                    ("paid", e.paid_cents, e.paid_count > 0),
+                    ("incurred", e.incurred_cents, e.incurred_count > 0),
+                    ("open", e.open_cents, True),
+                    ("budget", e.total_budget_cents, True),
+                    ("variance", variance, True)):
+                self.exp_kpis[f"{key}_compact"] = ds.fmt_rm_compact(
+                    cents if has else None, whole_below=True)
             non_ok = {k: v for k, v in e.validation_counts.items()
                       if k != "OK" and v}
             self.validation_summary = (
