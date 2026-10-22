@@ -80,9 +80,9 @@ def _status_cell(status, color, tag="", tip="") -> rx.Component:
 def _ladder_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text(row["level"], weight="medium")),
-        ui.td(row["target"], numeric=True, wide_only=True),
+        ui.td(row["target"], numeric=True),
         ui.td(row["achievement"], numeric=True),
-        ui.td(row["gap"], numeric=True, wide_only=True),
+        ui.td(row["gap"], numeric=True),
         _status_cell(row["status"], row["color"], row["early_tag"],
                      row["early_tip"]),
     )
@@ -91,9 +91,9 @@ def _ladder_row(row) -> rx.Component:
 def _comparison_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text(row["label"], weight="medium"), wrap=True),
-        ui.td("—", numeric=True, wide_only=True),
+        ui.td("—", numeric=True),
         ui.td(row["growth"], numeric=True),
-        ui.td("—", numeric=True, wide_only=True),
+        ui.td("—", numeric=True),
         _status_cell(row["status"], row["color"], row["early_tag"],
                      row["early_tip"]),
     )
@@ -102,8 +102,8 @@ def _comparison_row(row) -> rx.Component:
 def _target_ladder() -> rx.Component:
     return ui.section_card(
         ui.data_table(
-            ["Level", ("Target", True, True), ("Achievement", True),
-             ("Gap", True, True), "Status"],
+            ["Level", ("Target", True), ("Achievement", True),
+             ("Gap", True), "Status"],
             rx.foreach(S.sp_ladder, _ladder_row),
             rx.foreach(S.sp_comparisons, _comparison_row),
         ),
@@ -116,15 +116,17 @@ def _target_ladder() -> rx.Component:
     )
 
 
-_DAILY_COLS = ["Date", "Day", ("Sales", True), ("Trans.", True),
+_DAILY_COLS = ["Date", ("Sales", True), ("Trans.", True),
                ("Units", True), ("SPR", True), ("UPT", True), ("ASP", True),
                ("vs Budget", True), "Status", ""]
 
 
 def _daily_row(row) -> rx.Component:
     return rx.el.tr(
-        ui.td(rx.text(row["date"], weight="medium")),
-        ui.td(rx.text(row["weekday"], color=ds.TEXT_MUTED)),
+        ui.td(rx.hstack(rx.text(row["date"], weight="medium"),
+                        rx.text(row["weekday"], size="1",
+                                color=ds.TEXT_FAINT),
+                        spacing="2", align="baseline")),
         ui.td(row["sales"], numeric=True),
         ui.td(row["transactions"], numeric=True),
         ui.td(row["units"], numeric=True),

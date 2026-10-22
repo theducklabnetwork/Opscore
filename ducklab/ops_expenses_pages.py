@@ -69,9 +69,9 @@ def _kpi_cards() -> rx.Component:
 def _budget_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text(row["name"], weight="medium")),
-        ui.td(row["budget"], numeric=True, wide_only=True),
+        ui.td(row["budget"], numeric=True),
         ui.td(row["paid"], numeric=True),
-        ui.td(row["remaining"], numeric=True, wide_only=True),
+        ui.td(row["remaining"], numeric=True),
         ui.td(rx.hstack(
             rx.box(
                 rx.box(width=row["bar"] + "%", height="100%",
@@ -81,7 +81,7 @@ def _budget_row(row) -> rx.Component:
                 border_radius="3px", overflow="hidden",
             ),
             rx.text(row["util"], size="1", color=ds.TEXT_MUTED),
-            spacing="2", align="center"), wide_only=True),
+            spacing="2", align="center")),
         ui.td(ui.status_chip(row["status"], row["color"])),
     )
 
@@ -129,8 +129,8 @@ def _budget_monitor() -> rx.Component:
                 rx.cond(E.is_dark, ops_charts.chart(E.budget_fig_dark),
                         ops_charts.chart(E.budget_fig_light)),
                 ui.data_table(
-                    ["Category", ("Budget", True, True), ("Paid", True),
-                     ("Remaining", True, True), ("Utilization", False, True),
+                    ["Category", ("Budget", True), ("Paid", True),
+                     ("Remaining", True), "Utilization",
                      "Status"],
                     rx.foreach(E.budget_rows, _budget_row),
                 ),
@@ -186,13 +186,12 @@ def _filters() -> rx.Component:
     )
 
 
-# Paid by / Receipt ref / Recorded by only on very wide screens (all in
-# the dialog),
-# so the Edit button stays in view at desktop widths
+# Paid by / Receipt ref / Recorded by hide at 768-1535px (all in the
+# dialog) so the table fits at desktop widths; Edit is pinned either way
 _REG_COLS = ["Incurred", "Paid", "Category", "Description", ("Amount", True),
-             ("Paid by", False, True, True), "Status",
-             ("Receipt ref", False, True, True), "Verification",
-             ("Recorded by", False, True, True), "Data check", ""]
+             ("Paid by", False, True), "Status",
+             ("Receipt ref", False, True), "Verification",
+             ("Recorded by", False, True), "Data check", ""]
 
 
 def _register_row(row) -> rx.Component:
@@ -204,11 +203,11 @@ def _register_row(row) -> rx.Component:
               title=row["description"],
               style={"minWidth": "140px", "maxWidth": "220px"}),
         ui.td(row["amount"], numeric=True),
-        ui.td(row["paid_by"], wide_only=True, xl_only=True),
+        ui.td(row["paid_by"], xl_only=True),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
-        ui.td(row["receipt"], wide_only=True, xl_only=True),
+        ui.td(row["receipt"], xl_only=True),
         ui.td(ui.status_chip(row["verification"], row["ver_color"])),
-        ui.td(row["recorded_by"], wide_only=True, xl_only=True),
+        ui.td(row["recorded_by"], xl_only=True),
         ui.td(rx.tooltip(ui.status_chip(row["validation"], row["vcolor"]),
                          content=row["remarks"])),
         ui.td(rx.cond(
@@ -233,7 +232,10 @@ def _register() -> rx.Component:
                 "Use Add expense to record the first transaction for this "
                 "store.", icon="receipt"),
             ui.data_table(_REG_COLS,
-                          rx.foreach(E.expense_rows, _register_row)),
+                          rx.foreach(E.expense_rows, _register_row),
+                          hidden_note="Paid by, receipt ref and recorded by "
+                                      "show from 1536px wide and in each "
+                                      "row's dialog."),
         ),
         ui.note(E.rows_note),
         title="Transaction register",
@@ -247,169 +249,100 @@ def _register() -> rx.Component:
 
 
 # ---------------------------------------------------------------------------
-# Expense dialog form (centered; same pattern as Daily Operations)
+# Expense dialog (kit entry dialog, same pattern as Daily Operations)
 # ---------------------------------------------------------------------------
 
-def _field(label: str, comp: rx.Component, hint: str = "") -> rx.Component:
-    return rx.vstack(
-        rx.text(label, size="2", weight="medium"),
-        comp,
-        rx.cond(hint != "", rx.text(hint, size="1", color=ds.TEXT_FAINT)),
-        spacing="1", align="start", width="100%",
-    )
-
-
 def _expense_dialog() -> rx.Component:
-    ro = ~ExpensesState.can_write_expenses
-    return rx.dialog.root(
-            rx.dialog.content(
-                rx.vstack(
-                    rx.hstack(
-                        rx.vstack(
-                            rx.heading(
-                                rx.cond(ExpensesState.editing_id == "",
-                                        "Add Expense", "Edit Expense"),
-                                size="4"),
-                            rx.text(
-                                "Incomplete transactions may be saved as "
-                                "drafts; the Data Check column flags what "
-                                "still needs attention.",
-                                size="1", color=ds.TEXT_MUTED),
-                            spacing="0", align="start"),
-                        rx.spacer(),
-                        rx.dialog.close(
-                            rx.icon_button(rx.icon("x", size=16),
-                                           variant="ghost",
-                                           id="exp-close")),
-                        width="100%", align="center", flex_shrink="0"),
-                    rx.cond(
-                        ro,
-                        rx.callout(
-                            "You have read-only access. Contact an "
-                            "administrator to modify expenses.",
-                            icon="lock", color_scheme="gray", variant="soft",
-                            width="100%"),
-                    ),
-                    rx.cond(ExpensesState.exp_form_error != "",
-                            ds.error_callout(ExpensesState.exp_form_error)),
-                    rx.scroll_area(
-                        rx.vstack(
-                            ds.section_heading("Transaction", "receipt"),
-                            rx.grid(
-                                _field("Incurred date",
-                                       rx.input(type="date",
-                                                value=ExpensesState.e_incurred,
-                                                on_change=ExpensesState.set_e_incurred,
-                                                id="e-incurred",
-                                                disabled=ro)),
-                                _field("Paid date",
-                                       rx.input(type="date",
-                                                value=ExpensesState.e_paid,
-                                                on_change=ExpensesState.set_e_paid,
-                                                id="e-paid",
-                                                disabled=ro),
-                                       "Required only when status is Paid."),
-                                _field("Category",
-                                       rx.select(
-                                           ExpensesState.category_names,
-                                           value=ExpensesState.e_category,
-                                           on_change=ExpensesState.set_e_category,
-                                           placeholder="Select category",
-                                           id="e-category",
-                                           disabled=ro)),
-                                _field("Amount (RM)",
-                                       rx.input(value=ExpensesState.e_amount,
-                                                on_change=ExpensesState.set_e_amount,
-                                                placeholder="0.00",
-                                                input_mode="decimal",
-                                                id="e-amount", disabled=ro),
-                                       "Exact cents; RM125.50 = 12550¢."),
-                                columns="2",
-                                spacing="3", width="100%"),
-                            _field("Description",
-                                   rx.text_area(
-                                       value=ExpensesState.e_description,
-                                       on_change=ExpensesState.set_e_description,
+    ro = ~E.can_write_expenses
+    return ui.form_dialog(
+        ui.form_section(
+            "Transaction",
+            ui.form_grid(
+                ui.form_field("Incurred date",
+                              rx.input(type="date", value=E.e_incurred,
+                                       on_change=E.set_e_incurred,
+                                       id="e-incurred", disabled=ro)),
+                ui.form_field("Paid date",
+                              rx.input(type="date", value=E.e_paid,
+                                       on_change=E.set_e_paid, id="e-paid",
+                                       disabled=ro),
+                              "Required only when status is Paid."),
+                ui.form_field("Category",
+                              rx.select(E.category_names,
+                                        value=E.e_category,
+                                        on_change=E.set_e_category,
+                                        placeholder="Select category",
+                                        id="e-category", disabled=ro)),
+                ui.form_field("Amount (RM)",
+                              rx.input(value=E.e_amount,
+                                       on_change=E.set_e_amount,
+                                       placeholder="0.00",
+                                       input_mode="decimal", id="e-amount",
+                                       disabled=ro),
+                              "Exact cents; RM125.50 = 12550¢."),
+            ),
+            ui.form_field("Description",
+                          rx.text_area(value=E.e_description,
+                                       on_change=E.set_e_description,
                                        placeholder="What was purchased?",
                                        id="e-description", disabled=ro)),
-                            rx.divider(),
-                            ds.section_heading("Payment & Verification",
-                                               "banknote"),
-                            rx.grid(
-                                _field("Payment status",
-                                       rx.select(
-                                           list(PAYMENT_STATUSES),
-                                           value=ExpensesState.e_status,
-                                           on_change=ExpensesState.set_e_status,
-                                           id="e-status", disabled=ro)),
-                                _field("Paid by",
-                                       rx.select(
-                                           list(PAYMENT_SOURCES),
-                                           value=ExpensesState.e_paid_by,
-                                           on_change=ExpensesState.set_e_paid_by,
-                                           placeholder="Select source",
-                                           id="e-paid-by", disabled=ro)),
-                                _field("Verification",
-                                       rx.select(
-                                           list(VERIFICATIONS),
-                                           value=ExpensesState.e_verification,
-                                           on_change=ExpensesState.set_e_verification,
-                                           id="e-verification", disabled=ro),
-                                       "Paid does not imply Verified."),
-                                _field("Receipt / transaction reference",
-                                       rx.input(value=ExpensesState.e_receipt,
-                                                on_change=ExpensesState.set_e_receipt,
-                                                placeholder="e.g. RCP-1024",
-                                                id="e-receipt", disabled=ro)),
-                                _field("Recorded by",
-                                       rx.input(value=ExpensesState.e_recorded_by,
-                                                on_change=ExpensesState.set_e_recorded_by,
-                                                placeholder="Your name",
-                                                id="e-recorded-by",
-                                                disabled=ro)),
-                                columns="2",
-                                spacing="3", width="100%"),
-                            _field("Remarks",
-                                   rx.text_area(
-                                       value=ExpensesState.e_remarks,
-                                       on_change=ExpensesState.set_e_remarks,
+        ),
+        ui.form_section(
+            "Payment & verification",
+            ui.form_grid(
+                ui.form_field("Payment status",
+                              rx.select(list(PAYMENT_STATUSES),
+                                        value=E.e_status,
+                                        on_change=E.set_e_status,
+                                        id="e-status", disabled=ro)),
+                ui.form_field("Paid by",
+                              rx.select(list(PAYMENT_SOURCES),
+                                        value=E.e_paid_by,
+                                        on_change=E.set_e_paid_by,
+                                        placeholder="Select source",
+                                        id="e-paid-by", disabled=ro)),
+                ui.form_field("Verification",
+                              rx.select(list(VERIFICATIONS),
+                                        value=E.e_verification,
+                                        on_change=E.set_e_verification,
+                                        id="e-verification", disabled=ro),
+                              "Paid does not imply Verified."),
+                ui.form_field("Receipt / transaction reference",
+                              rx.input(value=E.e_receipt,
+                                       on_change=E.set_e_receipt,
+                                       placeholder="e.g. RCP-1024",
+                                       id="e-receipt", disabled=ro)),
+                ui.form_field("Recorded by",
+                              rx.input(value=E.e_recorded_by,
+                                       on_change=E.set_e_recorded_by,
+                                       placeholder="Your name",
+                                       id="e-recorded-by", disabled=ro)),
+            ),
+            ui.form_field("Remarks",
+                          rx.text_area(value=E.e_remarks,
+                                       on_change=E.set_e_remarks,
                                        placeholder="Optional notes",
                                        id="e-remarks", disabled=ro)),
-                            spacing="4", width="100%"),
-                        flex_grow="1", min_height="0", type="auto",
-                        width="100%"),
-                    rx.hstack(
-                        rx.spacer(),
-                        rx.dialog.close(
-                            rx.button("Cancel", variant="soft",
-                                      color_scheme="gray", id="exp-cancel")),
-                        rx.cond(
-                            ExpensesState.can_write_expenses,
-                            rx.button(
-                                rx.cond(ExpensesState.exp_saving,
-                                        rx.spinner(size="1"),
-                                        rx.icon("save", size=14)),
-                                "Save Expense", color_scheme="indigo",
-                                on_click=ExpensesState.save_expense,
-                                disabled=ExpensesState.exp_saving,
-                                id="exp-save")),
-                        width="100%", align="center", flex_shrink="0",
-                        border_top=f"1px solid {ds.BORDER}",
-                        padding_top="0.75em"),
-                    spacing="4", width="100%", height="100%",
-                    min_height="0",
-                ),
-                width="min(720px, 92vw)",
-                style={
-                    "maxWidth": "min(720px, 92vw)",
-                    "maxHeight": "85vh",
-                    "display": "flex",
-                    "flexDirection": "column",
-                },
-                background=ds.BG, padding="1.5em",
-            ),
-        open=ExpensesState.exp_form_open,
-        on_open_change=lambda v: ExpensesState.close_expense_form(),
+        ),
+        open=E.exp_form_open,
+        on_open_change=lambda v: E.close_expense_form(),
+        title=rx.cond(E.editing_id == "", "Add Expense", "Edit Expense"),
+        subtitle="Incomplete transactions may be saved as drafts; the Data "
+                 "check column flags what still needs attention.",
+        close_id="exp-close",
+        notices=[
+            rx.cond(ro, rx.callout(
+                "You have read-only access. Contact an administrator to "
+                "modify expenses.",
+                icon="lock", color_scheme="gray", variant="soft",
+                width="100%")),
+            rx.cond(E.exp_form_error != "",
+                    ds.error_callout(E.exp_form_error)),
+        ],
+        actions=ui.dialog_actions(
+            save_label="Save Expense", on_save=E.save_expense,
+            saving=E.exp_saving, save_id="exp-save", cancel_id="exp-cancel",
+            can_save=E.can_write_expenses),
     )
 
 

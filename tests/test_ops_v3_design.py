@@ -106,7 +106,8 @@ class ChipColourTests(unittest.TestCase):
     def test_treatment_chips_are_not_the_accent(self):
         colours = {t: ds.status_color(t)
                    for t in ("Included", "Offset", "Info only")}
-        self.assertEqual(colours, {"Included": "orange", "Offset": "green",
+        # V4: a treatment is a classification, never an attention status
+        self.assertEqual(colours, {"Included": "gray", "Offset": "gray",
                                    "Info only": "gray"})
         self.assertNotIn("indigo", colours.values())
 

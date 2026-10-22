@@ -50,27 +50,36 @@ def login(page, email, password):
 
 
 def choose(page, trigger, option_text, timeout=25000):
-    """Radix select: type-to-highlight + Enter (keyboard), with a click
-    fallback. Avoids the option-detach race on animated listboxes."""
+    """Radix select: a real pointer click on the option (Radix selects on
+    pointerup, which a synthetic dispatch_event("click") never sends).
+
+    No type-ahead + Enter inside a dialog: while the listbox is open,
+    focus stays on the dialog's close button, so Enter pressed it and
+    closed the dialog (the old "could not select 'Petty Cash'" crash).
+    Outside a dialog type-ahead is the fallback."""
     key = option_text.split(" — ")[0]
+    opt = page.locator(f"[role='option']:has-text(\"{option_text}\")").first
     for _ in range(4):
         try:
-            page.click(trigger)
-            page.wait_for_selector("[role='option']", state="visible",
-                                   timeout=10000)
-            page.keyboard.type(key, delay=40)
-            page.wait_for_timeout(300)
-            page.keyboard.press("Enter")
+            if not page.locator("[role='listbox']").is_visible():
+                page.click(trigger)
+            opt.wait_for(state="visible", timeout=10000)
+            page.wait_for_timeout(300)  # open animation settles
+            opt.click()
             page.wait_for_timeout(1000)
             if key in page.locator(trigger).inner_text():
                 return
         except Exception:
             pass
-        try:  # click fallback
-            page.click(trigger)
-            opt = f"[role='option']:has-text(\"{option_text}\")"
-            page.wait_for_selector(opt, state="visible", timeout=10000)
-            page.locator(opt).first.dispatch_event("click")
+        if page.locator("[role='dialog']").count():
+            page.wait_for_timeout(1200)
+            continue
+        try:  # keyboard fallback (page-level selects only)
+            if not page.locator("[role='listbox']").is_visible():
+                page.click(trigger)
+            page.keyboard.type(key.split(" ")[0], delay=40)
+            page.wait_for_timeout(300)
+            page.keyboard.press("Enter")
             page.wait_for_timeout(1000)
             if key in page.locator(trigger).inner_text():
                 return

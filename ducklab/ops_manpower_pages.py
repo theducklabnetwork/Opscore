@@ -230,150 +230,73 @@ def _staffing_table() -> rx.Component:
 
 
 # ---------------------------------------------------------------------------
-# Configuration & payroll editor dialog (centered; Daily pattern)
+# Configuration & payroll editor dialog (kit entry dialog; Daily pattern)
 # ---------------------------------------------------------------------------
 
-def _field(label: str, comp: rx.Component, hint: str = "") -> rx.Component:
-    return rx.vstack(
-        rx.text(label, size="2", weight="medium"),
-        comp,
-        rx.cond(hint != "", rx.text(hint, size="1", color=ds.TEXT_FAINT)),
-        spacing="1", align="start", width="100%",
-    )
+def _input(attr, fid, mode="decimal", placeholder="") -> rx.Component:
+    return rx.input(value=getattr(M, attr), on_change=getattr(M, "set_" + attr),
+                    input_mode=mode, placeholder=placeholder, id=fid)
 
 
 def _config_dialog() -> rx.Component:
-    return rx.dialog.root(
-            rx.dialog.content(
-                rx.vstack(
-                    rx.hstack(
-                        rx.vstack(
-                            rx.heading("Monthly Configuration & Payroll",
-                                       size="4"),
-                            rx.text(
-                                "Only changed staffing fields are saved; "
-                                "blank payroll fields explicitly clear to "
-                                "awaiting-payroll (NULL), never RM 0.",
-                                size="1", color=ds.TEXT_MUTED),
-                            spacing="0", align="start"),
-                        rx.spacer(),
-                        rx.dialog.close(
-                            rx.icon_button(rx.icon("x", size=16),
-                                           variant="ghost",
-                                           id="cfg-close")),
-                        width="100%", align="center", flex_shrink="0"),
-                    rx.cond(
-                        ManpowerState.mp_finalized,
-                        rx.callout(
-                            "This month has a finalized snapshot. Changes "
-                            "affect live results only; the preserved snapshot "
-                            "is never modified.",
-                            icon="archive", color_scheme="violet",
-                            variant="soft", width="100%"),
-                    ),
-                    rx.cond(ManpowerState.cfg_error != "",
-                            ds.error_callout(ManpowerState.cfg_error)),
-                    rx.scroll_area(
-                        rx.vstack(
-                            ds.section_heading("Workforce", "users"),
-                            rx.grid(
-                                _field("Opening FT headcount",
-                                       rx.input(value=ManpowerState.c_opening,
-                                                on_change=ManpowerState.set_c_opening,
-                                                input_mode="numeric",
-                                                id="c-opening"),
-                                       "Blank = leave unchanged."),
-                                _field("Budgeted headcount",
-                                       rx.input(value=ManpowerState.c_budget,
-                                                on_change=ManpowerState.set_c_budget,
-                                                input_mode="numeric",
-                                                id="c-budget")),
-                                _field("Part-time conversion factor",
-                                       rx.input(value=ManpowerState.c_pt_factor,
-                                                on_change=ManpowerState.set_c_pt_factor,
-                                                input_mode="decimal",
-                                                placeholder="e.g. 0.5",
-                                                id="c-pt-factor"),
-                                       "Effective staff = FT + PT × factor."),
-                                _field("Turnover threshold (%)",
-                                       rx.input(value=ManpowerState.c_turnover,
-                                                on_change=ManpowerState.set_c_turnover,
-                                                input_mode="decimal",
-                                                placeholder="e.g. 45",
-                                                id="c-turnover")),
-                                _field("Salary ratio target (%)",
-                                       rx.input(value=ManpowerState.c_ratio_target,
-                                                on_change=ManpowerState.set_c_ratio_target,
-                                                input_mode="decimal",
-                                                placeholder="e.g. 6.818",
-                                                id="c-ratio-target")),
-                                columns="2",
-                                spacing="3", width="100%"),
-                            rx.divider(),
-                            ds.section_heading("Month-end Payroll (RM)",
-                                               "wallet"),
-                            rx.grid(
-                                _field("Basic salary + allowances",
-                                       rx.input(value=ManpowerState.p_salary,
-                                                on_change=ManpowerState.set_p_salary,
-                                                input_mode="decimal",
-                                                placeholder="e.g. 13275.75",
-                                                id="p-salary"),
-                                       "Blank = awaiting payroll (NULL)."),
-                                _field("Overtime",
-                                       rx.input(value=ManpowerState.p_overtime,
-                                                on_change=ManpowerState.set_p_overtime,
-                                                input_mode="decimal",
-                                                placeholder="e.g. 4198.50",
-                                                id="p-overtime")),
-                                _field("Support team cost",
-                                       rx.input(value=ManpowerState.p_support,
-                                                on_change=ManpowerState.set_p_support,
-                                                input_mode="decimal",
-                                                placeholder="Optional",
-                                                id="p-support")),
-                                columns="2",
-                                spacing="3", width="100%"),
-                            rx.text(
-                                "Payroll inputs are workbook month-end "
-                                "aggregates. Which management positions are "
-                                "included in Basic Salary + Allowances "
-                                "follows the workbook definition and remains "
-                                "subject to HQ confirmation.",
-                                size="1", color=ds.TEXT_FAINT),
-                            spacing="4", width="100%"),
-                        flex_grow="1", min_height="0", type="auto",
-                        width="100%"),
-                    rx.hstack(
-                        rx.spacer(),
-                        rx.dialog.close(
-                            rx.button("Cancel", variant="soft",
-                                      color_scheme="gray", id="cfg-cancel")),
-                        rx.button(
-                            rx.cond(ManpowerState.cfg_saving,
-                                    rx.spinner(size="1"),
-                                    rx.icon("save", size=14)),
-                            "Save Configuration", color_scheme="indigo",
-                            on_click=ManpowerState.save_config,
-                            disabled=ManpowerState.cfg_saving,
-                            id="cfg-save"),
-                        width="100%", align="center", flex_shrink="0",
-                        border_top=f"1px solid {ds.BORDER}",
-                        padding_top="0.75em"),
-                    spacing="4", width="100%", height="100%",
-                    min_height="0",
-                ),
-                width="min(720px, 92vw)",
-                style={
-                    "maxWidth": "min(720px, 92vw)",
-                    "maxHeight": "85vh",
-                    "display": "flex",
-                    "flexDirection": "column",
-                },
-                background=ds.BG, padding="1.5em",
+    return ui.form_dialog(
+        ui.form_section(
+            "Workforce",
+            ui.form_grid(
+                ui.form_field("Opening FT headcount",
+                              _input("c_opening", "c-opening", "numeric"),
+                              "Blank = leave unchanged."),
+                ui.form_field("Budgeted headcount",
+                              _input("c_budget", "c-budget", "numeric")),
+                ui.form_field("Part-time conversion factor",
+                              _input("c_pt_factor", "c-pt-factor",
+                                     placeholder="e.g. 0.5"),
+                              "Effective staff = FT + PT × factor."),
+                ui.form_field("Turnover threshold (%)",
+                              _input("c_turnover", "c-turnover",
+                                     placeholder="e.g. 45")),
+                ui.form_field("Salary ratio target (%)",
+                              _input("c_ratio_target", "c-ratio-target",
+                                     placeholder="e.g. 6.818")),
             ),
-        open=ManpowerState.cfg_open,
-        on_open_change=lambda v: ManpowerState.close_config(),
+        ),
+        ui.form_section(
+            "Month-end payroll (RM)",
+            ui.form_grid(
+                ui.form_field("Basic salary + allowances",
+                              _input("p_salary", "p-salary",
+                                     placeholder="e.g. 13275.75"),
+                              "Blank = awaiting payroll (NULL)."),
+                ui.form_field("Overtime",
+                              _input("p_overtime", "p-overtime",
+                                     placeholder="e.g. 4198.50")),
+                ui.form_field("Support team cost",
+                              _input("p_support", "p-support",
+                                     placeholder="Optional")),
+            ),
+            hint="Payroll inputs are workbook month-end aggregates. Which "
+                 "management positions are included in Basic Salary + "
+                 "Allowances follows the workbook definition and remains "
+                 "subject to HQ confirmation.",
+        ),
+        open=M.cfg_open,
+        on_open_change=lambda v: M.close_config(),
+        title="Monthly Configuration & Payroll",
+        subtitle="Only changed staffing fields are saved; blank payroll "
+                 "fields explicitly clear to awaiting-payroll (NULL), never "
+                 "RM 0.",
+        close_id="cfg-close",
+        notices=[
+            rx.cond(M.mp_finalized, rx.callout(
+                "This month has a finalized snapshot. Changes affect live "
+                "results only; the preserved snapshot is never modified.",
+                icon="archive", color_scheme="violet", variant="soft",
+                width="100%")),
+            rx.cond(M.cfg_error != "", ds.error_callout(M.cfg_error)),
+        ],
+        actions=ui.dialog_actions(
+            save_label="Save Configuration", on_save=M.save_config,
+            saving=M.cfg_saving, save_id="cfg-save", cancel_id="cfg-cancel"),
     )
 
 
