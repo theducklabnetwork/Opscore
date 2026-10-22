@@ -73,13 +73,15 @@ def section_card(*children, title=None, subtitle=None, extra=None,
 
 
 # --- chips ----------------------------------------------------------------------
-def status_chip(text, color=None) -> rx.Component:
+def status_chip(text, color=None, id=None,
+                wrap: bool = False) -> rx.Component:
     """Status chip. ``color`` defaults to ds.status_color(text) for plain
     strings; pass the state-computed colour for Vars."""
     if color is None:
         color = ds.status_color(text) if isinstance(text, str) else "gray"
     return rx.badge(text, color_scheme=color, variant="soft", size="1",
-                    radius="full", white_space="nowrap")
+                    radius="full", id=id,
+                    white_space="normal" if wrap else "nowrap")
 
 
 def early_tag(tag, tip="") -> rx.Component:
@@ -120,7 +122,8 @@ def _value(value, compact=None, exact=None, size_wide="7",
 
 
 def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
-         tag=None, tag_tip="", id=None, size="7") -> rx.Component:
+         tag=None, tag_tip="", id=None, size="7",
+         chip_id=None) -> rx.Component:
     """Label + big value (+ chips, + sub-line). No border: use inside a
     section_card, or kpi_tile for a standalone tile."""
     items = [rx.text(label, size="2", color=ds.TEXT_MUTED, weight="medium"),
@@ -129,7 +132,7 @@ def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
         chips = []
         if chip is not None:
             text, color = chip
-            chips.append(_when(text, status_chip(text, color)))
+            chips.append(_when(text, status_chip(text, color, id=chip_id)))
         if tag is not None:
             chips.append(early_tag(tag, tag_tip))
         items.append(rx.hstack(*chips, spacing="1", wrap="wrap"))
@@ -150,6 +153,20 @@ def kpi_tile(label, value, **kw) -> rx.Component:
     )
 
 
+def stat_grid(*stats, columns=None) -> rx.Component:
+    """Stats inside a section card (no nested borders)."""
+    return rx.grid(
+        *stats,
+        columns=columns or rx.breakpoints(initial="2", md="4"),
+        spacing="5", width="100%",
+    )
+
+
+def note(text) -> rx.Component:
+    """One muted explanatory line under a group."""
+    return rx.text(text, size="1", color=ds.TEXT_FAINT)
+
+
 def kpi_grid(*tiles, columns=None, id=None) -> rx.Component:
     return rx.grid(
         *tiles,
@@ -161,12 +178,16 @@ def kpi_grid(*tiles, columns=None, id=None) -> rx.Component:
 # --- tables ----------------------------------------------------------------------
 _TABLE_STYLE = {
     "width": "100%",
+    # columns marked wide-only drop out on phones (< 768px)
+    "@media (max-width: 767px)": {
+        "& .wide-only": {"display": "none"},
+        "& th, & td": {"paddingLeft": "8px", "paddingRight": "8px"},
+    },
     "borderCollapse": "separate",
     "borderSpacing": "0",
     "fontSize": "14px",
     "fontVariantNumeric": "tabular-nums",
     "& th": {
-        "position": "sticky", "top": "0", "zIndex": "1",
         "background": CARD_BG, "color": ds.TEXT_MUTED,
         "fontWeight": "500", "fontSize": "12px", "textAlign": "left",
         "padding": "10px 14px", "whiteSpace": "nowrap",
@@ -177,33 +198,47 @@ _TABLE_STYLE = {
         "borderBottom": f"1px solid {ROW_BORDER}",
     },
     "& .num": {"textAlign": "right"},
+    "& td.wrap": {"whiteSpace": "normal"},
+    # Radix's badge class sets nowrap; let chips wrap in wrap cells
+    "& td.wrap .rt-Badge": {"whiteSpace": "normal", "height": "auto",
+                            "flexShrink": "1"},
     "& tbody tr:last-child td": {"borderBottom": "none"},
     "& tbody tr:hover td": {"background": ds.SURFACE_HOVER},
     "& tr.collapsed-row td": {"color": ds.TEXT_MUTED},
 }
 
 
-def th(label, numeric: bool = False) -> rx.Component:
-    return rx.el.th(label, class_name="num" if numeric else "")
+def _cls(numeric: bool, wide_only: bool, wrap: bool = False) -> str:
+    return " ".join(c for c, on in (("num", numeric),
+                                    ("wide-only", wide_only),
+                                    ("wrap", wrap)) if on)
 
 
-def td(*children, numeric: bool = False, **props) -> rx.Component:
-    return rx.el.td(*children, class_name="num" if numeric else "", **props)
+def th(label, numeric: bool = False, wide_only: bool = False) -> rx.Component:
+    return rx.el.th(label, class_name=_cls(numeric, wide_only))
 
 
-def data_table(columns, *body, id=None,
-               max_height: str = "640px") -> rx.Component:
-    """Detail table: sticky header; scrolls inside its own container
-    (horizontally on small screens), never overflowing the page.
+def td(*children, numeric: bool = False, wide_only: bool = False,
+       wrap: bool = False, **props) -> rx.Component:
+    """Table cell; ``wrap`` lets long labels/chips wrap (narrow tables)."""
+    return rx.el.td(*children, class_name=_cls(numeric, wide_only, wrap),
+                    **props)
 
-    ``columns``: list of labels or (label, numeric) tuples; ``body``: row
-    components (``rx.el.tr`` built with ``td``), foreach/cond allowed."""
+
+def data_table(columns, *body, id=None) -> rx.Component:
+    """Detail table. Grows with its rows and scrolls with the page (no
+    fixed-height inner scroll); only overflows sideways, inside its own
+    container, on narrow screens. (A sticky header is not possible together
+    with that sideways scroll in plain CSS, so the header is not sticky.)
+
+    ``columns``: labels or (label, numeric[, wide_only]) tuples — wide_only
+    columns are hidden on phones (pass the same flag to their ``td``);
+    ``body``: row components (``rx.el.tr`` built with ``td``)."""
     heads = [th(c) if isinstance(c, str) else th(*c) for c in columns]
     return rx.box(
         rx.el.table(rx.el.thead(rx.el.tr(*heads)), rx.el.tbody(*body),
                     style=_TABLE_STYLE),
-        id=id, width="100%", max_width="100%", max_height=max_height,
-        overflow="auto",
+        id=id, width="100%", max_width="100%", overflow_x="auto",
     )
 
 

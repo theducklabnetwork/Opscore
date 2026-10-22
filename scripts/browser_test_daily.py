@@ -133,10 +133,15 @@ def main() -> int:
                   "#daily-table >> text=29 days not reported").count() == 1)
         check("Achievement is MTD / Level 1 (11.2%)",
               page.locator("#kpi-achievement >> text=11.2%").count() == 1)
-        check("projected figures carry the projection label",
-              page.locator("#kpi-projected >> text=Projected:").count() == 1
-              and page.locator(
-                  "#kpi-projected >> text=Early estimate").count() == 1)
+        check("projection chip + early tag once, on projected achievement",
+              page.locator(
+                  "#kpi-proj-achievement >> text=Projected:").count() == 1
+              and page.locator("#daily-kpis >> text=Early estimate")
+              .count() == 1
+              and page.locator("#kpi-projected >> text=Projected:")
+              .count() == 0)
+        check("Record a day enabled for the branch manager",
+              page.locator("#record-day").is_enabled())
         page.screenshot(path=str(OUT / "daily_overview_dark.png"),
                         full_page=True)
 
@@ -182,6 +187,14 @@ def main() -> int:
         check("sales untouched by stock-only edit",
               page.input_value("#f-sales") == "15000.00")
         page.click("#entry-close")
+
+        # --- Record a day opens the entry dialog on an unreported date ------
+        page.click("#record-day")
+        page.wait_for_selector("#f-sales", state="visible", timeout=15000)
+        check("Record a day opens an empty entry for an unreported day",
+              page.input_value("#f-sales") == "")
+        page.click("#entry-close")
+        page.wait_for_timeout(400)
 
         # --- create a new day (Oct 3) ------------------------------------------
         show_all_days(page)
@@ -291,6 +304,8 @@ def main() -> int:
               vp.locator("#daily-table >> text=RM 15,000.00").count() > 0)
         check("viewer gets View button, not Edit",
               vp.locator("#daily-table >> text=View").count() > 0)
+        check("viewer: Record a day disabled",
+              vp.locator("#record-day").is_disabled())
         vp.click("#daily-table >> text=View >> nth=0")
         vp.wait_for_selector("#f-sales", state="visible", timeout=15000)
         check("viewer form inputs disabled",

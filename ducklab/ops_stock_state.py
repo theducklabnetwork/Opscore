@@ -62,12 +62,19 @@ class StockState(ManpowerState):
     kpi_missing: str = "—"
     kpi_extra: str = "—"
     kpi_days: str = "—"
+    kpi_total_loss_sub: str = ""
+    kpi_ratio_sub: str = ""
     st_status: str = ""
     st_status_color: str = "gray"
 
     cat_rows: list[dict[str, str]] = []        # all 13 codes
-    day_rows: list[dict[str, str]] = []        # daily table
+    day_rows: list[dict[str, str]] = []        # daily table (every day)
+    st_rows_reported: list[dict[str, str]] = []  # days with a record
+    st_hidden_count: int = 0                   # unreported days (collapsed)
+    st_hidden_label: str = ""
+    st_show_hidden: bool = False
     chart_rows: list[dict] = []                # trend (reported days only)
+    st_chart_ready: bool = False               # >= 3 days with entries
     chart_fig_dark: go.Figure = go.Figure()                  # Plotly trend (dark theme)
     chart_fig_light: go.Figure = go.Figure()                 # Plotly trend (light theme)
     comp_fig_dark: go.Figure = go.Figure()                   # Plotly composition (dark)
@@ -95,11 +102,17 @@ class StockState(ManpowerState):
         self.kpi_missing = "—"
         self.kpi_extra = "—"
         self.kpi_days = "—"
+        self.kpi_total_loss_sub = ""
+        self.kpi_ratio_sub = ""
         self.st_status = ""
         self.st_status_color = "gray"
         self.cat_rows = []
         self.day_rows = []
+        self.st_rows_reported = []
+        self.st_hidden_count = 0
+        self.st_hidden_label = ""
         self.chart_rows = []
+        self.st_chart_ready = False
         self.chart_fig_dark = go.Figure()
         self.chart_fig_light = go.Figure()
         self.comp_fig_dark = go.Figure()
@@ -144,6 +157,10 @@ class StockState(ManpowerState):
             return guard
         yield OpsState.load_ops()
         yield StockState.load_stock_data()
+
+    @rx.event
+    def toggle_stock_hidden_days(self):
+        self.st_show_hidden = not self.st_show_hidden
 
     @rx.event
     def select_category(self, code: str) -> None:
@@ -243,6 +260,8 @@ class StockState(ManpowerState):
         self.kpi_extra = ds.fmt_rm(st.totals_by_code.get("EXTRA", 0))
         days_with_loss = sum(1 for d in days if d.stock_losses)
         self.kpi_days = f"{days_with_loss} / {s.days_in_month}"
+        self.kpi_total_loss_sub = (f"{days_with_loss} of {s.days_in_month} "
+                                   "days with stock entries")
         # One status for Stock, Report and Overview (kpi.py)
         self.st_status = kpi.stock_status_label(
             st.total_loss_cents, sales_mtd, target, s.days_entered)
@@ -257,6 +276,11 @@ class StockState(ManpowerState):
             else:
                 var_pp = (ratio - kpi.to_decimal(target)) * 100
                 self.kpi_variance = f"{float(var_pp):+.1f} pp"
+        self.kpi_ratio_sub = (
+            "No target set" if target is None
+            else f"Target {self.kpi_target}"
+            + ("" if self.kpi_variance == "—"
+               else f" · {self.kpi_variance}"))
 
         # --- category breakdown ------------------------------------------
         rows: list[dict[str, str]] = []
@@ -289,12 +313,14 @@ class StockState(ManpowerState):
         by_date = {d.date: d for d in days}
         drows: list[dict[str, str]] = []
         crows: list[dict] = []
-        trend_labels: list[str] = []          # every calendar day
+        trend_labels: list[str] = []          # every calendar day (hover)
+        trend_days: list[int] = []            # numeric x (day of month)
         trend_vals: list = []                 # RM loss or None (gap)
         for i in range(1, n_days + 1):
             d = date(y, m, i)
             rec = by_date.get(d)
             trend_labels.append(d.strftime("%d %b"))
+            trend_days.append(i)
             if rec is None:
                 drows.append({
                     "date": d.isoformat(), "label": d.strftime("%d %b"),
@@ -337,12 +363,20 @@ class StockState(ManpowerState):
             else:
                 trend_vals.append(None)
         self.day_rows = drows
+        self.st_rows_reported = [r for r in drows
+                                 if r["status"] != ds.DAY_NOT_REPORTED]
+        self.st_hidden_count = len(drows) - len(self.st_rows_reported)
+        self.st_hidden_label = ds.days_not_reported_label(
+            self.st_hidden_count)
         self.chart_rows = crows
+        self.st_chart_ready = len(crows) >= 3
         # Plotly figures, one per theme (identical data, styling only)
         self.chart_fig_dark = ops_charts.daily_line(
-            trend_labels, trend_vals, dark=True, name="Total loss")
+            trend_labels, trend_vals, dark=True, name="Total loss",
+            y_title="", day_numbers=trend_days)
         self.chart_fig_light = ops_charts.daily_line(
-            trend_labels, trend_vals, dark=False, name="Total loss")
+            trend_labels, trend_vals, dark=False, name="Total loss",
+            y_title="", day_numbers=trend_days)
         comp_items = [{"code": c["code"], "name": c["name"],
                        "total_cents": st.totals_by_code.get(c["code"], 0),
                        "sign": c["contribution_sign"]} for c in codes]

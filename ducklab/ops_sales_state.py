@@ -45,6 +45,7 @@ class SalesState(StoresState):
     sp_month_end_compact: str = "—"
     sp_month_end_exact: str = "—"
     sp_month_end_label: str = "Month-End Sales"
+    sp_month_end_sub: str = ""               # "Projected" / "Actual"
     sp_l1_achievement: str = "—"           # projected month-end / Level 1
     sp_l1_achievement_sub: str = ""
     sp_needed: str = "—"
@@ -61,7 +62,8 @@ class SalesState(StoresState):
     sp_early_tag: str = ""
     sp_early_tip: str = ""
 
-    # target ladder + comparisons
+    # target ladder + comparisons (Levels 2-4 only when an uplift is set)
+    sp_levels_configured: bool = True
     sp_ladder: list[dict[str, str]] = []
     sp_comparisons: list[dict[str, str]] = []
 
@@ -91,6 +93,8 @@ class SalesState(StoresState):
         self.sp_mtd_achievement = "—"
         self.sp_mtd_achievement_sub = ""
         self.sp_month_end_label = "Month-End Sales"
+        self.sp_month_end_sub = ""
+        self.sp_levels_configured = True
         self.sp_l1_achievement = "—"
         self.sp_l1_achievement_sub = ""
         self.sp_needed_sub = ""
@@ -180,11 +184,12 @@ class SalesState(StoresState):
         self.sp_mtd_achievement = (ds.fmt_pct(s.mtd_achievement_l1)
                                    if entered else "—")
         self.sp_mtd_achievement_sub = (
-            "MTD sales vs Level 1 " + ds.fmt_rm0(level1)
+            "Level 1 target " + ds.fmt_rm0(level1)
             if level1 is not None else "No Level 1 target")
         complete = pstate == "actual"
         self.sp_month_end_label = ("Month-End Sales (Actual)" if complete
                                    else "Month-End Sales (Projected)")
+        self.sp_month_end_sub = "Actual" if complete else "Projected"
         self._set_money("month_end", s.month_end_sales_cents)
         self.sp_l1_achievement = ds.fmt_pct(s.achievement_by_level.get("level1"))
         self.sp_l1_achievement_sub = ("Month-end vs Level 1" if complete
@@ -204,6 +209,11 @@ class SalesState(StoresState):
         self.sp_days = f"{entered} / {dim}"
         self._set_money("avg_day", s.average_per_day)
 
+        # same rule as the Overview: without a Level 2-4 uplift the levels
+        # equal Level 1 (base x (1 + 0)) -> show Level 1 only + a note
+        cfg = rep.config
+        self.sp_levels_configured = bool(cfg.level2_pct or cfg.level3_pct
+                                         or cfg.level4_pct)
         self.sp_ladder = [
             (lambda lbl, color, tag: {
              "level": f"Level {n}", "target": ds.fmt_rm(s.targets.get(name)),
@@ -215,27 +225,24 @@ class SalesState(StoresState):
                 *ds.projection_style(
                     pstate, s.status_by_level.get(name, "Awaiting data")))
             for n, name in enumerate(
-                ("level1", "level2", "level3", "level4"), start=1)
+                ("level1", "level2", "level3", "level4")
+                if self.sp_levels_configured else ("level1",), start=1)
         ]
         # growth comparison statuses are projected figures too while the
         # month is incomplete
-        g_ly, g_lyc, gtag = ds.projection_style(
-            pstate, s.growth_status_last_year)
-        g_lm, g_lmc, _ = ds.projection_style(pstate, s.growth_status_last_month)
-        self.sp_comparisons = [
-            {"label": "vs Same Month Last Year",
-             "growth": ds.fmt_pct(s.growth_last_year),
-             "status": g_ly, "color": g_lyc,
-             "early_tag": gtag,
-             "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
-                           if gtag else "")},
-            {"label": "vs Last Month",
-             "growth": ds.fmt_pct(s.growth_last_month),
-             "status": g_lm, "color": g_lmc,
-             "early_tag": gtag,
-             "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
-                           if gtag else "")},
-        ]
+        # ("No reference" never gets the prefix or the tag)
+        self.sp_comparisons = []
+        for label, growth, gstatus in (
+                ("vs Same Month Last Year", s.growth_last_year,
+                 s.growth_status_last_year),
+                ("vs Last Month", s.growth_last_month,
+                 s.growth_status_last_month)):
+            g_lbl, g_color, g_tag = ds.projection_style(pstate, gstatus)
+            self.sp_comparisons.append({
+                "label": label, "growth": ds.fmt_pct(growth),
+                "status": g_lbl, "color": g_color, "early_tag": g_tag,
+                "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
+                              if g_tag else "")})
 
         self.sp_spr = (ds.fmt_rm(s.spr) if s.spr is not None
                        else "Not available")

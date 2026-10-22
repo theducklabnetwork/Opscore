@@ -95,7 +95,8 @@ def main() -> int:
         # category click -> investigation panel
         page.wait_for_selector("#category-section", timeout=60000)
         page.wait_for_timeout(1000)
-        page.get_by_text("DMO", exact=True).first.click()
+        page.locator("#category-section").get_by_text(
+            "DMO", exact=True).first.click()
         page.wait_for_selector("#investigation-panel", timeout=15000)
         panel = page.locator("#investigation-panel").inner_text()
         check("investigation panel shows DMO total", "RM 385.00" in panel)
