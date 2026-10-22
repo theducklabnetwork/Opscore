@@ -76,9 +76,14 @@ DIALOGS = {
 TABLES = {
     "daily": ("/ops/daily", "A01", "#daily-table"),
     "sales": ("/ops/sales", "S01", "#sales-daily-section"),
+    "stock-categories": ("/ops/stock", "A01", "#category-section"),
     "stock": ("/ops/stock", "A01", "#daily-section"),
+    "expenses-budget": ("/ops/expenses", "X01", "#budget-monitor"),
     "expenses": ("/ops/expenses", "X01", "#expense-register"),
     "actions": ("/ops/actions", "A01", "#actions-table"),
+    "manpower": ("/ops/manpower", "A01", "#staffing-table"),
+    "report-expenses": ("/ops/report", "A01", "#expenses-section"),
+    "report-stock": ("/ops/report", "A01", "#stock-section"),
 }
 MODES = {
     "desktop-dark": ({"width": 1440, "height": 900}, "dark"),

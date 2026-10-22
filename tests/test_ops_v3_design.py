@@ -97,7 +97,7 @@ class NegativeMoneyTests(unittest.TestCase):
         self.assertEqual(ds.fmt_rm_compact(-706666, whole_below=True),
                          f"{m}RM 7,067")
         self.assertEqual(ops_charts.fmt_rm(-8500.0), f"{m}RM 85.00")
-        self.assertEqual(ops_charts.fmt_money_compact(-500), f"{m}RM 5.00")
+        self.assertEqual(ops_charts.fmt_money_compact(-500), f"{m}RM 5")
         self.assertEqual(ds.fmt_rm(0), "RM 0.00")         # zero unsigned
         self.assertEqual(ds.fmt_rm(None), "—")
 
@@ -106,8 +106,8 @@ class ChipColourTests(unittest.TestCase):
     def test_treatment_chips_are_not_the_accent(self):
         colours = {t: ds.status_color(t)
                    for t in ("Included", "Offset", "Info only")}
-        # V4: a treatment is a classification, never an attention status
-        self.assertEqual(colours, {"Included": "gray", "Offset": "gray",
+        # V5: Offset green (as the composition chart), the others gray
+        self.assertEqual(colours, {"Included": "gray", "Offset": "green",
                                    "Info only": "gray"})
         self.assertNotIn("indigo", colours.values())
 

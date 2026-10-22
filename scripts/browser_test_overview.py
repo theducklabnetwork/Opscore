@@ -102,11 +102,14 @@ def main() -> int:
                                        "Within budget", "Within target",
                                        "Over target", "No target",
                                        "No budget", "No payments yet")))
-        cc = page.locator("#command-center").inner_text()
-        check("command center: sales MTD + budget + days",
-              all(k in cc for k in ("Sales MTD", "Level 1 budget",
-                                    "Days entered", "Open actions",
-                                    "Overdue actions")))
+        # the V4 Overview has no "command center" card: the same facts are
+        # in the pillar strip, the targets panel, the header line and At a
+        # glance
+        check("sales MTD, Level 1 target, days reported, open actions",
+              "Sales MTD" in strip
+              and "Level 1" in page.locator("#targets-panel").inner_text()
+              and "days reported" in body
+              and "Open actions" in page.locator("#at-a-glance").inner_text())
         check("needs attention: seeded overdue actions shown",
               "overdue action" in body)
         check("needs attention: unreported days (month in progress)",
@@ -115,7 +118,7 @@ def main() -> int:
               page.locator("div.js-plotly-plot").count() >= 1)
 
         # card link preserves store + month
-        page.locator("#command-center a").first.click()
+        page.locator("#pillar-strip a").first.click()
         page.wait_for_timeout(3000)
         check("card link opens a module page",
               "/ops/" in page.url and page.url != f"{BASE}/ops")

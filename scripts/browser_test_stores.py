@@ -126,22 +126,27 @@ def main() -> int:
         page.wait_for_timeout(1000)
         page.fill("#setup-stock-loss-target", "1.5")
         page.fill("#setup-level1-base-cents", "200000")
-        page.fill("#setup-part-timer-factor", "50")
+        # a factor (FT + factor × PT), not a percentage
+        page.fill("#setup-part-timer-factor", "0.5")
         page.screenshot(path=str(OUT / "setup-desktop-dark.png"))
         print("  -> setup-desktop-dark.png")
         page.click("#setup-save")
         page.wait_for_timeout(2000)
+        # the notice text itself ("saved" alone also matches the page's
+        # help line about Level 1 base, which hid a failed save)
         check("setup saved (notice)",
-              "saved" in page.locator("body").inner_text().lower())
+              "Monthly setup saved." in page.locator("body").inner_text())
 
         # 4. stock page shows target status (one seeded day so a ratio exists)
         seed_day(code)
+        # the status chip renders only once the selected store has a
+        # status, so wait for the selector, pick the new store, then the chip
         page.goto(f"{BASE}/ops/stock")
-        page.wait_for_selector("#stock-status", timeout=60000)
+        page.wait_for_selector("#store-selector", timeout=60000)
         page.wait_for_timeout(1200)
         choose(page, "#store-selector", f"{code} — Task Seven QA",
-               wait_selector=None)
-        page.wait_for_timeout(2500)
+               wait_selector="#stock-status")
+        page.wait_for_timeout(1500)
         status = page.locator("#stock-status").inner_text()
         check(f"stock page shows target status (got '{status}')",
               status in ("Within target", "Over target"))

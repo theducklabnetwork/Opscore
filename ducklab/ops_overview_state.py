@@ -75,6 +75,9 @@ class OverviewState(ActionsState):
     spark_sales_light: go.Figure = go.Figure()
     spark_stock_dark: go.Figure = go.Figure()
     spark_stock_light: go.Figure = go.Figure()
+    # a sparkline needs 3 reported days; fewer -> "Not enough data yet"
+    spark_sales_ready: bool = False
+    spark_stock_ready: bool = False
 
     # pace chart (same data as /ops/sales)
     pace_fig_dark: go.Figure = go.Figure()
@@ -105,6 +108,8 @@ class OverviewState(ActionsState):
         self.spark_sales_light = go.Figure()
         self.spark_stock_dark = go.Figure()
         self.spark_stock_light = go.Figure()
+        self.spark_sales_ready = False
+        self.spark_stock_ready = False
 
     # --- selector overrides -------------------------------------------------
     @rx.event
@@ -481,6 +486,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
             loss_daily[d.date.day - 1] = kpi.total_loss_cents(
                 d.stock_losses, signs) / 100
     spark_days = list(range(1, dim + 1))
+    out["spark_sales_ready"] = sum(v is not None for v in sales_daily) >= 3
+    out["spark_stock_ready"] = sum(v is not None for v in loss_daily) >= 3
     out["spark_sales_dark"] = ops_charts.sparkline(spark_days, sales_daily,
                                                    dark=True)
     out["spark_sales_light"] = ops_charts.sparkline(spark_days, sales_daily,

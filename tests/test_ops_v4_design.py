@@ -97,7 +97,8 @@ class ChipTests(unittest.TestCase):
         st.report_categories = [{"name": "Water", "status": "OVER BUDGET"}]
         self.assertEqual(st.report_colors, {"sales": "amber",
                                             "manpower": "red",
-                                            "stock": "green"})
+                                            "stock": "green",
+                                            "expenses": "gray"})
         self.assertEqual(st.report_category_rows[0]["color"], "red")
         st.report = {"sales": {"status_l1": "Achieved"}}
         self.assertEqual(st.report_colors["sales"], "green")

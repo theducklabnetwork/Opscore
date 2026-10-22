@@ -190,9 +190,9 @@ STATUS_COLOR: dict[str, str] = {
     "Disputed": "red", "Unverified": "amber", "Verified": "green",
     # expense transaction status
     "Paid": "green", "Pending": "amber", "Cancelled": "gray",
-    # stock-loss code treatment: a classification, not a status that needs
-    # attention, so always neutral gray (the chart keeps its own colours)
-    "Included": "gray", "Offset": "gray", "Info only": "gray",
+    # stock-loss code treatment (see TREATMENT): Offset green as in the
+    # composition chart; Included and Info only neutral gray
+    "Included": "gray", "Offset": "green", "Info only": "gray",
     # actions
     "Open": "blue", "In progress": "amber", "Blocked": "red",
     "Done": "green",
@@ -215,6 +215,11 @@ STATUS_COLOR: dict[str, str] = {
     # misc engine strings
     "Restricted": "gray",
 }
+
+
+# Stock-loss code treatment by contribution sign (store_ops_db
+# STOCK_LOSS_CODES): one label everywhere (Stock page, Monthly Report).
+TREATMENT = {1: "Included", -1: "Offset", 0: "Info only"}
 
 
 def status_color(status: str, default: str = "gray") -> str:

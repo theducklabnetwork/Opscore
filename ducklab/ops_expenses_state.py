@@ -355,6 +355,9 @@ class ExpensesState(DailyState):
                 if e.incurred_date else "—",
             "incurred_iso": e.incurred_date.isoformat()
                 if e.incurred_date else "",
+            # phones: day + month only (the year is the selected month's)
+            "incurred_short": e.incurred_date.strftime("%d %b")
+                if e.incurred_date else "—",
             "paid": e.paid_date.strftime("%d %b %Y") if e.paid_date else "—",
             "paid_iso": e.paid_date.isoformat() if e.paid_date else "",
             "category": cat_names.get(e.category_id, "Unknown")
@@ -362,6 +365,8 @@ class ExpensesState(DailyState):
             "category_id": str(e.category_id or ""),
             "description": e.description or "",
             "amount": ds.fmt_rm(e.amount_cents),
+            "amount_compact": ds.fmt_rm_compact(e.amount_cents,
+                                                whole_below=True),
             "amount_cents": (f"{abs(e.amount_cents):012d}"
                              if e.amount_cents is not None else ""),
             "paid_by": e.paid_by or "—",

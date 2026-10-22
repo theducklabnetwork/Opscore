@@ -153,6 +153,7 @@ def _category_section() -> rx.Component:
              ("Share of loss", True), ("Days", True),
              "Treatment"],
             rx.foreach(S.cat_rows, _category_row),
+            phone=("Code", "Monthly total", "Treatment"),
         ),
         _investigation(),
         title="Category breakdown",
@@ -167,7 +168,7 @@ def _category_section() -> rx.Component:
 # 4. Daily table (unreported days collapsed)
 # ---------------------------------------------------------------------------
 
-# phones scroll sideways with Edit pinned to the right edge
+# phones show Date, Total loss, Status and Edit
 _DAY_COLS = ["Date", ("Sales", True),
              ("Total loss", True), ("Ratio", True), ("Missing", True),
              ("Extra", True), "Status", ""]
@@ -177,7 +178,7 @@ def _day_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.hstack(rx.text(row["label"], weight="medium"),
                         rx.text(row["weekday"], size="1",
-                                color=ds.TEXT_FAINT),
+                                color=ds.TEXT_FAINT, class_name="ph-hide"),
                         spacing="2", align="baseline")),
         ui.td(row["sales"], numeric=True),
         ui.td(row["loss"], numeric=True),
@@ -198,6 +199,7 @@ def _daily_section() -> rx.Component:
                          S.st_hidden_label, S.st_show_hidden,
                          S.toggle_stock_hidden_days, _day_row,
                          len(_DAY_COLS), toggle_id="stock-hidden-toggle"),
+            phone=("Date", "Total loss", "Status", ""),
         ),
         ui.status_legend(_DAY_STATUSES),
         title="Daily stock loss", id="daily-section",

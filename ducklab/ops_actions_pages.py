@@ -58,7 +58,8 @@ def _filters() -> rx.Component:
     )
 
 
-# phones scroll sideways with Edit pinned; Pillar hides at 768-1535px
+# phones show Issue, Priority, Status and Edit; Pillar hides at 768-1535px
+_PHONE = ("Issue", "Priority", "Status", "")
 _COLS = ["Raised", ("Pillar", False, True), "Issue",
          "Priority",
          "Status",
@@ -72,11 +73,18 @@ def _row(row) -> rx.Component:
         ui.td(row["pillar"], xl_only=True),
         ui.td(rx.vstack(
             rx.text(row["issue"], size="2"),
-            rx.cond(row["carried"],
-                    rx.badge("Carried over", size="1", variant="outline",
-                             color_scheme="violet", radius="full")),
+            rx.hstack(
+                rx.cond(row["carried"],
+                        rx.badge("Carried over", size="1", variant="outline",
+                                 color_scheme="violet", radius="full")),
+                # the Due column is off on phones: its badge moves here
+                rx.cond(row["overdue"],
+                        rx.box(ui.status_chip("Overdue", "red"),
+                               class_name="ph-only")),
+                spacing="1", wrap="wrap"),
             spacing="1", align="start"),
-            wrap=True, style={"minWidth": "min(220px, 42vw)"}),
+            wrap=True, style={"minWidth": "min(220px, 42vw)",
+                              ui.PHONE: {"minWidth": "0"}}),
         ui.td(ui.status_chip(row["priority"], row["priority_color"])),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
         ui.td(row["pic"]),
@@ -99,6 +107,7 @@ def _table() -> rx.Component:
         rx.cond(
             A.loaded & (A.rows.length() > 0),
             ui.data_table(_COLS, rx.foreach(A.filtered_rows, _row),
+                          phone=_PHONE,
                           hidden_note="Pillar shows from 1536px wide and "
                                       "in each action's Edit dialog."),
             ui.empty_state("No actions for this month",

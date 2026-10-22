@@ -355,6 +355,9 @@ def report_page() -> rx.Component:
 
 app = rx.App(
     stylesheets=["/drawer_fixes.css"],
+    # page language: screen readers, and CSS hyphenation of long words in
+    # narrow phone table columns
+    html_lang="en",
 )
 
 # --- DuckLab Operations: authentication ---

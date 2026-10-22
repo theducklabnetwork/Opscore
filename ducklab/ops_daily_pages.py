@@ -85,12 +85,14 @@ def _day_row(row) -> rx.Component:
             rx.cond(
                 DailyState.can_write,
                 rx.button(
-                    rx.icon("pencil", size=13), "Edit", size="1",
+                    rx.icon("pencil", size=13, class_name="ph-hide"), "Edit",
+                    size="1",
                     variant="soft",
                     on_click=DailyState.open_entry(row["iso"]),
                 ),
                 rx.button(
-                    rx.icon("eye", size=13), "View", size="1",
+                    rx.icon("eye", size=13, class_name="ph-hide"), "View",
+                    size="1",
                     variant="ghost",
                     on_click=DailyState.open_entry(row["iso"]),
                 ),
@@ -122,6 +124,7 @@ def _records_table() -> rx.Component:
                          DailyState.show_hidden,
                          DailyState.toggle_hidden_days, _day_row, len(_COLS),
                          toggle_id="daily-hidden-toggle"),
+            phone=("Date", "Sales", "Status", ""),
         ),
         ui.status_legend(
             note="Status reflects all entered fields, not sales alone. "
