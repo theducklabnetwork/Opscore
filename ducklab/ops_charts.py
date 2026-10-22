@@ -16,7 +16,10 @@ Semantics enforced here:
 - pace: actual cumulative line stops at the last reported day.
 - budget bars: blank (None) budget = no bar.
 - composition: negative contributions (e.g. Extra) plotted as offsets;
-  info-only categories visually distinct and labelled "not in Total Loss".
+  info-only categories visually distinct and labelled "not in Total Loss";
+  categories that are zero for the month are left out.
+- legends sit above the plot (never under the x-axis labels, which can
+  rotate on phones); long category labels wrap onto two lines.
 """
 
 from __future__ import annotations
@@ -110,11 +113,13 @@ def _base_layout(pal: dict, y_title: str, x_title: str = "") -> dict:
         margin=dict(l=8, r=8, t=12, b=8),
         # quiet axes: horizontal gridlines only, no zero line / axis line
         xaxis=dict(title=x_title, showgrid=False, zeroline=False,
-                   showline=False, color=pal["muted"]),
+                   showline=False, color=pal["muted"], automargin=True),
         yaxis=dict(title=y_title, gridcolor=pal["grid"], zeroline=False,
-                   showline=False, color=pal["muted"]),
-        legend=dict(orientation="h", yanchor="top", y=-0.22,
-                    xanchor="center", x=0.5, font=dict(size=11)),
+                   showline=False, color=pal["muted"], automargin=True),
+        # above the plot: x-axis labels (which may rotate on narrow
+        # screens) can never run into it
+        legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                    xanchor="left", x=0, font=dict(size=11)),
         hovermode="x unified",
         autosize=True,
     )
@@ -230,6 +235,19 @@ def pace_chart(days: Sequence[int],
     return fig
 
 
+def wrap_label(text: str, width: int = 12) -> str:
+    """Category axis label on at most two lines ("Repairs &<br>
+    Maintenance"); short labels unchanged."""
+    if len(text) <= width or " " not in text:
+        return text
+    words, first = text.split(" "), ""
+    while words and len(first) + len(words[0]) <= width:
+        first = f"{first} {words.pop(0)}".strip()
+    if not first:
+        first = words.pop(0)
+    return f"{first}<br>{' '.join(words)}" if words else first
+
+
 # ---------------------------------------------------------------------------
 # 3. grouped bars: budget vs actual per category
 # ---------------------------------------------------------------------------
@@ -241,16 +259,19 @@ def budget_vs_actual(categories: Sequence[str],
     """None budget = no budget bar for that category."""
     pal = _pal(dark)
     fig = go.Figure()
+    x = [wrap_label(c) for c in categories]
+    names = list(categories)
     fig.add_trace(go.Bar(
-        x=list(categories),
-        y=[None if b is None else b / 100 for b in budgets_cents],
+        x=x, y=[None if b is None else b / 100 for b in budgets_cents],
         name="Budget", marker_color=pal["budget"], opacity=0.55,
-        hovertemplate="%{x}<br>Budget: RM %{y:,.2f}<extra></extra>",
+        customdata=names,
+        hovertemplate="%{customdata}<br>Budget: RM %{y:,.2f}<extra></extra>",
     ))
     fig.add_trace(go.Bar(
-        x=list(categories), y=[a / 100 for a in actuals_cents],
+        x=x, y=[a / 100 for a in actuals_cents],
         name="Actual (paid)", marker_color=pal["accent"],
-        hovertemplate="%{x}<br>Actual: RM %{y:,.2f}<extra></extra>",
+        customdata=names,
+        hovertemplate="%{customdata}<br>Actual: RM %{y:,.2f}<extra></extra>",
     ))
     layout = _base_layout(pal, y_title)
     layout["barmode"] = "group"
@@ -272,6 +293,7 @@ def composition(items: Sequence[dict], dark: bool,
     """
     pal = _pal(dark)
     fig = go.Figure()
+    items = [i for i in items if i["total_cents"]]  # zero this month: omit
     losses = [i for i in items if i["sign"] == 1]
     offsets = [i for i in items if i["sign"] == -1]
     infos = [i for i in items if i["sign"] == 0]

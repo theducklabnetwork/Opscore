@@ -179,15 +179,32 @@ def kpi_grid(*tiles, columns=None, id=None) -> rx.Component:
 
 
 # --- tables ----------------------------------------------------------------------
+# Narrow screens never drop columns: the table scrolls sideways inside its
+# own container. Tables whose last column is the row action (Edit) pin that
+# column to the right edge with a rule + soft shadow, so Edit is always in
+# view; other tables get a fade at the right edge (see data_table).
+_ACT = "&.has-act tr:not(.collapsed-row) > :last-child"
 _TABLE_STYLE = {
     "width": "100%",
-    # columns marked wide-only drop out on phones (< 768px)
-    # xl-only columns (secondary detail) need a very wide screen
-    "@media (max-width: 1535px)": {"& .xl-only": {"display": "none"}},
+    # xl-only columns (secondary detail, also in the row's dialog) hide on
+    # tablet/desktop widths below 1536px so Edit stays in view there; phones
+    # scroll and show them
+    "@media (min-width: 768px) and (max-width: 1535px)": {
+        "& .xl-only": {"display": "none"}},
     "@media (max-width: 767px)": {
-        "& .wide-only": {"display": "none"},
         "& th, & td": {"paddingLeft": "8px", "paddingRight": "8px"},
+        # room under the right-edge fade once scrolled to the end
+        "&:not(.has-act) tr > :last-child": {"paddingRight": "28px"},
     },
+    "@media (max-width: 991px)": {
+        _ACT: {"borderLeft": f"1px solid {CARD_BORDER}",
+               "boxShadow": "-8px 0 10px -8px rgba(0, 0, 0, 0.35)",
+               "paddingLeft": "10px"},
+    },
+    _ACT: {"position": "sticky", "right": "0", "zIndex": "1",
+           "background": CARD_BG},
+    "&.has-act tbody tr:not(.collapsed-row):hover > td:last-child": {
+        "background": ds.SURFACE_HOVER},
     "borderCollapse": "separate",
     "borderSpacing": "0",
     "fontSize": "14px",
@@ -213,45 +230,65 @@ _TABLE_STYLE = {
 }
 
 
-def _cls(numeric: bool, wide_only: bool, wrap: bool = False,
-         xl_only: bool = False) -> str:
-    return " ".join(c for c, on in (("num", numeric),
-                                    ("wide-only", wide_only),
-                                    ("wrap", wrap),
+def _cls(numeric: bool, wrap: bool = False, xl_only: bool = False) -> str:
+    return " ".join(c for c, on in (("num", numeric), ("wrap", wrap),
                                     ("xl-only", xl_only)) if on)
 
 
-def th(label, numeric: bool = False, wide_only: bool = False,
-       xl_only: bool = False) -> rx.Component:
-    return rx.el.th(label, class_name=_cls(numeric, wide_only,
-                                           xl_only=xl_only))
+def th(label, numeric: bool = False, xl_only: bool = False) -> rx.Component:
+    return rx.el.th(label, class_name=_cls(numeric, xl_only=xl_only))
 
 
-def td(*children, numeric: bool = False, wide_only: bool = False,
-       wrap: bool = False, xl_only: bool = False, **props) -> rx.Component:
-    """Table cell; ``wrap`` lets long labels/chips wrap; ``wide_only``
-    hides it on phones, ``xl_only`` below 1536px (match the column)."""
-    return rx.el.td(*children,
-                    class_name=_cls(numeric, wide_only, wrap, xl_only),
+def td(*children, numeric: bool = False, wrap: bool = False,
+       xl_only: bool = False, **props) -> rx.Component:
+    """Table cell; ``wrap`` lets long labels/chips wrap; ``xl_only`` hides
+    it at 768-1535px (match the column)."""
+    return rx.el.td(*children, class_name=_cls(numeric, wrap, xl_only),
                     **props)
 
 
-def data_table(columns, *body, id=None) -> rx.Component:
-    """Detail table. Grows with its rows and scrolls with the page (no
-    fixed-height inner scroll); only overflows sideways, inside its own
-    container, on narrow screens. (A sticky header is not possible together
-    with that sideways scroll in plain CSS, so the header is not sticky.)
+# right-edge fade over the sideways-scrolling area (tables without a
+# pinned action column); the table's last cells leave room under it
+_FADE_STYLE = {
+    "position": "relative",
+    "@media (max-width: 767px)": {"&::after": {
+        "content": '""', "position": "absolute", "top": "0", "right": "0",
+        "bottom": "0", "width": "28px", "pointerEvents": "none",
+        "background": f"linear-gradient(to right, transparent, {CARD_BG})",
+    }},
+}
 
-    ``columns``: labels or (label, numeric[, wide_only[, xl_only]])
-    tuples — wide_only columns are hidden on phones, xl_only ones below
-    1536px (pass the same flag to their ``td``);
+
+def data_table(columns, *body, id=None, hidden_note=None) -> rx.Component:
+    """Detail table. Grows with its rows and scrolls with the page (no
+    fixed-height inner scroll); on narrow screens it scrolls sideways
+    inside its own container (never hides columns there). (A sticky header
+    is not possible together with that sideways scroll in plain CSS, so the
+    header is not sticky.)
+
+    ``columns``: labels or (label, numeric[, xl_only]) tuples — xl_only
+    columns hide at 768-1535px (pass the same flag to their ``td``) and
+    ``hidden_note`` then says where their values are. A last column
+    labelled "" is the row action (Edit/View): it stays pinned to the
+    right edge while the table scrolls.
     ``body``: row components (``rx.el.tr`` built with ``td``)."""
     heads = [th(c) if isinstance(c, str) else th(*c) for c in columns]
-    return rx.box(
+    has_act = columns[-1] == ""
+    table = rx.box(
         rx.el.table(rx.el.thead(rx.el.tr(*heads)), rx.el.tbody(*body),
-                    style=_TABLE_STYLE),
-        id=id, width="100%", max_width="100%", overflow_x="auto",
+                    style=_TABLE_STYLE,
+                    class_name="has-act" if has_act else ""),
+        width="100%", max_width="100%", overflow_x="auto",
     )
+    items = [rx.box(table, width="100%", min_width="0",
+                    style={} if has_act else _FADE_STYLE,
+                    class_name="kit-table")]
+    if hidden_note is not None:
+        items.append(rx.box(note(hidden_note),
+                            display=rx.breakpoints(initial="none", sm="block",
+                                                   xl="none")))
+    return rx.vstack(*items, id=id, spacing="2", width="100%",
+                     min_width="0", align="stretch")
 
 
 def collapsed_row(n_cols: int, label, expanded, on_toggle,
@@ -325,3 +362,132 @@ def chart_card(title, chart, *, ready, subtitle=None, detail=None,
     "Not enough data yet" instead of a near-empty plot."""
     return section_card(rx.cond(ready, chart, not_enough_data(detail)),
                         title=title, subtitle=subtitle, id=id)
+
+
+# --- entry dialogs and forms ---------------------------------------------------------
+# One look for every entry dialog: header (title, one-line subtitle, close),
+# pinned notices, a scrolling body of form sections, and a pinned footer
+# (status text left, Cancel + primary action right).
+_DIALOG_PAD = ["1em", "1.25em", "1.5em"]
+_RULE = f"1px solid {CARD_BORDER}"
+# consecutive form sections are separated by a soft rule
+_SECTION_RULES = {"& > .form-section + .form-section": {
+    "borderTop": f"1px solid {ROW_BORDER}", "paddingTop": "1.25em"}}
+
+
+def form_field(label, control, hint=None, *, required=False,
+               clear=None) -> rx.Component:
+    """Label (text, or a component for a richer label), control (stretched
+    to the column width), optional hint and an optional "Clear saved
+    value" checkbox (``clear``) under it."""
+    head = [label if isinstance(label, rx.Component)
+            else rx.text(label, size="2", weight="medium", color=ds.TEXT)]
+    if required:
+        head.append(rx.text("*", size="2", color=ds.ERROR))
+    items = [rx.hstack(*head, spacing="1", align="baseline"), control]
+    if hint is not None:
+        items.append(_when(hint, rx.text(hint, size="1",
+                                         color=ds.TEXT_FAINT)))
+    if clear is not None:
+        items.append(clear)
+    return rx.vstack(
+        *items, spacing="1", align="stretch", width="100%", min_width="0",
+        style={"& .rt-TextFieldRoot, & .rt-TextAreaRoot, & .rt-SelectTrigger":
+               {"width": "100%"}},
+    )
+
+
+def clear_box(checked, on_change, disabled=False, id=None) -> rx.Component:
+    """The "Clear saved value" checkbox under a field."""
+    return rx.checkbox("Clear saved value", checked=checked,
+                       on_change=on_change, size="1", disabled=disabled,
+                       id=id, color=ds.TEXT_MUTED)
+
+
+def form_grid(*fields, columns: str = "2") -> rx.Component:
+    """Fields in equal columns (one column on phones)."""
+    return rx.grid(*fields,
+                   columns=rx.breakpoints(initial="1", sm=columns),
+                   spacing="4", width="100%")
+
+
+def form_section(title, *children, extra=None, hint=None,
+                 id=None) -> rx.Component:
+    """A titled group of fields; groups are separated by a soft rule."""
+    head = [rx.text(title, size="3", weight="medium", color=ds.TEXT)]
+    if extra is not None:
+        head += [rx.spacer(), extra]
+    items = [rx.hstack(*head, width="100%", align="center", wrap="wrap",
+                       spacing="2"), *children]
+    if hint is not None:
+        items.append(note(hint))
+    return rx.vstack(*items, spacing="3", width="100%", align="stretch",
+                     class_name="form-section", id=id)
+
+
+def form_stack(*sections, **props) -> rx.Component:
+    """Form sections stacked with a soft rule between them (dialog bodies
+    and on-page forms such as Monthly Setup)."""
+    return rx.vstack(*sections, spacing="5", width="100%", align="stretch",
+                     style=_SECTION_RULES, **props)
+
+
+def dialog_actions(*, save_label, on_save, saving, save_id, cancel_id,
+                   can_save=True) -> list:
+    """Footer buttons: Cancel (closes) + the primary save action."""
+    save = rx.button(
+        rx.cond(saving, rx.spinner(size="1"), rx.icon("save", size=14)),
+        save_label, color_scheme="indigo", on_click=on_save,
+        disabled=saving, id=save_id)
+    return [
+        rx.dialog.close(rx.button("Cancel", variant="soft",
+                                  color_scheme="gray", id=cancel_id)),
+        save if can_save is True else rx.cond(can_save, save),
+    ]
+
+
+def form_dialog(*body, open, on_open_change, title, subtitle=None,
+                notices=(), actions=(), status=None, close_id=None,
+                width: str = "720px", **content_props) -> rx.Component:
+    """Centered entry dialog (Radix, portaled to <body>) with a pinned
+    header and footer; only the body scrolls."""
+    head_text = [rx.heading(title, size="4", weight="medium", color=ds.TEXT)]
+    if subtitle is not None:
+        head_text.append(rx.text(subtitle, size="2", color=ds.TEXT_MUTED))
+    header = rx.hstack(
+        rx.vstack(*head_text, spacing="1", align="start", min_width="0"),
+        rx.spacer(),
+        rx.dialog.close(rx.icon_button(rx.icon("x", size=16),
+                                       variant="ghost", color_scheme="gray",
+                                       id=close_id)),
+        width="100%", align="start", flex_shrink="0",
+        padding=_DIALOG_PAD, border_bottom=_RULE,
+    )
+    parts = [header]
+    if notices:
+        parts.append(rx.vstack(*notices, spacing="2", width="100%",
+                               padding_x=_DIALOG_PAD, padding_top="1em",
+                               flex_shrink="0",
+                               style={"&:empty": {"display": "none"}}))
+    parts.append(rx.scroll_area(
+        form_stack(*body, padding=_DIALOG_PAD),
+        type="auto", scrollbars="vertical", flex="1", min_height="0",
+        width="100%"))
+    parts.append(rx.hstack(
+        *([status] if status is not None else []),
+        rx.spacer(), *actions,
+        spacing="3", width="100%", align="center", flex_shrink="0",
+        padding_x=_DIALOG_PAD, padding_y="0.85em", border_top=_RULE,
+        background=CARD_BG,
+    ))
+    return rx.dialog.root(
+        rx.dialog.content(
+            *parts,
+            padding="0", background=ds.BG, overflow="hidden",
+            style={"width": f"min({width}, 92vw)",
+                   "maxWidth": f"min({width}, 92vw)", "maxHeight": "85vh",
+                   "display": "flex", "flexDirection": "column"},
+            **content_props,
+        ),
+        open=open, on_open_change=on_open_change,
+    )

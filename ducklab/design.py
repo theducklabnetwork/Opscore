@@ -190,9 +190,9 @@ STATUS_COLOR: dict[str, str] = {
     "Disputed": "red", "Unverified": "amber", "Verified": "green",
     # expense transaction status
     "Paid": "green", "Pending": "amber", "Cancelled": "gray",
-    # stock-loss code treatment (neutral / semantic, never the accent;
-    # matches the composition chart: offsets green, info-only muted)
-    "Included": "orange", "Offset": "green", "Info only": "gray",
+    # stock-loss code treatment: a classification, not a status that needs
+    # attention, so always neutral gray (the chart keeps its own colours)
+    "Included": "gray", "Offset": "gray", "Info only": "gray",
     # actions
     "Open": "blue", "In progress": "amber", "Blocked": "red",
     "Done": "green",

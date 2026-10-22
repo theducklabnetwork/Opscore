@@ -15,7 +15,9 @@ For cloud VMs / disposable checkouts (no .devdata, no real data). Steps:
      its --dev mode is a no-op once A01 exists.
   2. start `reflex run --env prod --single-port` against that DB;
   3. log in with Playwright and screenshot every /ops page at 1440px dark,
-     1440px light and 390px mobile (full page);
+     1440px light and 390px mobile (full page), then each entry dialog
+     (viewport, as OUT_DIR/<mode>/dialog-<name>.png) and, on mobile, the
+     wide tables on their own (OUT_DIR/mobile/table-<name>.png);
   4. stop the server (the temp DB is deleted unless --keep-db).
 
 Usage:
@@ -52,6 +54,7 @@ DEV_SEEDS = ("seed_ui_sales", "seed_ui_expenses_dev", "seed_ui_actions_dev")
 # page path -> store to show (the seeds put each module's data on one store)
 PAGES = {
     "/ops": "A01",
+    "/ops/report": "A01",
     "/ops/sales": "S01",
     "/ops/stock": "A01",
     "/ops/expenses": "X01",
@@ -59,6 +62,23 @@ PAGES = {
     "/ops/daily": "A01",
     "/ops/actions": "A01",
     "/ops/stores": None,
+}
+# dialog name -> (page, store, opener selector, selector inside the dialog)
+DIALOGS = {
+    "daily": ("/ops/daily", "A01", "#daily-table tbody button", "#f-sales"),
+    "expense": ("/ops/expenses", "X01", "#expense-register tbody button",
+                "#e-amount"),
+    "action": ("/ops/actions", "A01", ".act-edit", "#a-issue"),
+    "manpower": ("/ops/manpower", "A01", "#open-config", "#c-opening"),
+    "store": ("/ops/stores", None, "#store-new", "#sf-code"),
+}
+# phone table close-ups: name -> (page, store, table container selector)
+TABLES = {
+    "daily": ("/ops/daily", "A01", "#daily-table"),
+    "sales": ("/ops/sales", "S01", "#sales-daily-section"),
+    "stock": ("/ops/stock", "A01", "#daily-section"),
+    "expenses": ("/ops/expenses", "X01", "#expense-register"),
+    "actions": ("/ops/actions", "A01", "#actions-table"),
 }
 MODES = {
     "desktop-dark": ({"width": 1440, "height": 900}, "dark"),
@@ -158,6 +178,47 @@ def choose_store(page, code: str) -> None:
     page.wait_for_load_state("networkidle")
 
 
+def open_page(page, base: str, path: str, store) -> None:
+    page.goto(base + path)
+    page.wait_for_selector("#store-selector", timeout=30000)
+    page.wait_for_load_state("networkidle")
+    if store:
+        choose_store(page, store)
+    page.wait_for_timeout(1500)  # charts / transitions
+
+
+def shoot_dialogs(page, base: str, out: Path, mode: str,
+                  failures: list[str]) -> None:
+    for name, (path, store, opener, inside) in DIALOGS.items():
+        try:
+            open_page(page, base, path, store)
+            btn = page.locator(opener).first
+            btn.scroll_into_view_if_needed()
+            btn.click()
+            page.wait_for_selector(inside, state="visible", timeout=15000)
+            page.wait_for_timeout(800)  # open animation
+            page.screenshot(path=str(out / mode / f"dialog-{name}.png"))
+            page.keyboard.press("Escape")
+            print(f"ok    {mode:13} dialog {name}")
+        except Exception as exc:
+            failures.append(f"{mode} dialog {name}: {exc}")
+            print(f"FAIL  {mode:13} dialog {name}: {exc}")
+
+
+def shoot_tables(page, base: str, out: Path, mode: str,
+                 failures: list[str]) -> None:
+    for name, (path, store, sel) in TABLES.items():
+        try:
+            open_page(page, base, path, store)
+            el = page.locator(sel).first
+            el.scroll_into_view_if_needed()
+            el.screenshot(path=str(out / mode / f"table-{name}.png"))
+            print(f"ok    {mode:13} table {name}")
+        except Exception as exc:
+            failures.append(f"{mode} table {name}: {exc}")
+            print(f"FAIL  {mode:13} table {name}: {exc}")
+
+
 def screenshots(base: str, out: Path) -> list[str]:
     from playwright.sync_api import sync_playwright
 
@@ -188,12 +249,7 @@ def screenshots(base: str, out: Path) -> list[str]:
             for path, store in PAGES.items():
                 name = path.strip("/").replace("/", "-")
                 try:
-                    page.goto(base + path)
-                    page.wait_for_selector("#store-selector", timeout=30000)
-                    page.wait_for_load_state("networkidle")
-                    if store:
-                        choose_store(page, store)
-                    page.wait_for_timeout(1500)  # charts / transitions
+                    open_page(page, base, path, store)
                     got = page.evaluate("document.documentElement.className")
                     if theme not in got:
                         raise RuntimeError(f"theme is {got!r}, not {theme}")
@@ -203,6 +259,9 @@ def screenshots(base: str, out: Path) -> list[str]:
                 except Exception as exc:
                     failures.append(f"{mode} {path}: {exc}")
                     print(f"FAIL  {mode:13} {path}: {exc}")
+            shoot_dialogs(page, base, out, mode, failures)
+            if mode == "mobile":
+                shoot_tables(page, base, out, mode, failures)
             if errors:
                 print(f"      {mode}: {len(errors)} console error(s), "
                       f"first: {errors[0][:200]}")

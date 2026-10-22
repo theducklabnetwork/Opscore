@@ -135,54 +135,45 @@ def _records_table() -> rx.Component:
 # Entry form
 # ---------------------------------------------------------------------------
 
-def _sales_section() -> rx.Component:
-    return rx.vstack(
-        ds.section_heading("Sales", "banknote"),
-        rx.grid(
-            rx.vstack(
-                rx.text("Daily sales (RM)", size="2", weight="medium"),
-                rx.input(value=DailyState.f_sales,
-                         on_change=DailyState.set_f_sales,
-                         placeholder="0.00", input_mode="decimal",
-                         id="f-sales", disabled=~DailyState.can_write),
-                rx.checkbox("Clear saved value", checked=DailyState.clear_fields["f_sales"],
-                            on_change=lambda v: DailyState.set_clear_field("f_sales", v), size="1",
-                            disabled=~DailyState.can_write),
-                spacing="1", align="start", width="100%",
-            ),
-            rx.vstack(
-                rx.text("Transactions", size="2", weight="medium"),
-                rx.input(value=DailyState.f_transactions,
-                         on_change=DailyState.set_f_transactions,
-                         placeholder="—", input_mode="numeric", id="f-transactions",
-                         disabled=~DailyState.can_write),
-                rx.checkbox("Clear saved value",
-                            checked=DailyState.clear_fields["f_transactions"],
-                            on_change=lambda v: DailyState.set_clear_field("f_transactions", v), size="1",
-                            disabled=~DailyState.can_write),
-                spacing="1", align="start", width="100%",
-            ),
-            rx.vstack(
-                rx.text("Units sold", size="2", weight="medium"),
-                rx.input(value=DailyState.f_units,
-                         on_change=DailyState.set_f_units,
-                         placeholder="—", input_mode="numeric", id="f-units",
-                         disabled=~DailyState.can_write),
-                rx.checkbox("Clear saved value", checked=DailyState.clear_fields["f_units"],
-                            on_change=lambda v: DailyState.set_clear_field("f_units", v), size="1",
-                            disabled=~DailyState.can_write),
-                spacing="1", align="start", width="100%",
-            ),
-            columns=rx.breakpoints(initial="1", sm="2", lg="3"),
-            spacing="3", width="100%",
-        ),
-        rx.text(
-            "Blank fields leave saved values untouched. Tick “Clear saved "
-            "value” to deliberately reset a field to unreported. Enter 0 to "
-            "record a genuine zero.",
-            size="1", color=ds.TEXT_FAINT),
-        spacing="3", align="start", width="100%",
+_W = ~DailyState.can_write  # read-only: every control disabled
+
+
+def _num_field(label, attr, setter, fid, placeholder="—",
+               mode="numeric") -> rx.Component:
+    return ui.form_field(
+        label,
+        rx.input(value=getattr(DailyState, attr),
+                 on_change=getattr(DailyState, setter),
+                 placeholder=placeholder, input_mode=mode, id=fid,
+                 disabled=_W),
+        clear=ui.clear_box(DailyState.clear_fields[attr],
+                           lambda v: DailyState.set_clear_field(attr, v),
+                           disabled=_W),
     )
+
+
+def _sales_section() -> rx.Component:
+    return ui.form_section(
+        "Sales",
+        ui.form_grid(
+            _num_field("Daily sales (RM)", "f_sales", "set_f_sales",
+                       "f-sales", placeholder="0.00", mode="decimal"),
+            _num_field("Transactions", "f_transactions",
+                       "set_f_transactions", "f-transactions"),
+            _num_field("Units sold", "f_units", "set_f_units", "f-units"),
+            columns="3",
+        ),
+        hint="Blank fields leave saved values untouched. Tick “Clear saved "
+             "value” to deliberately reset a field to unreported. Enter 0 "
+             "to record a genuine zero.",
+    )
+
+
+def _summary(label, value, color="gray") -> rx.Component:
+    return rx.hstack(
+        rx.text(label, size="1", color=ds.TEXT_MUTED),
+        ui.status_chip(value, color),
+        spacing="2", align="center")
 
 
 def _manpower_section() -> rx.Component:
@@ -196,183 +187,81 @@ def _manpower_section() -> rx.Component:
         ("f_leave_other", "set_f_leave_other", "Other paid leave", "f-leave-other"),
         ("f_leave_unpaid", "set_f_leave_unpaid", "Unpaid leave", "f-leave-unpaid"),
     ]
-    return rx.vstack(
-        ds.section_heading(
-            "Manpower", "users",
-            extra=rx.hstack(
-                rx.text("Effective staff:", size="1", color=ds.TEXT_FAINT),
-                rx.badge(DailyState.form_effective_staff, variant="soft",
-                         color_scheme="indigo"),
-                spacing="1"),
-        ),
-        rx.grid(
-            *[
-                rx.vstack(
-                    rx.text(label, size="2", weight="medium"),
-                    rx.input(
-                        value=getattr(DailyState, attr),
-                        on_change=getattr(DailyState, setter),
-                        placeholder="—", input_mode="numeric", id=fid,
-                        disabled=~DailyState.can_write),
-                    rx.checkbox(
-                        "Clear saved value",
-                        checked=DailyState.clear_fields[attr],
-                        on_change=lambda v: DailyState.set_clear_field(attr, v),
-                        size="1", disabled=~DailyState.can_write),
-                    spacing="1", align="start", width="100%",
-                )
-                for attr, setter, label, fid in fields
-            ],
-            columns=rx.breakpoints(initial="1", sm="2", lg="3"),
-            spacing="3", width="100%",
-        ),
-        rx.text(
-            "Effective staff = FT + PT × the configured part-timer factor "
-            "for this store/month. Blank attendance stays unreported.",
-            size="1", color=ds.TEXT_FAINT),
-        spacing="3", align="start", width="100%",
+    return ui.form_section(
+        "Manpower",
+        ui.form_grid(*[_num_field(label, attr, setter, fid)
+                       for attr, setter, label, fid in fields],
+                     columns="3"),
+        extra=_summary("Effective staff:", DailyState.form_effective_staff),
+        hint="Effective staff = FT + PT × the configured part-timer factor "
+             "for this store/month. Blank attendance stays unreported.",
     )
 
 
 def _stock_input(code: dict) -> rx.Component:
-    return rx.vstack(
-        rx.hstack(rx.text(code["code"], size="2", weight="bold"),
+    return ui.form_field(
+        rx.hstack(rx.text(code["code"], size="2", weight="medium",
+                          color=ds.TEXT),
                   rx.text(code["name"], size="1", color=ds.TEXT_FAINT),
                   spacing="2", align="baseline", wrap="wrap"),
         rx.input(
             value=DailyState.stock_form[code["code"]],
             on_change=lambda v: DailyState.set_stock_amount(code["code"], v),
             placeholder="0.00", input_mode="decimal",
-            id=f"stock-{code['code']}",
-            disabled=~DailyState.can_write,
+            id=f"stock-{code['code']}", disabled=_W,
         ),
-        rx.checkbox(
-            "Clear saved value",
-            checked=DailyState.clear_stock[code["code"]],
-            on_change=lambda v: DailyState.set_clear_stock(code["code"], v),
-            size="1", disabled=~DailyState.can_write,
-        ),
-        spacing="1", align="start", width="100%",
+        clear=ui.clear_box(
+            DailyState.clear_stock[code["code"]],
+            lambda v: DailyState.set_clear_stock(code["code"], v),
+            disabled=_W),
     )
 
 
 def _stock_section() -> rx.Component:
-    return rx.vstack(
-        ds.section_heading(
-            "Stock Loss", "boxes",
-            extra=rx.hstack(
-                rx.text("Total Loss:", size="1", color=ds.TEXT_FAINT),
-                rx.badge(DailyState.form_total_loss, variant="soft",
-                         color_scheme="red"),
-                spacing="1"),
-        ),
-        rx.text("Contributes to Total Loss "
-                "(DMO + DMC + DMP + Missing − Extra)",
-                size="2", weight="medium", color=ds.TEXT_MUTED),
-        rx.grid(
-            rx.foreach(DailyState.contributing_codes, _stock_input),
-            columns=rx.breakpoints(initial="1", sm="2", lg="3"),
-            spacing="3", width="100%",
-        ),
-        rx.divider(),
-        rx.text("Informational only — excluded from Total Loss",
-                size="2", weight="medium", color=ds.TEXT_MUTED),
-        rx.grid(
-            rx.foreach(DailyState.informational_codes, _stock_input),
-            columns=rx.breakpoints(initial="1", sm="2", lg="3"),
-            spacing="3", width="100%",
-        ),
-        spacing="3", align="start", width="100%",
+    return ui.form_section(
+        "Stock loss (RM)",
+        rx.text("Counts toward total loss (DMO + DMC + DMP + Missing − "
+                "Extra)", size="2", color=ds.TEXT_MUTED),
+        rx.grid(rx.foreach(DailyState.contributing_codes, _stock_input),
+                columns=rx.breakpoints(initial="1", sm="3"),
+                spacing="4", width="100%"),
+        rx.text("Informational only — excluded from total loss", size="2",
+                color=ds.TEXT_MUTED, padding_top="0.5em"),
+        rx.grid(rx.foreach(DailyState.informational_codes, _stock_input),
+                columns=rx.breakpoints(initial="1", sm="3"),
+                spacing="4", width="100%"),
+        extra=_summary("Total loss:", DailyState.form_total_loss),
     )
 
 
 def _entry_dialog() -> rx.Component:
-    """Centered modal dialog for daily entry.
-
-    Uses rx.dialog (Radix Dialog) instead of a right-side drawer: the drawer
-    was anchored to the viewport edge and animated in with a transform, which
-    both kept it off-center and shifted its position while opening. The
-    dialog overlay + content are portaled to <body> (no transformed/filtered
-    ancestor), so fixed positioning centers it reliably.
-    """
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.vstack(
-                # header — stays visible while the body scrolls
-                rx.hstack(
-                    rx.vstack(
-                        rx.heading(DailyState.form_title, size="4"),
-                        rx.text(DailyState.form_day_label, size="2",
-                                color=ds.TEXT_MUTED),
-                        spacing="0", align="start"),
-                    rx.spacer(),
-                    rx.dialog.close(
-                        rx.icon_button(rx.icon("x", size=16),
-                                       variant="ghost",
-                                       id="entry-close")),
-                    width="100%", align="center", flex_shrink="0"),
-                rx.cond(
-                    ~DailyState.can_write,
-                    rx.callout(
-                        "You have read-only access. Contact an "
-                        "administrator to modify operational records.",
-                        icon="lock", color_scheme="gray", variant="soft",
-                        width="100%"),
-                ),
-                rx.cond(
-                    DailyState.form_error != "",
-                    ds.error_callout(DailyState.form_error),
-                ),
-                # scrollable body
-                rx.scroll_area(
-                    rx.vstack(
-                        _sales_section(),
-                        rx.divider(),
-                        _manpower_section(),
-                        rx.divider(),
-                        _stock_section(),
-                        spacing="4", width="100%",
-                    ),
-                    flex_grow="1", min_height="0", type="auto",
-                    width="100%",
-                ),
-                # footer — stays visible while the body scrolls
-                rx.hstack(
-                    rx.cond(
-                        DailyState.form_dirty & DailyState.can_write,
-                        rx.text("Unsaved changes", size="1",
-                                color=ds.WARNING)),
-                    rx.spacer(),
-                    rx.dialog.close(
-                        rx.button("Cancel", variant="soft",
-                                  color_scheme="gray", id="entry-cancel")),
-                    rx.cond(
-                        DailyState.can_write,
-                        rx.button(
-                            rx.cond(DailyState.saving,
-                                    rx.spinner(size="1"),
-                                    rx.icon("save", size=14)),
-                            "Save Entry",
-                            color_scheme="indigo",
-                            on_click=DailyState.save_entry,
-                            disabled=DailyState.saving,
-                            id="entry-save")),
-                    width="100%", align="center", flex_shrink="0",
-                    border_top=f"1px solid {ds.BORDER}", padding_top="0.75em",
-                ),
-                spacing="4", width="100%", height="100%", min_height="0",
-            ),
-            width="min(720px, 92vw)",
-            style={
-                "maxWidth": "min(720px, 92vw)",
-                "maxHeight": "85vh",
-                "display": "flex",
-                "flexDirection": "column",
-            },
-            background=ds.BG, padding="1.5em",
-        ),
+    """Centered daily entry dialog (kit pattern: pinned header + footer,
+    only the sections scroll)."""
+    return ui.form_dialog(
+        _sales_section(),
+        _manpower_section(),
+        _stock_section(),
         open=DailyState.form_open,
         on_open_change=lambda v: DailyState.close_entry(),
+        title=DailyState.form_title,
+        subtitle=DailyState.form_day_label,
+        close_id="entry-close",
+        notices=[
+            rx.cond(_W, rx.callout(
+                "You have read-only access. Contact an administrator to "
+                "modify operational records.",
+                icon="lock", color_scheme="gray", variant="soft",
+                width="100%")),
+            rx.cond(DailyState.form_error != "",
+                    ds.error_callout(DailyState.form_error)),
+        ],
+        status=rx.cond(DailyState.form_dirty & DailyState.can_write,
+                       rx.text("Unsaved changes", size="1",
+                               color=ds.WARNING)),
+        actions=ui.dialog_actions(
+            save_label="Save Entry", on_save=DailyState.save_entry,
+            saving=DailyState.saving, save_id="entry-save",
+            cancel_id="entry-cancel", can_save=DailyState.can_write),
     )
 
 

@@ -58,18 +58,18 @@ def _filters() -> rx.Component:
     )
 
 
-# phones keep Issue, Priority, Status and Due
-_COLS = [("Raised", False, True), ("Pillar", False, True, True), "Issue",
+# phones scroll sideways with Edit pinned; Pillar hides at 768-1535px
+_COLS = ["Raised", ("Pillar", False, True), "Issue",
          "Priority",
          "Status",
-         ("Person in charge", False, True), "Due", ("Completed", False, True),
+         "Person in charge", "Due", "Completed",
          ""]
 
 
 def _row(row) -> rx.Component:
     return rx.el.tr(
-        ui.td(row["raised"], wide_only=True),
-        ui.td(row["pillar"], wide_only=True, xl_only=True),
+        ui.td(row["raised"]),
+        ui.td(row["pillar"], xl_only=True),
         ui.td(rx.vstack(
             rx.text(row["issue"], size="2"),
             rx.cond(row["carried"],
@@ -79,12 +79,12 @@ def _row(row) -> rx.Component:
             wrap=True, style={"minWidth": "min(220px, 42vw)"}),
         ui.td(ui.status_chip(row["priority"], row["priority_color"])),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
-        ui.td(row["pic"], wide_only=True),
+        ui.td(row["pic"]),
         ui.td(rx.hstack(
             rx.text(row["due"], size="2"),
             rx.cond(row["overdue"], ui.status_chip("Overdue", "red")),
             spacing="2", align="center")),
-        ui.td(row["completion"], wide_only=True),
+        ui.td(row["completion"]),
         ui.td(rx.cond(
             A.can_write_actions,
             rx.button("Edit", size="1", variant="soft",
@@ -98,7 +98,9 @@ def _table() -> rx.Component:
         _filters(),
         rx.cond(
             A.loaded & (A.rows.length() > 0),
-            ui.data_table(_COLS, rx.foreach(A.filtered_rows, _row)),
+            ui.data_table(_COLS, rx.foreach(A.filtered_rows, _row),
+                          hidden_note="Pillar shows from 1536px wide and "
+                                      "in each action's Edit dialog."),
             ui.empty_state("No actions for this month",
                            "Raise a follow-up with Add action; open items "
                            "from earlier months appear here automatically.",
@@ -121,128 +123,86 @@ def _table() -> rx.Component:
 
 
 # ---------------------------------------------------------------------------
-# 3. Add/Edit dialog (centered pattern, like Daily Operations)
+# 3. Add/Edit dialog (kit entry dialog, like Daily Operations)
 # ---------------------------------------------------------------------------
 
-def _field(label, control, required=False) -> rx.Component:
-    return rx.vstack(
-        rx.hstack(rx.text(label, size="1", color=ds.TEXT_MUTED),
-                  rx.cond(required,
-                          rx.text("*", color=ds.ERROR, size="1")),
-                  spacing="1"),
-        control,
-        spacing="1", align="start", width="100%")
-
-
 def _dialog() -> rx.Component:
-    return rx.dialog.root(
-        rx.dialog.content(
-            rx.vstack(
-                rx.hstack(
-                    rx.heading(ActionsState.form_title, size="4"),
-                    rx.spacer(),
-                    rx.dialog.close(
-                        rx.icon_button(rx.icon("x", size=16),
-                                       variant="ghost", id="a-close")),
-                    width="100%", align="center", flex_shrink="0"),
-                rx.cond(
-                    ~ActionsState.can_write_actions,
-                    rx.callout(
-                        "You have read-only access. Contact an "
-                        "administrator to modify actions.",
-                        icon="lock", color_scheme="gray", variant="soft",
-                        width="100%"),
-                ),
-                rx.cond(ActionsState.form_error != "",
-                        ds.error_callout(ActionsState.form_error)),
-                rx.scroll_area(
-                    rx.vstack(
-                        _field("Issue / observation",
-                               rx.text_area(value=ActionsState.a_issue,
-                                            on_change=ActionsState.set_a_issue,
-                                            id="a-issue", rows="3"),
-                               required=True),
-                        rx.grid(
-                            _field("Pillar",
-                                   rx.select(PILLARS,
-                                             value=ActionsState.a_pillar,
-                                             on_change=ActionsState.set_a_pillar,
-                                             id="a-pillar")),
-                            _field("Priority",
-                                   rx.select(PRIORITIES,
-                                             value=ActionsState.a_priority,
-                                             on_change=ActionsState.set_a_priority,
-                                             id="a-priority")),
-                            _field("Status",
-                                   rx.select(ACTION_STATUSES,
-                                             value=ActionsState.a_status,
-                                             on_change=ActionsState.set_a_status,
-                                             id="a-status")),
-                            columns=rx.breakpoints(initial="1", sm="3"),
-                            spacing="3", width="100%"),
-                        _field("Person in charge",
-                               rx.input(value=ActionsState.a_pic,
-                                        on_change=ActionsState.set_a_pic,
-                                        id="a-pic"),
-                               required=True),
-                        rx.grid(
-                            _field("Raised date",
-                                   rx.input(type="date",
-                                            value=ActionsState.a_raised,
-                                            on_change=ActionsState.set_a_raised,
-                                            id="a-raised")),
-                            _field("Due date",
-                                   rx.input(type="date",
-                                            value=ActionsState.a_due,
-                                            on_change=ActionsState.set_a_due,
-                                            id="a-due"),
-                                   required=True),
-                            rx.cond(
-                                ActionsState.a_status == "Done",
-                                _field("Completion date (defaults to today)",
-                                       rx.input(type="date",
-                                                value=ActionsState.a_completion,
-                                                on_change=ActionsState.set_a_completion,
-                                                id="a-completion"))),
-                            columns=rx.breakpoints(initial="1", sm="3"),
-                            spacing="3", width="100%"),
-                        _field("Corrective action / next step",
-                               rx.text_area(value=ActionsState.a_corrective,
-                                            on_change=ActionsState.set_a_corrective,
-                                            id="a-corrective", rows="2")),
-                        _field("Remarks",
-                               rx.text_area(value=ActionsState.a_remarks,
-                                            on_change=ActionsState.set_a_remarks,
-                                            id="a-remarks", rows="2")),
-                        spacing="4", width="100%",
-                    ),
-                    flex_grow="1", min_height="0", type="auto", width="100%",
-                ),
-                rx.hstack(
-                    rx.spacer(),
-                    rx.dialog.close(
-                        rx.button("Cancel", variant="soft",
-                                  color_scheme="gray", id="a-cancel")),
-                    rx.cond(
-                        ActionsState.can_write_actions,
-                        rx.button(
-                            rx.cond(ActionsState.saving,
-                                    rx.spinner(size="1"),
-                                    rx.icon("save", size=14)),
-                            "Save Action", color_scheme="indigo",
-                            on_click=ActionsState.save_action,
-                            disabled=ActionsState.saving,
-                            id="a-save")),
-                    width="100%", align="center", flex_shrink="0",
-                    padding_top="2"),
-                spacing="4", width="100%", height="100%",
-            ),
-            style={"maxWidth": "min(720px, 92vw)", "width": "100%",
-                   "maxHeight": "85vh", "display": "flex"},
-            on_escape_key_down=ActionsState.set_form_open(False),
+    return ui.form_dialog(
+        ui.form_section(
+            "Issue",
+            ui.form_field("Issue / observation",
+                          rx.text_area(value=A.a_issue,
+                                       on_change=A.set_a_issue,
+                                       id="a-issue", rows="3"),
+                          required=True),
+            ui.form_grid(
+                ui.form_field("Pillar",
+                              rx.select(PILLARS, value=A.a_pillar,
+                                        on_change=A.set_a_pillar,
+                                        id="a-pillar")),
+                ui.form_field("Priority",
+                              rx.select(PRIORITIES, value=A.a_priority,
+                                        on_change=A.set_a_priority,
+                                        id="a-priority")),
+                ui.form_field("Status",
+                              rx.select(ACTION_STATUSES, value=A.a_status,
+                                        on_change=A.set_a_status,
+                                        id="a-status")),
+                columns="3"),
         ),
-        open=ActionsState.form_open,
-        on_open_change=ActionsState.set_form_open,
+        ui.form_section(
+            "Owner & dates",
+            ui.form_grid(
+                ui.form_field("Person in charge",
+                              rx.input(value=A.a_pic, on_change=A.set_a_pic,
+                                       id="a-pic"),
+                              required=True),
+                ui.form_field("Raised date",
+                              rx.input(type="date", value=A.a_raised,
+                                       on_change=A.set_a_raised,
+                                       id="a-raised")),
+                ui.form_field("Due date",
+                              rx.input(type="date", value=A.a_due,
+                                       on_change=A.set_a_due, id="a-due"),
+                              required=True),
+                rx.cond(
+                    A.a_status == "Done",
+                    ui.form_field("Completion date",
+                                  rx.input(type="date", value=A.a_completion,
+                                           on_change=A.set_a_completion,
+                                           id="a-completion"),
+                                  "Defaults to today.")),
+                columns="3"),
+        ),
+        ui.form_section(
+            "Follow-up",
+            ui.form_field("Corrective action / next step",
+                          rx.text_area(value=A.a_corrective,
+                                       on_change=A.set_a_corrective,
+                                       id="a-corrective", rows="2")),
+            ui.form_field("Remarks",
+                          rx.text_area(value=A.a_remarks,
+                                       on_change=A.set_a_remarks,
+                                       id="a-remarks", rows="2")),
+        ),
+        open=A.form_open,
+        on_open_change=A.set_form_open,
+        on_escape_key_down=A.set_form_open(False),
+        title=A.form_title,
+        subtitle="Person in charge and due date are required.",
+        close_id="a-close",
+        notices=[
+            rx.cond(~A.can_write_actions, rx.callout(
+                "You have read-only access. Contact an administrator to "
+                "modify actions.",
+                icon="lock", color_scheme="gray", variant="soft",
+                width="100%")),
+            rx.cond(A.form_error != "", ds.error_callout(A.form_error)),
+        ],
+        actions=ui.dialog_actions(
+            save_label="Save Action", on_save=A.save_action,
+            saving=A.saving, save_id="a-save", cancel_id="a-cancel",
+            can_save=A.can_write_actions),
     )
 
 

@@ -99,10 +99,11 @@ def _category_row(row) -> rx.Component:
             rx.cond(row["selected"] == "1",
                     rx.icon("chevron-right", size=14, color=ds.ACCENT_TEXT)),
             spacing="1", align="center")),
-        ui.td(row["name"], wide_only=True),
+        ui.td(rx.text(row["name"], size="2"), wrap=True,
+              style={"minWidth": "120px", "maxWidth": "240px"}),
         ui.td(row["total"], numeric=True),
-        ui.td(row["share"], numeric=True, wide_only=True),
-        ui.td(row["days"], numeric=True, wide_only=True),
+        ui.td(row["share"], numeric=True),
+        ui.td(row["days"], numeric=True),
         ui.td(ui.status_chip(row["treatment"], row["treatment_color"])),
     )
 
@@ -148,8 +149,8 @@ def _investigation() -> rx.Component:
 def _category_section() -> rx.Component:
     return ui.section_card(
         ui.data_table(
-            ["Code", ("Description", False, True), ("Monthly total", True),
-             ("Share of loss", True, True), ("Days", True, True),
+            ["Code", "Description", ("Monthly total", True),
+             ("Share of loss", True), ("Days", True),
              "Treatment"],
             rx.foreach(S.cat_rows, _category_row),
         ),
@@ -166,21 +167,23 @@ def _category_section() -> rx.Component:
 # 4. Daily table (unreported days collapsed)
 # ---------------------------------------------------------------------------
 
-# phones keep Date, Total loss, Ratio, Status and Edit
-_DAY_COLS = [("Date", False), ("Day", False, True), ("Sales", True, True),
-             ("Total loss", True), ("Ratio", True), ("Missing", True, True),
-             ("Extra", True, True), "Status", ""]
+# phones scroll sideways with Edit pinned to the right edge
+_DAY_COLS = ["Date", ("Sales", True),
+             ("Total loss", True), ("Ratio", True), ("Missing", True),
+             ("Extra", True), "Status", ""]
 
 
 def _day_row(row) -> rx.Component:
     return rx.el.tr(
-        ui.td(rx.text(row["label"], weight="medium")),
-        ui.td(rx.text(row["weekday"], color=ds.TEXT_MUTED), wide_only=True),
-        ui.td(row["sales"], numeric=True, wide_only=True),
+        ui.td(rx.hstack(rx.text(row["label"], weight="medium"),
+                        rx.text(row["weekday"], size="1",
+                                color=ds.TEXT_FAINT),
+                        spacing="2", align="baseline")),
+        ui.td(row["sales"], numeric=True),
         ui.td(row["loss"], numeric=True),
         ui.td(row["ratio"], numeric=True),
-        ui.td(row["missing"], numeric=True, wide_only=True),
-        ui.td(row["extra"], numeric=True, wide_only=True),
+        ui.td(row["missing"], numeric=True),
+        ui.td(row["extra"], numeric=True),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
         ui.td(rx.link("Edit", href="/ops/daily?date=" + row["date"],
                       size="2")),

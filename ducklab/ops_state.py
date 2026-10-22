@@ -108,6 +108,25 @@ class OpsState(AuthState):
         s = self.report.get("store", {}).get("label", "")
         m = self.report.get("month", {}).get("label", "")
         return f"{s} · {m}" if s else ""
+    @rx.var
+    def report_colors(self) -> dict[str, str]:
+        """Chip colours for the report's section statuses (display only;
+        projected sales statuses are neutral amber, as ds.projection_style)."""
+        sales = str(self.report.get("sales", {}).get("status_l1", ""))
+        return {
+            "sales": ("amber" if sales.startswith("Projected: ")
+                      else ds.status_color(sales)),
+            "manpower": ds.status_color(
+                str(self.report.get("manpower", {}).get("ratio_status", ""))),
+            "stock": ds.status_color(
+                str(self.report.get("stock", {}).get("status", ""))),
+        }
+
+    @rx.var
+    def report_category_rows(self) -> list[dict[str, str]]:
+        return [{**c, "color": ds.status_color(c.get("status", ""))}
+                for c in self.report_categories]
+
     # untyped detail vars accessed via to(...) casts in components
     report_categories: list[dict[str, str]] = []
     report_stock_codes: list[dict[str, str]] = []
