@@ -1,4 +1,8 @@
-"""Sales Performance page (/ops/sales)."""
+"""Sales Performance page (/ops/sales).
+
+Layout (ui kit): headline KPI tiles, basket metrics, pace chart, then the
+detail tables (target ladder, daily sales with unreported days collapsed).
+"""
 
 from __future__ import annotations
 
@@ -6,186 +10,150 @@ import reflex as rx
 
 from ducklab import design as ds
 from ducklab import ops_charts
+from ducklab import ui
 from ducklab.ops_sales_state import SalesState
 from ducklab.ops_shell import shell
 
-
-def _kpi_cards() -> rx.Component:
-    return rx.grid(
-        ds.kpi_card("Sales MTD", SalesState.sp_sales_mtd, icon="banknote"),
-        ds.kpi_card(SalesState.sp_month_end_label, SalesState.sp_month_end,
-                    icon="chart-line"),
-        ds.kpi_card("Level 1 Achievement", SalesState.sp_l1_achievement,
-                    icon="target"),
-        ds.kpi_card("Needed / Remaining Day", SalesState.sp_needed,
-                    icon="calendar-clock", sub=SalesState.sp_needed_sub),
-        ds.kpi_card("Days Entered", SalesState.sp_days, icon="calendar-check"),
-        ds.kpi_card("Avg / Reported Day", SalesState.sp_avg_day,
-                    icon="trending-up"),
-        columns=rx.breakpoints(initial="2", sm="3", lg="6"),
-        spacing="3", width="100%",
-    )
+S = SalesState
+_PROJ_CHIP = (S.sp_proj_status, S.sp_proj_color)
 
 
-def _ladder_row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(rx.text(row["level"], weight="bold", size="2")),
-        rx.table.cell(row["target"]),
-        rx.table.cell(row["achievement"]),
-        rx.table.cell(row["gap"]),
-        rx.table.cell(rx.hstack(rx.badge(row["status"], color_scheme=row["color"],
-                               variant="soft", size="1"),
-                      rx.cond(row["early_tag"] != "",
-                              rx.tooltip(
-                                  rx.badge(row["early_tag"], color_scheme="blue",
-                                           variant="outline", size="1"),
-                                  content=row["early_tip"])),
-                      spacing="1")),
-    )
-
-
-def _comparison_row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(rx.text(row["label"], weight="bold", size="2")),
-        rx.table.cell("—"),
-        rx.table.cell(row["growth"]),
-        rx.table.cell("—"),
-        rx.table.cell(rx.hstack(rx.badge(row["status"], color_scheme=row["color"],
-                               variant="soft", size="1"),
-                      rx.cond(row["early_tag"] != "",
-                              rx.tooltip(
-                                  rx.badge(row["early_tag"], color_scheme="blue",
-                                           variant="outline", size="1"),
-                                  content=row["early_tip"])),
-                      spacing="1")),
-    )
-
-
-def _target_ladder() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Target Ladder & Comparisons", "target"),
-            rx.scroll_area(
-                rx.table.root(
-                    rx.table.header(
-                        rx.table.row(
-                            rx.table.column_header_cell("Level"),
-                            rx.table.column_header_cell("Target"),
-                            rx.table.column_header_cell("Achievement"),
-                            rx.table.column_header_cell("Gap"),
-                            rx.table.column_header_cell("Status"),
-                        )),
-                    rx.table.body(
-                        rx.foreach(SalesState.sp_ladder, _ladder_row),
-                        rx.foreach(SalesState.sp_comparisons,
-                                   _comparison_row),
-                    ),
-                    variant="surface", width="100%",
-                ),
-                type="auto", scrollbars="horizontal",
-                style={"maxWidth": "100%"},
-            ),
-            spacing="3", width="100%",
-        ),
-        width="100%", id="ladder-section",
+def _kpi_tiles() -> rx.Component:
+    return ui.kpi_grid(
+        ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
+                    compact=S.sp_sales_mtd_compact,
+                    exact=S.sp_sales_mtd_exact, sub=S.sp_sales_mtd_sub),
+        ui.kpi_tile("Achievement to Date", S.sp_mtd_achievement,
+                    sub=S.sp_mtd_achievement_sub),
+        ui.kpi_tile("Month-End Sales", S.sp_month_end,
+                    compact=S.sp_month_end_compact,
+                    exact=S.sp_month_end_exact,
+                    chip=_PROJ_CHIP, tag=S.sp_early_tag,
+                    tag_tip=S.sp_early_tip),
+        ui.kpi_tile("Level 1 Achievement", S.sp_l1_achievement,
+                    chip=_PROJ_CHIP, tag=S.sp_early_tag,
+                    tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub),
+        ui.kpi_tile("Needed / Remaining Day", S.sp_needed,
+                    compact=S.sp_needed_compact, exact=S.sp_needed_exact,
+                    sub=S.sp_needed_sub),
+        ui.kpi_tile("Avg / Reported Day", S.sp_avg_day,
+                    compact=S.sp_avg_day_compact,
+                    exact=S.sp_avg_day_exact),
+        columns=rx.breakpoints(initial="2", md="3"),
+        id="sales-kpis",
     )
 
 
 def _basket() -> rx.Component:
-    return rx.vstack(
-        ds.section_heading("Basket Metrics", "shopping-basket"),
+    return ui.section_card(
         rx.grid(
-            ds.kpi_card("Sales per Receipt (SPR)", SalesState.sp_spr),
-            ds.kpi_card("Units per Transaction (UPT)", SalesState.sp_upt),
-            ds.kpi_card("Average Selling Price (ASP)", SalesState.sp_asp),
+            ui.stat("Sales per Receipt (SPR)", S.sp_spr, size="6"),
+            ui.stat("Units per Transaction (UPT)", S.sp_upt, size="6"),
+            ui.stat("Average Selling Price (ASP)", S.sp_asp, size="6"),
             columns=rx.breakpoints(initial="1", sm="3"),
-            spacing="3", width="100%",
+            spacing="5", width="100%",
         ),
-        spacing="3", width="100%", id="basket-section",
+        title="Basket Metrics", id="basket-section",
     )
 
 
-def _daily_row(row) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(rx.text(row["date"], weight="medium", size="2")),
-        rx.table.cell(row["weekday"]),
-        rx.table.cell(row["sales"]),
-        rx.table.cell(row["transactions"]),
-        rx.table.cell(row["units"]),
-        rx.table.cell(row["spr"]),
-        rx.table.cell(row["upt"]),
-        rx.table.cell(row["asp"]),
-        rx.table.cell(row["vs_budget"]),
-        rx.table.cell(rx.badge(row["status"],
-                               color_scheme=row["status_color"],
-                               variant="soft", size="1")),
-        rx.table.cell(
-            rx.link("Edit", href="/ops/daily?date=" + row["iso"], size="1"),
+def _pace_chart() -> rx.Component:
+    return ui.chart_card(
+        "Pace vs Level 1 Budget",
+        rx.cond(S.is_dark, ops_charts.chart(S.sp_fig_dark),
+                ops_charts.chart(S.sp_fig_light)),
+        ready=S.sp_chart_ready,
+        subtitle="Cumulative sales (RM) against the Level 1 daily run-rate",
+        detail="The pace chart appears once 3 days are reported. "
+               "Unreported days are never interpolated.",
+        id="pace-section",
+    )
+
+
+def _status_cell(status, color, tag="", tip="") -> rx.Component:
+    return ui.td(rx.hstack(ui.status_chip(status, color),
+                           ui.early_tag(tag, tip), spacing="1"))
+
+
+def _ladder_row(row) -> rx.Component:
+    return rx.el.tr(
+        ui.td(rx.text(row["level"], weight="medium")),
+        ui.td(row["target"], numeric=True),
+        ui.td(row["achievement"], numeric=True),
+        ui.td(row["gap"], numeric=True),
+        _status_cell(row["status"], row["color"], row["early_tag"],
+                     row["early_tip"]),
+    )
+
+
+def _comparison_row(row) -> rx.Component:
+    return rx.el.tr(
+        ui.td(rx.text(row["label"], weight="medium")),
+        ui.td("—", numeric=True),
+        ui.td(row["growth"], numeric=True),
+        ui.td("—", numeric=True),
+        _status_cell(row["status"], row["color"], row["early_tag"],
+                     row["early_tip"]),
+    )
+
+
+def _target_ladder() -> rx.Component:
+    return ui.section_card(
+        ui.data_table(
+            ["Level", ("Target", True), ("Achievement", True),
+             ("Gap", True), "Status"],
+            rx.foreach(S.sp_ladder, _ladder_row),
+            rx.foreach(S.sp_comparisons, _comparison_row),
         ),
+        title="Target Ladder & Comparisons",
+        subtitle="Achievement and gap use the projected month-end until "
+                 "every day is entered",
+        id="ladder-section",
+    )
+
+
+_DAILY_COLS = ["Date", "Day", ("Sales", True), ("Trans.", True),
+               ("Units", True), ("SPR", True), ("UPT", True), ("ASP", True),
+               ("vs Budget", True), "Status", ""]
+
+
+def _daily_row(row) -> rx.Component:
+    return rx.el.tr(
+        ui.td(rx.text(row["date"], weight="medium")),
+        ui.td(rx.text(row["weekday"], color=ds.TEXT_MUTED)),
+        ui.td(row["sales"], numeric=True),
+        ui.td(row["transactions"], numeric=True),
+        ui.td(row["units"], numeric=True),
+        ui.td(row["spr"], numeric=True),
+        ui.td(row["upt"], numeric=True),
+        ui.td(row["asp"], numeric=True),
+        ui.td(row["vs_budget"], numeric=True),
+        ui.td(ui.status_chip(row["status"], row["status_color"])),
+        ui.td(rx.link("Edit", href="/ops/daily?date=" + row["iso"],
+                      size="2")),
         id="sales-row-" + row["iso"],
     )
 
 
 def _daily_table() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Daily Sales", "calendar-check"),
-            rx.cond(
-                SalesState.sp_rows.length() > 0,
-                rx.scroll_area(
-                    rx.table.root(
-                        rx.table.header(
-                            rx.table.row(
-                                rx.table.column_header_cell("Date"),
-                                rx.table.column_header_cell("Day"),
-                                rx.table.column_header_cell("Sales"),
-                                rx.table.column_header_cell("Trans."),
-                                rx.table.column_header_cell("Units"),
-                                rx.table.column_header_cell("SPR"),
-                                rx.table.column_header_cell("UPT"),
-                                rx.table.column_header_cell("ASP"),
-                                rx.table.column_header_cell("vs Budget"),
-                                rx.table.column_header_cell("Status"),
-                                rx.table.column_header_cell(""),
-                            )),
-                        rx.table.body(
-                            rx.foreach(SalesState.sp_rows, _daily_row)),
-                        variant="surface", width="100%",
-                    ),
-                    type="auto", scrollbars="horizontal",
-                    style={"maxWidth": "100%"},
-                ),
-                ds.empty_state("No daily records yet",
-                               "Enter daily sales in Daily Operations.",
-                               icon="calendar"),
+    return ui.section_card(
+        rx.cond(
+            S.sp_rows.length() > 0,
+            ui.data_table(
+                _DAILY_COLS,
+                *ui.day_rows(S.sp_rows, S.sp_rows_reported,
+                             S.sp_hidden_count, S.sp_hidden_label,
+                             S.sp_show_hidden, S.toggle_hidden_days,
+                             _daily_row, len(_DAILY_COLS),
+                             toggle_id="sales-hidden-toggle"),
             ),
-            rx.text(
-                "Blank = not reported; an entered 0 counts as reported. "
-                "vs Budget = sales minus the Level 1 daily run-rate.",
-                size="1", color=ds.TEXT_FAINT),
-            spacing="3", width="100%",
+            ui.empty_state("No daily records yet",
+                           "Enter daily sales in Daily Operations.",
+                           icon="calendar"),
         ),
-        width="100%", id="sales-daily-section",
-    )
-
-
-def _pace_chart() -> rx.Component:
-    return rx.card(
-        rx.vstack(
-            ds.section_heading("Pace vs Level 1 Budget", "chart-line"),
-            rx.cond(
-                SalesState.sp_chart.length() > 0,
-                rx.cond(SalesState.is_dark,
-                        ops_charts.chart(SalesState.sp_fig_dark),
-                        ops_charts.chart(SalesState.sp_fig_light)),
-                ds.empty_state("Awaiting data",
-                               "Cumulative actuals stop at the last reported "
-                               "day; unreported days are never interpolated.",
-                               icon="chart-line"),
-            ),
-            spacing="3", width="100%",
-        ),
-        width="100%", id="pace-section",
+        ui.status_legend(note="An entered 0 counts as reported. vs Budget "
+                              "= sales minus the Level 1 daily run-rate."),
+        title="Daily Sales", id="sales-daily-section",
     )
 
 
@@ -193,27 +161,24 @@ def sales_page() -> rx.Component:
     return shell(
         "Sales Performance",
         rx.vstack(
-            rx.text(
-                "Sales results against the monthly Level 1–4 targets and "
-                "reference periods. Figures follow the workbook rules: the "
-                "month-end figure is projected until every day is entered.",
-                size="2", color=ds.TEXT_MUTED),
-            rx.cond(SalesState.sp_finalized,
+            rx.cond(S.sp_finalized,
                     rx.callout(
                         "This month has a finalized snapshot. Figures below "
                         "are live previews; the finalized report is "
                         "unchanged.",
                         icon="lock", color_scheme="amber", variant="soft",
                         width="100%")),
-            rx.cond(SalesState.sp_error != "",
-                    ds.error_callout(SalesState.sp_error)),
-            _kpi_cards(),
-            _target_ladder(),
+            rx.cond(S.sp_error != "", ds.error_callout(S.sp_error)),
+            _kpi_tiles(),
             _basket(),
             _pace_chart(),
+            _target_ladder(),
             _daily_table(),
-            spacing="4", width="100%",
+            spacing=ui.GAP, width="100%",
         ),
-        on_store=SalesState.select_store,
-        on_month=SalesState.select_month,
+        on_store=S.select_store,
+        on_month=S.select_month,
+        description="Sales against the monthly Level 1–4 targets. The "
+                    "month-end figure is projected until every day is "
+                    "entered.",
     )

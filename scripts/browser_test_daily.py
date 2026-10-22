@@ -90,6 +90,22 @@ def open_entry(page, nth=0, host=None) -> None:
     host.wait_for_timeout(400)
 
 
+def show_all_days(page) -> None:
+    """Unreported days are collapsed into one row by default; expand them
+    (every day then shows in date order)."""
+    toggle = page.locator("#daily-hidden-toggle")
+    if toggle.count() and toggle.inner_text().strip() == "Show":
+        for _ in range(2):
+            toggle.click()
+            try:
+                page.wait_for_function(
+                    "document.querySelector('#daily-hidden-toggle')"
+                    ".innerText.trim() == 'Hide'", timeout=10000)
+                return
+            except Exception:
+                continue
+
+
 def main() -> int:
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -111,6 +127,16 @@ def main() -> int:
               page.locator("#daily-kpis").count() == 1)
         check("existing Oct 1 record shows RM 12,000.00",
               page.locator("#daily-table >> text=RM 12,000.00").count() > 0)
+        check("unreported days collapsed into one row by default",
+              page.locator("#daily-table tbody tr").count() == 3
+              and page.locator(
+                  "#daily-table >> text=29 days not reported").count() == 1)
+        check("Achievement is MTD / Level 1 (11.2%)",
+              page.locator("#kpi-achievement >> text=11.2%").count() == 1)
+        check("projected figures carry the projection label",
+              page.locator("#kpi-projected >> text=Projected:").count() == 1
+              and page.locator(
+                  "#kpi-projected >> text=Early estimate").count() == 1)
         page.screenshot(path=str(OUT / "daily_overview_dark.png"),
                         full_page=True)
 
@@ -158,6 +184,9 @@ def main() -> int:
         page.click("#entry-close")
 
         # --- create a new day (Oct 3) ------------------------------------------
+        show_all_days(page)
+        check("expanded table lists every day of the month",
+              page.locator("#daily-table tbody tr").count() == 32)
         open_entry(page, nth=2)
         page.fill("#f-sales", "8500.50")
         page.fill("#f-transactions", "210")
@@ -220,7 +249,7 @@ def main() -> int:
         ap.wait_for_selector("#daily-table >> text=RM 15,000.00",
                              timeout=15000)
         choose(ap, "#store-selector", "B02 — Beta Galleria",
-               "#daily-table >> text=unreported", timeout=15000)
+               "#daily-table >> text=not reported", timeout=15000)
         # The wait selector above can match pre-switch unreported rows, so
         # deterministically wait for the switch to be APPLIED: the stale A01
         # figure must disappear (B02 has no records at all).
@@ -228,8 +257,9 @@ def main() -> int:
             "document.querySelector('#daily-table') && "
             "!document.querySelector('#daily-table').innerText.includes('RM 15,000.00')",
             timeout=15000)
-        check("B02 shows unreported placeholders",
-              ap.locator("#daily-table >> text=unreported").count() > 0)
+        check("B02 shows unreported days (collapsed row)",
+              ap.locator(
+                  "#daily-table >> text=31 days not reported").count() > 0)
         # B02 has no records: the A01 figure must NOT be present
         check("store switch clears previous store's rows",
               ap.locator("#daily-table >> text=RM 15,000.00").count() == 0)

@@ -61,6 +61,10 @@ class DailyState(OpsState):
     # loaded via AppService.get_month_config; None -> unset (shows "—")
     pt_factor: Optional[float] = None
     day_rows: list[dict[str, str]] = []      # overview table rows
+    day_rows_reported: list[dict[str, str]] = []   # days with any entry
+    hidden_count: int = 0                    # unreported days (collapsed)
+    hidden_label: str = ""
+    show_hidden: bool = False
     day_kpis: dict[str, str] = {}
     can_write: bool = False
     month_finalized: bool = False
@@ -158,6 +162,10 @@ class DailyState(OpsState):
         eff = kpi.effective_staff(ft, pt, self.pt_factor)
         return f"{float(eff):,.2f}" if eff is not None else "—"
 
+    @rx.event
+    def toggle_hidden_days(self):
+        self.show_hidden = not self.show_hidden
+
     # ------------------------------------------------------------------
     # selector overrides: keep daily data in sync with store/month
     # ------------------------------------------------------------------
@@ -215,6 +223,9 @@ class DailyState(OpsState):
     def load_daily_data(self) -> None:
         """Reload day rows + KPI summary for the current selection."""
         self.day_rows = []
+        self.day_rows_reported = []
+        self.hidden_count = 0
+        self.hidden_label = ""
         self.day_kpis = {}
         self.month_finalized = False
         store_id = self._selected_store_id()
@@ -260,6 +271,10 @@ class DailyState(OpsState):
             rec = by_date.get(d)
             rows.append(self._day_row(d, rec, signs, factor))
         self.day_rows = rows
+        self.day_rows_reported = [r for r in rows
+                                  if r["status"] != ds.DAY_NOT_REPORTED]
+        self.hidden_count = len(rows) - len(self.day_rows_reported)
+        self.hidden_label = ds.days_not_reported_label(self.hidden_count)
         self.day_kpis = day_kpis
 
     def _day_row(self, d: date, rec, signs, factor) -> dict[str, str]:
@@ -268,8 +283,10 @@ class DailyState(OpsState):
             "date": f"{d.day:02d}",
             "weekday": calendar.day_name[d.weekday()][:3],
         }
-        if rec is None:
-            return {**base, "status": "unreported", "sales": "—",
+        if ds.day_status(rec) == ds.DAY_NOT_REPORTED:
+            return {**base, "status": ds.DAY_NOT_REPORTED,
+                    "status_color": ds.status_color(ds.DAY_NOT_REPORTED),
+                    "sales": "—",
                     "transactions": "—", "units": "—", "spr": "—",
                     "upt": "—", "asp": "—", "staff": "—",
                     "sales_per_staff": "—", "loss": "—", "loss_missing": "1"}
@@ -283,14 +300,10 @@ class DailyState(OpsState):
         eff = kpi.effective_staff(rec.ft_working, rec.pt_working, factor)
         sps = kpi.daily_sales_per_staff_cents(rec, factor)
         factor_missing = factor is None and bool(rec.pt_working)
-        filled = sum(v is not None for v in (
-            rec.sales_cents, rec.transactions, rec.units, rec.ft_working,
-            rec.pt_working, rec.new_hires_ft, rec.resigned_ft,
-            rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
-            rec.leave_unpaid)) + len(rec.stock_losses)
-        status = "complete" if filled >= 3 else "partial"
+        status = ds.day_status(rec)
         return {
             **base, "status": status,
+            "status_color": ds.status_color(status),
             "sales": ds.fmt_rm(sales),
             "transactions": ds.fmt_num(rec.transactions),
             "units": ds.fmt_num(rec.units),
@@ -319,20 +332,63 @@ class DailyState(OpsState):
             rep = app_service.preview_month(
                 self._actor(), self._selected_store_id(), month)
             s = rep.sales
+            proj = (int(s.month_end_sales_cents)
+                    if s.month_end_sales_cents is not None else None)
+            # projected figures carry the engine's projection label exactly
+            # as the Overview: "Projected: <status>" + "Early estimate"
+            proj_status, proj_color, early_tag = ds.projection_style(
+                s.projection_state,
+                s.status_by_level.get("level1", "Awaiting data"))
             out.update({
                 "target": ds.fmt_rm(s.targets.get("level1")),
-                "achievement": ds.fmt_pct(s.achievement_by_level.get("level1")),
-                "projected": ds.fmt_rm0(
-                    int(s.month_end_sales_cents)
-                    if s.month_end_sales_cents is not None else None),
+                # Achievement = month-to-date sales / Level 1 (Daily
+                # Dashboard!H5); the projection is a separate tile
+                "achievement": (ds.fmt_pct(s.mtd_achievement_l1)
+                                if s.days_entered else "—"),
+                "proj_achievement": ds.fmt_pct(
+                    s.achievement_by_level.get("level1")),
+                "projected": ds.fmt_rm0(proj),
+                "projected_compact": ds.fmt_rm_compact(proj,
+                                                       whole_below=True),
+                "projected_exact": ds.fmt_rm(proj),
+                "proj_status": proj_status,
+                "proj_color": proj_color,
+                "early_tag": early_tag,
+                "early_tip": (ds.EARLY_ESTIMATE_TIP.format(
+                    n=s.days_entered, m=s.days_in_month)
+                    if early_tag else ""),
+                "proj_achievement_sub": (
+                    "Month-end vs Level 1"
+                    if s.projection_state == "actual"
+                    else "Projected month-end vs Level 1"),
                 "loss": ds.fmt_rm(rep.stock.total_loss_cents),
             })
         except (ConfigNotFoundError, StoreNotFoundError, RepositoryError):
             # no month configuration yet: target-based cards stay blank
             s = None
             out.update({"target": "—", "achievement": "—",
-                        "projected": "—", "loss": "—"})
-        out.update(_sales_summary(days, s))
+                        "proj_achievement": "—", "projected": "—",
+                        "projected_compact": "—", "projected_exact": "—",
+                        "proj_status": "", "proj_color": "gray",
+                        "proj_achievement_sub": "",
+                        "early_tag": "", "early_tip": "", "loss": "—"})
+        summary = _sales_summary(days, s)
+        out.update(summary)
+        # compact variants for narrow tiles (exact value in the tooltip)
+        if s is not None:
+            mtd, avg = s.sales_mtd_cents, s.average_per_day
+        else:
+            mtd = kpi.sales_mtd_cents(days)
+            avg = kpi.average_per_reported_day(
+                mtd, kpi.days_with_sales_entered(days))
+        entered = summary["mtd"] != "—"
+        out["mtd_compact"] = ds.fmt_rm_compact(mtd if entered else None,
+                                               whole_below=True)
+        out["avg_daily_exact"] = ds.fmt_rm(
+            int(avg) if entered and avg is not None else None)
+        out["target_sub"] = ("Level 1 target " + out["target"]
+                             if out["target"] != "—"
+                             else "No Level 1 target")
         return out
 
 

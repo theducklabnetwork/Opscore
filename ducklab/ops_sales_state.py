@@ -34,15 +34,32 @@ class SalesState(StoresState):
     sp_error: str = ""
     sp_finalized: bool = False
 
-    # KPI cards
+    # KPI tiles: value (wide screens), *_compact (narrow), *_exact (tooltip)
     sp_sales_mtd: str = "—"
+    sp_sales_mtd_compact: str = "—"
+    sp_sales_mtd_exact: str = "—"
+    sp_sales_mtd_sub: str = ""
+    sp_mtd_achievement: str = "—"          # MTD / Level 1 (to date)
+    sp_mtd_achievement_sub: str = ""
     sp_month_end: str = "—"
+    sp_month_end_compact: str = "—"
+    sp_month_end_exact: str = "—"
     sp_month_end_label: str = "Month-End Sales"
-    sp_l1_achievement: str = "—"
+    sp_l1_achievement: str = "—"           # projected month-end / Level 1
+    sp_l1_achievement_sub: str = ""
     sp_needed: str = "—"
+    sp_needed_compact: str = "—"
+    sp_needed_exact: str = "—"
     sp_needed_sub: str = ""
     sp_days: str = "—"
     sp_avg_day: str = "—"
+    sp_avg_day_compact: str = "—"
+    sp_avg_day_exact: str = "—"
+    # projection chip (ds.projection_style) shared by the projected tiles
+    sp_proj_status: str = ""
+    sp_proj_color: str = "gray"
+    sp_early_tag: str = ""
+    sp_early_tip: str = ""
 
     # target ladder + comparisons
     sp_ladder: list[dict[str, str]] = []
@@ -53,29 +70,50 @@ class SalesState(StoresState):
     sp_upt: str = "Not available"
     sp_asp: str = "Not available"
 
-    # daily table + pace chart
+    # daily table (reported days + one collapsed row) + pace chart
     sp_rows: list[dict[str, str]] = []
+    sp_rows_reported: list[dict[str, str]] = []
+    sp_hidden_count: int = 0
+    sp_hidden_label: str = ""
+    sp_show_hidden: bool = False
     sp_chart: list[dict] = []
+    sp_chart_ready: bool = False            # >= 3 reported days
     sp_fig_dark: go.Figure = go.Figure()                    # Plotly pace (dark theme)
     sp_fig_light: go.Figure = go.Figure()                   # Plotly pace (light theme)
 
     def _clear_sales(self) -> None:
         self.sp_error = ""
         self.sp_finalized = False
-        self.sp_sales_mtd = self.sp_month_end = "—"
+        for name in ("sales_mtd", "month_end", "needed", "avg_day"):
+            for suffix in ("", "_compact", "_exact"):
+                setattr(self, f"sp_{name}{suffix}", "—")
+        self.sp_sales_mtd_sub = ""
+        self.sp_mtd_achievement = "—"
+        self.sp_mtd_achievement_sub = ""
         self.sp_month_end_label = "Month-End Sales"
         self.sp_l1_achievement = "—"
-        self.sp_needed = "—"
+        self.sp_l1_achievement_sub = ""
         self.sp_needed_sub = ""
         self.sp_days = "—"
-        self.sp_avg_day = "—"
+        self.sp_proj_status = ""
+        self.sp_proj_color = "gray"
+        self.sp_early_tag = ""
+        self.sp_early_tip = ""
         self.sp_ladder = []
         self.sp_comparisons = []
         self.sp_spr = self.sp_upt = self.sp_asp = "Not available"
         self.sp_rows = []
+        self.sp_rows_reported = []
+        self.sp_hidden_count = 0
+        self.sp_hidden_label = ""
         self.sp_chart = []
+        self.sp_chart_ready = False
         self.sp_fig_dark = go.Figure()
         self.sp_fig_light = go.Figure()
+
+    @rx.event
+    def toggle_hidden_days(self):
+        self.sp_show_hidden = not self.sp_show_hidden
 
     @rx.event
     def select_store(self, label: str):
@@ -136,20 +174,35 @@ class SalesState(StoresState):
         s = rep.sales
         entered, dim = s.days_entered, s.days_in_month
         pstate = s.projection_state
-        self.sp_sales_mtd = (ds.fmt_rm0(s.sales_mtd_cents)
-                             if entered else "Not reported yet")
+        self._set_money("sales_mtd", s.sales_mtd_cents if entered else None)
+        self.sp_sales_mtd_sub = f"{entered} of {dim} days reported"
+        level1 = s.targets.get("level1")
+        self.sp_mtd_achievement = (ds.fmt_pct(s.mtd_achievement_l1)
+                                   if entered else "—")
+        self.sp_mtd_achievement_sub = (
+            "MTD sales vs Level 1 " + ds.fmt_rm0(level1)
+            if level1 is not None else "No Level 1 target")
         complete = pstate == "actual"
         self.sp_month_end_label = ("Month-End Sales (Actual)" if complete
                                    else "Month-End Sales (Projected)")
-        self.sp_month_end = _fmt_rm0(s.month_end_sales_cents)
+        self._set_money("month_end", s.month_end_sales_cents)
         self.sp_l1_achievement = ds.fmt_pct(s.achievement_by_level.get("level1"))
-        self.sp_needed = _fmt_rm0(s.needed_per_remaining_day)
+        self.sp_l1_achievement_sub = ("Month-end vs Level 1" if complete
+                                      else "Projected month-end vs Level 1")
+        # projected tiles carry the engine's projection label, exactly as
+        # the Overview: "Projected: <status>" + "Early estimate" (< 7 days)
+        (self.sp_proj_status, self.sp_proj_color,
+         self.sp_early_tag) = ds.projection_style(
+            pstate, s.status_by_level.get("level1", "Awaiting data"))
+        self.sp_early_tip = (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
+                             if self.sp_early_tag else "")
+        self._set_money("needed", s.needed_per_remaining_day)
         run_rate = s.required_daily_run_rate
         self.sp_needed_sub = ("Required run-rate: "
                               + (_fmt_rm0(run_rate) if run_rate is not None
                                  else "No target"))
         self.sp_days = f"{entered} / {dim}"
-        self.sp_avg_day = _fmt_rm0(s.average_per_day)
+        self._set_money("avg_day", s.average_per_day)
 
         self.sp_ladder = [
             (lambda lbl, color, tag: {
@@ -192,15 +245,30 @@ class SalesState(StoresState):
                        else "Not available")
 
         self.sp_rows = self._daily_rows(days, dim, s.targets.get("level1"))
+        self.sp_rows_reported = [r for r in self.sp_rows
+                                 if r["status"] != ds.DAY_NOT_REPORTED]
+        self.sp_hidden_count = len(self.sp_rows) - len(self.sp_rows_reported)
+        self.sp_hidden_label = ds.days_not_reported_label(
+            self.sp_hidden_count)
         self.sp_chart = self._pace_chart(days, dim, s.targets.get("level1"))
+        self.sp_chart_ready = entered >= 3
         pts = self.sp_chart
         p_days = [p["day"] for p in pts]
         p_actual = [p["actual"] for p in pts]
         p_budget = [p["budget"] for p in pts]
+        # y units live in the card subtitle (less chart clutter)
         self.sp_fig_dark = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                 dark=True)
+                                                 dark=True, y_title="")
         self.sp_fig_light = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                  dark=False)
+                                                  dark=False, y_title="")
+
+    def _set_money(self, name: str, cents) -> None:
+        """Whole-ringgit tile value + compact + exact (tooltip) variants."""
+        cents = None if cents is None else int(cents)
+        setattr(self, f"sp_{name}", ds.fmt_rm0(cents))
+        setattr(self, f"sp_{name}_compact",
+                ds.fmt_rm_compact(cents, whole_below=True))
+        setattr(self, f"sp_{name}_exact", ds.fmt_rm(cents))
 
     @staticmethod
     def _gap(sales, name) -> str:
@@ -235,25 +303,24 @@ class SalesState(StoresState):
                 spr = upt = asp = None
             vs = (kpi.daily_vs_run_rate_cents(d.sales_cents, budget)
                   if reported else None)
-            status = ("Not reported" if not reported
-                      else "Zero sales" if d.sales_cents == 0 else "Reported")
+            # same day chips as Daily Operations; a day without sales is
+            # "Not reported" here (this page is about sales)
+            status = ds.day_status(d) if reported else ds.DAY_NOT_REPORTED
             rows.append({
                 "iso": day.isoformat(),
                 "date": day.strftime("%d %b"),
                 "weekday": day.strftime("%a"),
                 "sales": ds.fmt_rm(d.sales_cents) if reported else "—",
-                "transactions": str(d.transactions) if reported and
-                    d.transactions is not None else "—",
-                "units": str(d.units) if reported and
-                    d.units is not None else "—",
+                "transactions": ds.fmt_num(d.transactions if reported
+                                           else None),
+                "units": ds.fmt_num(d.units if reported else None),
                 "spr": ds.fmt_rm(spr) if spr is not None else "—",
                 "upt": f"{float(upt):.2f}" if upt is not None else "—",
                 "asp": ds.fmt_rm(asp) if asp is not None else "—",
                 "vs_budget": ("−" if vs is not None and vs < 0 else "")
                     + (ds.fmt_rm(abs(int(vs))) if vs is not None else "—"),
                 "status": status,
-                "status_color": {"Not reported": "gray", "Zero sales":
-                                 "amber", "Reported": "green"}[status],
+                "status_color": ds.status_color(status),
             })
         return rows
 

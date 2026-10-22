@@ -33,7 +33,7 @@ _DARK = dict(
     plot_bg="rgba(0,0,0,0)",
     text="#EDEEF0",        # slate-12
     muted="#B0B4BA",       # slate-11
-    grid="#31353B",        # slate-6
+    grid="#272A2D",        # slate-4 (subtle)
     accent="#6E6BD8",      # indigo-9
     accent_fill="rgba(110,107,216,0.18)",
     pace_fill="rgba(110,107,216,0.07)",
@@ -48,7 +48,7 @@ _LIGHT = dict(
     plot_bg="rgba(0,0,0,0)",
     text="#1C2024",
     muted="#60646C",
-    grid="#DFE0E2",
+    grid="#E8E8EC",        # slate-5 (subtle)
     accent="#5B5BD6",
     accent_fill="rgba(91,91,214,0.14)",
     pace_fill="rgba(91,91,214,0.06)",
@@ -110,10 +110,11 @@ def _base_layout(pal: dict, y_title: str, x_title: str = "") -> dict:
         plot_bgcolor=pal["plot_bg"],
         font=dict(family=FONT_FAMILY, color=pal["text"], size=12),
         margin=dict(l=8, r=8, t=12, b=8),
-        xaxis=dict(title=x_title, gridcolor=pal["grid"],
-                   zerolinecolor=pal["grid"], color=pal["muted"]),
-        yaxis=dict(title=y_title, gridcolor=pal["grid"],
-                   zerolinecolor=pal["grid"], color=pal["muted"]),
+        # quiet axes: horizontal gridlines only, no zero line / axis line
+        xaxis=dict(title=x_title, showgrid=False, zeroline=False,
+                   showline=False, color=pal["muted"]),
+        yaxis=dict(title=y_title, gridcolor=pal["grid"], zeroline=False,
+                   showline=False, color=pal["muted"]),
         legend=dict(orientation="h", yanchor="top", y=-0.22,
                     xanchor="center", x=0.5, font=dict(size=11)),
         hovermode="x unified",
@@ -300,16 +301,8 @@ def fmt_money_compact(cents: Optional[float]) -> str:
     Values < 10,000 are shown exact; >= 10,000 rounded to 0.1k (>= 1M as
     M). The exact value is always available via fmt_rm for tooltips.
     """
-    if cents is None:
-        return "—"
-    rm = cents / 100
-    sign = "-" if rm < 0 else ""
-    a = abs(rm)
-    if a >= 1_000_000:
-        return f"{sign}RM {a / 1_000_000:.1f}M"
-    if a >= 10_000:
-        return f"{sign}RM {a / 1_000:.1f}k"
-    return f"{sign}RM {a:,.2f}"
+    from ducklab.design import fmt_rm_compact
+    return fmt_rm_compact(cents)
 
 
 def fmt_pct1(ratio: Optional[float]) -> str:

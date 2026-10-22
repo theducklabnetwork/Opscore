@@ -86,16 +86,23 @@ def main() -> int:
 
         body = page.locator("body").inner_text()
         check("projected label on partial month",
-              "Month-End Sales (Projected)" in body)
+              "Projected: " in body)
         check("Sales MTD seeded (RM 115,200.00)", "RM 115,200" in body)
         print("DEBUG MTD line:", [l for l in body.splitlines() if "Sales MTD" in l])
-        check("days entered 19 / 31", "19 / 31" in body)
+        check("days entered 19 of 31", "19 of 31 days reported" in body)
         check("Level 1 status badge", "Achieved" in body
               or "Below target" in body)
         check("comparison rows", "vs Same Month Last Year" in body
               and "vs Last Month" in body)
+        check("unreported days collapsed into one row",
+              "12 days not reported" in body)
+        page.click("#sales-hidden-toggle")
+        page.wait_for_selector("#sales-row-2026-10-11", timeout=15000)
         check("Not reported vs Zero sales distinguished",
-              "Not reported" in body and "Zero sales" in body)
+              page.locator("#sales-row-2026-10-11 >> text=Not reported")
+              .count() == 1
+              and page.locator("#sales-row-2026-10-05 >> text=Zero sales")
+              .count() == 1)
         check("basket metrics section", "Sales per Receipt (SPR)" in body)
 
         # edit deep link for the 1st of the month

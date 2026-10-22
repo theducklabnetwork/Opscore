@@ -5,6 +5,7 @@ from __future__ import annotations
 import reflex as rx
 
 from ducklab import design as ds
+from ducklab import ui
 from ducklab.auth_pages import AuthState
 from ducklab.ops_state import OpsState
 
@@ -60,22 +61,30 @@ def _sidebar_nav() -> rx.Component:
 
 
 def sidebar() -> rx.Component:
-    return rx.vstack(
-        rx.hstack(
-            rx.box(rx.icon("chart-no-axes-combined", size=20, color="white"),
-                   background=f"linear-gradient(135deg, {rx.color('indigo', 9)},"
-                              f" {rx.color('violet', 10)})",
-                   border_radius="10px", padding="8px"),
-            rx.vstack(rx.heading("DuckLab", size="4"),
-                      rx.text("Operations", size="1", color=ds.TEXT_FAINT),
-                      spacing="0", align="start"),
-            spacing="2", align="center",
+    # The outer column stretches to the full page height (background and
+    # border never stop at the first screen); the nav inside stays sticky.
+    return rx.box(
+        rx.vstack(
+            rx.hstack(
+                rx.box(rx.icon("chart-no-axes-combined", size=20,
+                               color="white"),
+                       background=f"linear-gradient(135deg, "
+                                  f"{rx.color('indigo', 9)},"
+                                  f" {rx.color('violet', 10)})",
+                       border_radius="10px", padding="8px"),
+                rx.vstack(rx.heading("DuckLab", size="4"),
+                          rx.text("Operations", size="1",
+                                  color=ds.TEXT_FAINT),
+                          spacing="0", align="start"),
+                spacing="2", align="center",
+            ),
+            _sidebar_nav(),
+            spacing="6", align="start", padding="1.25em", width="100%",
+            height="100vh", position="sticky", top="0", overflow_y="auto",
         ),
-        _sidebar_nav(),
-        spacing="6", align="start", padding="1.25em", width="230px",
-        height="100vh", position="sticky", top="0", flex_shrink="0",
+        width="230px", flex_shrink="0", align_self="stretch",
         border_right=f"1px solid {ds.BORDER}", background=ds.BG,
-        display=["none", "none", "none", "flex"],
+        display=["none", "none", "none", "block"],
     )
 
 
@@ -132,11 +141,12 @@ def month_selector(on_month=None) -> rx.Component:
     )
 
 
-def header(title: str, on_store=None, on_month=None) -> rx.Component:
+def header(title: str, on_store=None, on_month=None,
+           description=None) -> rx.Component:
     return rx.vstack(
         rx.hstack(
             mobile_drawer(),
-            rx.heading(title, size="6", weight="bold"),
+            ui.page_header(title, description),
             rx.spacer(),
             rx.box(  # wrapper: click bubbles to sync theme into state
                 rx.color_mode.button(variant="ghost", id="theme-toggle"),
@@ -155,7 +165,7 @@ def header(title: str, on_store=None, on_month=None) -> rx.Component:
                                  color="red", id="menu-sign-out"),
                 ),
             ),
-            width="100%", align="center", spacing="2",
+            width="100%", align="start", spacing="2",
         ),
         rx.hstack(
             store_selector(on_store=on_store),
@@ -163,19 +173,20 @@ def header(title: str, on_store=None, on_month=None) -> rx.Component:
             spacing="3", width="100%",
             wrap="wrap",
         ),
-        spacing="3", width="100%",
-        padding_bottom="1em",
-        border_bottom=f"1px solid {ds.BORDER}",
+        spacing="4", width="100%",
+        padding_bottom="1.25em",
+        border_bottom=f"1px solid {ui.CARD_BORDER}",
     )
 
 
 def shell(title: str, content: rx.Component,
-          on_store=None, on_month=None) -> rx.Component:
+          on_store=None, on_month=None, description=None) -> rx.Component:
     return rx.hstack(
         sidebar(),
         rx.box(
             rx.vstack(
-                header(title, on_store=on_store, on_month=on_month),
+                header(title, on_store=on_store, on_month=on_month,
+                       description=description),
                 rx.cond(
                     ~OpsState.selected_store_active,
                     rx.callout(
@@ -186,11 +197,14 @@ def shell(title: str, content: rx.Component,
                         id="store-readonly-banner",
                     ),
                 ),
-                rx.box(content, padding_top="1.5em", width="100%"),
+                rx.box(content, padding_top="1.75em", width="100%",
+                       min_width="0"),
                 width="100%", max_width="1200px", margin="0 auto",
                 padding=["1em", "1.5em", "2em"],
             ),
-            width="100%", min_height="100vh", background=ds.BG,
+            width="100%", min_width="0", min_height="100vh",
+            background=ds.BG,
         ),
-        spacing="0", align="start", width="100%",
+        spacing="0", align="start", width="100%", min_height="100vh",
+        background=ds.BG,
     )
