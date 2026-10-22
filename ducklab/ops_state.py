@@ -180,7 +180,11 @@ class OpsState(AuthState):
 
     @rx.event
     def refresh_report(self) -> None:
+        # Keep the chosen version across the reset (store/month/mode
+        # changes clear it before calling here).
+        version_label = self.selected_version_label
         self._clear_report()
+        self.selected_version_label = version_label
         if not self.has_stores:
             self.report_status = "empty"
             self.error_message = "No stores are assigned to your account."
@@ -190,35 +194,28 @@ class OpsState(AuthState):
         if store_id is None or month is None:
             self.report_status = "empty"
             return
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            self.error_message = "Your session has expired. Please sign in again."
-            self.report_status = "error"
-            return
         # Re-read the selected store's active flag on EVERY refresh so a
         # store deactivated since page load is shown read-only immediately
         # (the cached store list from load_ops may be stale).
         try:
-            store = app_service.read_repo.get_store(store_id)
-            self.selected_store_active = bool(store.active)
-            for s in self.stores:
-                if s["label"] == self.selected_store_label:
-                    s["active"] = bool(store.active)
-        except Exception:
-            pass
+            user = self._actor()
+            self.selected_store_active, lookup_error = _refresh_store_active(
+                app_service, user, store_id, self.stores,
+                self.selected_store_label)
         except AuthenticationError:
             self.report_status = "error"
             self.error_message = "Your session has expired. Please sign in again."
+            return
+        if lookup_error:
+            self.report_status = "error"
+            self.error_message = lookup_error
             return
         # Available finalized versions (metadata only).
         try:
             version_rows = app_service.list_report_versions(user, store_id, month)
         except AuthorizationError:
             version_rows = []
-        self.versions = [
-            f"Version {v['version']} — {v['created_at']}" for v in version_rows
-        ]
+        self.versions = [_version_label(v) for v in version_rows]
         self.report_status = "loading"
         yield
         try:
@@ -228,13 +225,14 @@ class OpsState(AuthState):
                         "No finalized snapshot exists for this store and month")
                 wanted = None
                 if self.selected_version_label:
-                    wanted = int(self.selected_version_label.split("—")[0]
-                                 .strip().split()[-1])
+                    wanted = _version_for_label(self.selected_version_label,
+                                                version_rows)
                 snap = app_service.get_finalized_report(user, store_id, month,
                                                         version=wanted)
                 data = _serialize_snapshot(snap, user=user)
                 self.finalized_note = (
-                    f"Finalized version {snap['version']} · {snap['created_at']}"
+                    f"Finalized version {snap['version']} · "
+                    f"{ds.fmt_kl_datetime(snap['created_at'])}"
                     + (" (superseded)" if snap["superseded_by"] else ""))
             else:
                 live = app_service.preview_month(user, store_id, month)
@@ -268,6 +266,44 @@ class OpsState(AuthState):
         except RepositoryError as exc:
             self.report_status = "error"
             self.error_message = f"Report unavailable: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Refresh helpers (pure; testable without a Reflex runtime)
+# ---------------------------------------------------------------------------
+
+def _refresh_store_active(service, user, store_id: int, stores: list[dict],
+                          label: str) -> tuple[bool, str]:
+    """-> (store active?, error message). Looks the store up through
+    AppService (access checked first) and updates the cached store entry.
+    A failed lookup marks the store inactive (read-only) — never a stale
+    "active" flag from the cached list. AuthenticationError propagates."""
+    try:
+        active = bool(service.get_store(user, store_id).active)
+        error = ""
+    except StoreNotFoundError:
+        active, error = False, "This store no longer exists."
+    except AuthorizationError:
+        active, error = False, "You do not have access to this store."
+    for s in stores:
+        if s["label"] == label:
+            s["active"] = active
+    return active, error
+
+
+def _version_label(row: dict) -> str:
+    """Version picker label; created_at shown in Kuala Lumpur time."""
+    return f"Version {row['version']} — {ds.fmt_kl_datetime(row['created_at'])}"
+
+
+def _version_for_label(label: str, version_rows: list[dict]) -> int:
+    """Map a picker label back to its version number. Labels arrive over
+    the socket, so anything not in the current list is rejected."""
+    for row in version_rows:
+        if _version_label(row) == label:
+            return int(row["version"])
+    raise SnapshotNotFoundError(
+        "Unknown report version — choose one from the list.")
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +425,15 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
                                         "EXTRA"} else "0"}
              for code, total in sorted(st.get("totals_by_code", {}).items())
              if total]
+    # Same display rules as live: a finalized complete month is "actual"
+    # (Month-End), partial months are labelled projected/early estimate.
+    entered = s.get("days_entered") or 0
+    dim = s.get("days_in_month") or 0
+    pstate = kpi.projection_state(entered, dim)
+    growth_year_status = s.get("growth_status_last_year") or kpi.growth_status(
+        s.get("growth_last_year"), entered)
+    growth_month_status = s.get("growth_status_last_month") or kpi.growth_status(
+        s.get("growth_last_month"), entered)
     return {
         "mode": "finalized",
         "store": store_label,
@@ -401,10 +446,19 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
             "target_l1": ds.fmt_rm(s.get("targets", {}).get("level1")),
             "achievement_l1": ds.fmt_pct(
                 s.get("achievement_by_level", {}).get("level1")),
-            "status_l1": s.get("status_by_level", {}).get("level1",
-                                                          "no target"),
+            "status_l1": ds.projection_style(
+                pstate,
+                s.get("status_by_level", {}).get("level1", "no target"))[0],
+            "projection_state": pstate,
+            "early_estimate_tag": (
+                f"Early estimate: {entered} of {dim} days"
+                if pstate == "early_estimate" else ""),
             "growth_year": ds.fmt_pct(s.get("growth_last_year")),
+            "growth_year_status": ds.projection_style(
+                pstate, growth_year_status)[0],
             "growth_month": ds.fmt_pct(s.get("growth_last_month")),
+            "growth_month_status": ds.projection_style(
+                pstate, growth_month_status)[0],
             "spr": ds.fmt_rm(int(s["spr"]) if s.get("spr") is not None
                              else None),
             "upt": ds.fmt_num(float(s["upt"]) if s.get("upt") is not None

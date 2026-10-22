@@ -287,14 +287,15 @@ class ActionsState(StoresState):
             user = self._actor()
             app_service.save_action(
                 user, store_id,
-                int(self.editing_id) if self.editing_id else None,
+                _editing_id(self.editing_id),
                 _today(),
-                raised_date=_pdate(self.a_raised),
+                raised_date=_pdate(self.a_raised, "Raised date"),
                 pillar=self.a_pillar, issue=self.a_issue,
                 priority=self.a_priority, status=self.a_status,
-                pic=self.a_pic, due_date=_pdate(self.a_due),
+                pic=self.a_pic, due_date=_pdate(self.a_due, "Due date"),
                 corrective_action=self.a_corrective or None,
-                completion_date=_pdate(self.a_completion),
+                completion_date=_pdate(self.a_completion,
+                                       "Completion date"),
                 remarks=self.a_remarks or None)
         except ValidationError as exc:
             self.form_error = str(exc)
@@ -315,9 +316,28 @@ class ActionsState(StoresState):
         yield ActionsState.load_actions_data()
 
 
-def _pdate(s: str) -> Optional[date]:
+def _pdate(s: str, label: str) -> Optional[date]:
+    """Form date -> date; blank -> None. Values arrive over the socket, so
+    a malformed date is a form error, never an uncaught ValueError."""
     s = (s or "").strip()
-    return date.fromisoformat(s) if s else None
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        raise ValidationError(f"{label}: enter a date as YYYY-MM-DD") from None
+
+
+def _editing_id(s: str) -> Optional[int]:
+    """Action id being edited ('' = new action)."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        raise ValidationError(
+            "Unknown action — reopen it from the list.") from None
 
 
 def actions_summary(all_actions, month: str, today: date):

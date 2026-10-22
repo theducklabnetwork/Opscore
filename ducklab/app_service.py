@@ -53,6 +53,12 @@ class AppService:
             conn.close()
 
     # -- reads ---------------------------------------------------------------
+    def get_store(self, user: User, store_id: int):
+        """One store's details (incl. active flag); access checked first so
+        an unassigned store is never probed."""
+        authz.require_store_access(user, store_id)
+        return self.read_repo.get_store(store_id)
+
     def preview_month(self, user: User, store_id: int, month: str,
                       as_of: Optional[date] = None) -> MonthlyOperationsReport:
         authz.require_store_access(user, store_id)

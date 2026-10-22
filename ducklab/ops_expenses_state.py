@@ -92,6 +92,7 @@ class ExpensesState(DailyState):
     # --- budget form -------------------------------------------------------
     b_category: str = ""
     b_amount: str = ""
+    b_clear: bool = False     # "Clear saved value": budget -> NULL
     b_error: str = ""
     b_notice: str = ""
     b_saving: bool = False
@@ -480,6 +481,8 @@ class ExpensesState(DailyState):
     def set_b_category(self, v: str): self.b_category = v
     @rx.event
     def set_b_amount(self, v: str): self.b_amount = v
+    @rx.event
+    def set_b_clear(self, v: bool): self.b_clear = bool(v)
 
     # ------------------------------------------------------------------
     # save expense
@@ -626,12 +629,8 @@ class ExpensesState(DailyState):
         if category_id is None:
             self.b_error = f"Unknown category: {self.b_category!r}"
             return
-        if not self.b_amount.strip():
-            self.b_error = ("Enter a budget amount. A missing budget is "
-                            "distinct from RM 0 — leave unset instead.")
-            return
         try:
-            cents = _parse_money(self.b_amount)
+            cents = _budget_save_value(self.b_amount, self.b_clear)
         except ValueError as exc:
             self.b_error = str(exc)
             return
@@ -659,7 +658,22 @@ class ExpensesState(DailyState):
             self.b_error = f"Save failed: {exc}"
             return
         self.b_saving = False
-        self.b_notice = (f"Budget for {self.b_category} saved "
+        self.b_clear = False
+        self.b_notice = (f"Budget for {self.b_category} cleared "
+                         f"(No budget for {month})." if cents is None else
+                         f"Budget for {self.b_category} saved "
                          f"({ds.fmt_rm(cents)} for {month}).")
         yield ExpensesState.load_expenses_data()
         yield ExpensesState.refresh_report()
+
+
+def _budget_save_value(amount: str, clear: bool) -> Optional[int]:
+    """Budget form -> cents to save. A ticked "Clear saved value" -> None
+    (NULL = "No budget", never 0); otherwise an amount is required."""
+    if clear:
+        return None
+    if not amount.strip():
+        raise ValueError(
+            "Enter a budget amount, or tick “Clear saved value” to remove "
+            "it. A missing budget is distinct from RM 0.")
+    return _parse_money(amount)

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal, InvalidOperation
+from typing import Optional
 
 import reflex as rx
 
@@ -299,7 +300,8 @@ class StoresState(StockState):
             self.budget_rows = [
                 {"id": str(c.id), "name": c.name,
                  "value": _money_str(budgets.get(c.id)),
-                 "original": _money_str(budgets.get(c.id))}
+                 "original": _money_str(budgets.get(c.id)),
+                 "clear": ""}
                 for c in cats
             ]
         except Exception:
@@ -510,35 +512,8 @@ class StoresState(StockState):
         return out, errors
 
     def _parse_budgets(self):
-        """Validate every budget row before ANY write; -> (updates, errors).
-
-        updates = {category_id: cents} only for rows the user changed
-        (blank rows that were already blank are not sent). Blank handling
-        matches the Expenses page budget form: a budget is never written
-        as blank — clearing an existing budget is rejected, not saved as
-        NULL or 0."""
-        updates: dict[int, int] = {}
-        errors: list[str] = []
-        for row in self.budget_rows:
-            raw = row["value"].strip()
-            if raw == row.get("original", ""):
-                continue
-            if raw == "":
-                errors.append(
-                    f"Budget for {row['name']}: enter a budget amount. A "
-                    "missing budget is distinct from RM 0 — leave unset "
-                    "instead.")
-                continue
-            try:
-                cents = kpi.parse_money_cents(raw)
-                if cents < 0:
-                    raise ValueError("negative")
-            except ValueError:
-                errors.append(
-                    f"Budget for {row['name']}: non-negative number")
-                continue
-            updates[int(row["id"])] = cents
-        return updates, errors
+        """Validate every budget row before ANY write; -> (updates, errors)."""
+        return _parse_budget_rows(self.budget_rows)
 
     # ------------------------------------------------------------------
     # form field setters (explicit, matching the daily page pattern)
@@ -681,3 +656,43 @@ class StoresState(StockState):
             {**r, "value": value} if r["id"] == category_id else r
             for r in self.budget_rows
         ]
+
+    @rx.event
+    def set_budget_clear(self, category_id: str, v: bool) -> None:
+        self.budget_rows = [
+            {**r, "clear": "1" if v else ""} if r["id"] == category_id else r
+            for r in self.budget_rows
+        ]
+
+
+def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
+    """Budget rows -> (updates, errors); pure, so it is testable.
+
+    updates = {category_id: cents | None} only for rows the user changed.
+    A ticked "Clear saved value" writes NULL ("No budget"), never 0.
+    Untouched rows send nothing. Blanking a saved budget WITHOUT ticking
+    the checkbox is rejected (a missing budget is distinct from RM 0)."""
+    updates: dict[int, Optional[int]] = {}
+    errors: list[str] = []
+    for row in rows:
+        if row.get("clear") and row.get("original", ""):
+            updates[int(row["id"])] = None
+            continue
+        raw = row["value"].strip()
+        if raw == row.get("original", ""):
+            continue
+        if raw == "":
+            errors.append(
+                f"Budget for {row['name']}: enter a budget amount, or tick "
+                "“Clear saved value” to remove it (No budget).")
+            continue
+        try:
+            cents = kpi.parse_money_cents(raw)
+            if cents < 0:
+                raise ValueError("negative")
+        except ValueError:
+            errors.append(
+                f"Budget for {row['name']}: non-negative number")
+            continue
+        updates[int(row["id"])] = cents
+    return updates, errors

@@ -158,7 +158,13 @@ def _budget_monitor() -> rx.Component:
                                 value=ExpensesState.b_amount,
                                 on_change=ExpensesState.set_b_amount,
                                 placeholder="e.g. 3200.00",
-                                input_mode="decimal", id="b-amount"),
+                                input_mode="decimal", id="b-amount",
+                                disabled=ExpensesState.b_clear),
+                            rx.checkbox(
+                                "Clear saved value",
+                                checked=ExpensesState.b_clear,
+                                on_change=ExpensesState.set_b_clear,
+                                size="1", id="b-clear"),
                             spacing="1", align="start", width="100%"),
                         rx.vstack(
                             rx.text("\u00a0", size="1"),

@@ -58,6 +58,36 @@ def _pct_str(value) -> str:
     return f"{float(value) * 100:g}"
 
 
+def _config_form_values(cfg, can_payroll: bool) -> dict[str, str]:
+    """Config editor values. The salary ratio target and payroll figures
+    are filled ONLY for configuration managers (consistent with Stores and
+    Overview); everyone else gets blanks."""
+    values = {
+        "c_opening": (str(cfg.opening_headcount_ft)
+                      if cfg.opening_headcount_ft is not None else ""),
+        "c_budget": (str(cfg.budget_headcount)
+                     if cfg.budget_headcount is not None else ""),
+        "c_pt_factor": (f"{float(cfg.part_timer_factor):g}"
+                        if cfg.part_timer_factor is not None else ""),
+        "c_turnover": _pct_str(cfg.turnover_threshold),
+        "c_ratio_target": "", "p_salary": "", "p_overtime": "",
+        "p_support": "",
+    }
+    if can_payroll:
+        values.update({
+            "c_ratio_target": _pct_str(cfg.salary_ratio_target),
+            "p_salary": (f"{cfg.salary_basic_allowance_cents / 100:.2f}"
+                         if cfg.salary_basic_allowance_cents is not None
+                         else ""),
+            "p_overtime": (f"{cfg.overtime_cents / 100:.2f}"
+                           if cfg.overtime_cents is not None else ""),
+            "p_support": (f"{cfg.support_team_cost_cents / 100:.2f}"
+                          if cfg.support_team_cost_cents is not None
+                          else ""),
+        })
+    return values
+
+
 class ManpowerState(ExpensesState):
     """Manpower Efficiency page state (inherits selectors + guards)."""
 
@@ -368,33 +398,11 @@ class ManpowerState(ExpensesState):
             try:
                 user = self._actor()
                 # Event handlers can be invoked directly over the socket:
-                # payroll fields load ONLY for configuration managers.
+                # payroll fields and the salary ratio target load ONLY for
+                # configuration managers.
                 can_payroll = authz.can_manage_config(user)
                 cfg = app_service.get_month_config(user, store_id, month)
-                staffing = {
-                    "c_opening": (str(cfg.opening_headcount_ft)
-                                  if cfg.opening_headcount_ft is not None
-                                  else ""),
-                    "c_budget": (str(cfg.budget_headcount)
-                                 if cfg.budget_headcount is not None else ""),
-                    "c_pt_factor": (f"{float(cfg.part_timer_factor):g}"
-                                    if cfg.part_timer_factor is not None
-                                    else ""),
-                    "c_turnover": _pct_str(cfg.turnover_threshold),
-                    "c_ratio_target": _pct_str(cfg.salary_ratio_target),
-                }
-                payroll = {
-                    "p_salary": (f"{cfg.salary_basic_allowance_cents / 100:.2f}"
-                                 if cfg.salary_basic_allowance_cents
-                                 is not None else ""),
-                    "p_overtime": (f"{cfg.overtime_cents / 100:.2f}"
-                                   if cfg.overtime_cents is not None else ""),
-                    "p_support": (f"{cfg.support_team_cost_cents / 100:.2f}"
-                                  if cfg.support_team_cost_cents is not None
-                                  else ""),
-                } if can_payroll else {}
-                values.update(staffing)
-                values.update(payroll)
+                values.update(_config_form_values(cfg, can_payroll))
             except Exception:
                 pass
         for a, v in values.items():

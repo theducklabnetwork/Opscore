@@ -130,8 +130,8 @@ class Fixture(unittest.TestCase):
 
     def test_setup_blank_budget_matches_expenses_page(self):
         """Blank budget rule = Expenses page: an untouched blank is not
-        sent; clearing an existing budget to blank is rejected (never
-        written as NULL or 0)."""
+        sent; blanking an existing budget WITHOUT ticking "Clear saved
+        value" is rejected (never written as NULL or 0)."""
         import types
         from ducklab.ops_stores_state import StoresState
         st = types.SimpleNamespace(budget_rows=[
@@ -142,8 +142,8 @@ class Fixture(unittest.TestCase):
         updates, errors = StoresState._parse_budgets(st)
         self.assertEqual(updates, {9: 12345})
         self.assertEqual(errors, [
-            "Budget for Water: enter a budget amount. A missing budget is "
-            "distinct from RM 0 — leave unset instead."])
+            "Budget for Water: enter a budget amount, or tick "
+            "“Clear saved value” to remove it (No budget)."])
 
     # 3 ------------------------------------------------------------------
     def test_unchanged_blank_field_does_not_overwrite(self):

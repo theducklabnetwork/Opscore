@@ -259,7 +259,13 @@ def _budget_row(row) -> rx.Component:
                  on_change=lambda v: StoresState.set_budget_value(row["id"], v),
                  placeholder="—", width="100%",
                  id=f"setup-budget-{row['id']}",
-                 disabled=~StoresState.can_edit_setup),
+                 disabled=~StoresState.can_edit_setup | (row["clear"] == "1")),
+        rx.cond(
+            row["original"] != "",
+            rx.checkbox("Clear saved value", checked=row["clear"] == "1",
+                        on_change=lambda v: StoresState.set_budget_clear(row["id"], v),
+                        size="1", disabled=~StoresState.can_edit_setup),
+        ),
         spacing="1", align="start", width="100%")
 
 

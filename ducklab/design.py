@@ -7,7 +7,11 @@ green/amber/red), which automatically adapt to dark and light mode.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import reflex as rx
+
+from ducklab.kpi import KL_TZ
 
 # --- Tokens (semantic Radix scales: dark/light adaptive) -------------------
 BG = rx.color("slate", 1)            # app background (deep navy-charcoal dark)
@@ -69,6 +73,19 @@ def fmt_num(value, dash="—") -> str:
         return f"{value:,.2f}"
     return f"{value:,}"
 
+
+def fmt_kl_datetime(utc_text, dash="—") -> str:
+    """Stored UTC 'YYYY-MM-DD HH:MM:SS' (SQLite datetime('now'), no zone)
+    -> Kuala Lumpur display '21 Oct 2026, 14:05 MYT'. Display only;
+    unparseable text is shown unchanged."""
+    if utc_text is None:
+        return dash
+    try:
+        dt = datetime.strptime(str(utc_text), "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return str(utc_text)
+    kl = dt.replace(tzinfo=timezone.utc).astimezone(KL_TZ)
+    return f"{kl.day} {kl:%b %Y, %H:%M} MYT"
 
 # --- Primitives ------------------------------------------------------------
 def kpi_card(label: str, value, *, icon: str = "", sub=None,

@@ -310,16 +310,10 @@ class DailyState(OpsState):
         }
 
     def _monthly_kpis(self, days) -> dict[str, str]:
-        sales_days = [d for d in days if d.sales_cents is not None]
-        sales_total = sum(d.sales_cents for d in sales_days)
         tx = sum(d.transactions or 0 for d in days)
         units = sum(d.units or 0 for d in days)
         month = self._selected_month()
         out = {
-            "mtd": ds.fmt_rm(sales_total if days else None),
-            "reported_days": f"{len(sales_days)} sales days reported",
-            "avg_daily": ds.fmt_rm0(
-                round(sales_total / len(sales_days)) if sales_days else None),
             "transactions": ds.fmt_num(tx if days else None),
             "units": ds.fmt_num(units if days else None),
         }
@@ -336,8 +330,10 @@ class DailyState(OpsState):
                 "loss": ds.fmt_rm(rep.stock.total_loss_cents),
             })
         except Exception:
+            s = None
             out.update({"target": "—", "achievement": "—",
                         "projected": "—", "loss": "—"})
+        out.update(_sales_summary(days, s))
         return out
 
 
@@ -538,3 +534,23 @@ class DailyState(OpsState):
 # sites (and imports from other ops_*_state modules) stable.
 _parse_money = kpi.parse_money_cents
 _parse_count = kpi.parse_count
+
+
+def _sales_summary(days, sales=None) -> dict[str, str]:
+    """MTD / average / reported-days cards. Uses the report's figures
+    (SalesSection) when available, else the same kpi engine functions on
+    the saved records (no month config yet). Exact Decimal — no float
+    math; "—" when no sales days are entered."""
+    if sales is not None:
+        entered = sales.days_entered
+        mtd = sales.sales_mtd_cents
+        avg = sales.average_per_day
+    else:
+        entered = kpi.days_with_sales_entered(days)
+        mtd = kpi.sales_mtd_cents(days)
+        avg = kpi.average_per_reported_day(mtd, entered)
+    return {
+        "mtd": ds.fmt_rm(mtd if entered else None),
+        "avg_daily": ds.fmt_rm0(avg if entered else None),
+        "reported_days": f"{entered} sales days reported",
+    }
