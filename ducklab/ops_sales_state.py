@@ -220,8 +220,11 @@ class SalesState(StoresState):
         # achievement to date: MTD / selected level (Level 1 = the budget
         # achievement, the engine's mtd_achievement_l1)
         self.sp_mtd_achievement_label = f"Achievement to date vs Level {n}"
+        # same rounding as Daily: a shortfall is never rounded up
         self.sp_mtd_achievement = (
-            ds.fmt_pct(kpi.mtd_achievement(s.sales_mtd_cents, target))
+            ds.fmt_achievement(
+                kpi.mtd_achievement(s.sales_mtd_cents, target),
+                kpi.sales_status(s.sales_mtd_cents, target))
             if entered else "—")
         self.sp_mtd_achievement_sub = (
             f"Level {n} target " + ds.fmt_rm0(target)
@@ -234,18 +237,19 @@ class SalesState(StoresState):
         self.sp_l1_achievement_label = (
             f"Achievement vs Level {n}" if complete
             else f"Projected achievement vs Level {n}")
-        self.sp_l1_achievement = ds.fmt_pct(s.achievement_by_level.get(key))
+        status = s.status_by_level.get(key, "Awaiting data")
+        # a shortfall is never rounded up to 100.0% (ds.fmt_achievement)
+        self.sp_l1_achievement = ds.fmt_achievement(
+            s.achievement_by_level.get(key), status)
         gap = self._gap(s, key)
         self.sp_l1_achievement_sub = (
             "" if gap == "—" else
             ("Gap " if complete else "Projected gap ") + gap)
-        # projected tiles carry the engine's projection label, exactly as
-        # the Overview: "Projected: <status>" + "Early estimate" (< 7 days)
+        # the engine status chip for the selected level: Achieved / Below
+        # target (complete), "Projected: <status>" + "Early estimate"
+        # (< 7 days) while incomplete — the same labels as the Overview
         (self.sp_proj_status, self.sp_proj_color,
-         self.sp_early_tag) = ds.projection_style(
-            pstate, s.status_by_level.get(key, "Awaiting data"))
-        if complete:
-            self.sp_proj_status = ""  # the actual tile needs no chip
+         self.sp_early_tag) = ds.projection_style(pstate, status)
         self.sp_early_tip = (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
                              if self.sp_early_tag else "")
         cfg = rep.config
@@ -254,16 +258,18 @@ class SalesState(StoresState):
             s.month_end_sales_cents, s.targets)
         self._set_level(level, nxt, short, len(s.targets), pstate,
                         entered, s.targets.get("level1") is None)
-        if nxt is not None and entered:
+        # achievement vs the next level, unless that is the selected level
+        # (the achievement tile already shows it)
+        if nxt is not None and entered and nxt != n:
             self.sp_level_sub2 = (
-                ds.fmt_pct(s.achievement_by_level.get(f"level{nxt}"))
+                ds.fmt_achievement(
+                    s.achievement_by_level.get(f"level{nxt}"),
+                    s.status_by_level.get(f"level{nxt}", ""))
                 + f" of Level {nxt}")
 
-        # needed per remaining day / run-rate for the selected level
-        if complete:
-            self.sp_needed = self.sp_needed_compact = "Month complete"
-            self.sp_needed_exact = "Every day of the month is entered"
-        else:
+        # needed per remaining day / run-rate for the selected level (the
+        # tile is not shown for a complete month)
+        if not complete:
             self.sp_needed_label = f"Needed per remaining day for Level {n}"
             self._set_money("needed", kpi.needed_per_remaining_day_for_level(
                 s.targets, n, s.sales_mtd_cents, entered, dim))
@@ -277,7 +283,9 @@ class SalesState(StoresState):
         self.sp_ladder = [
             (lambda lbl, color, tag: {
              "level": f"Level {n}", "target": ds.fmt_rm(s.targets.get(name)),
-             "achievement": ds.fmt_pct(s.achievement_by_level.get(name)),
+             "achievement": ds.fmt_achievement(
+                 s.achievement_by_level.get(name),
+                 s.status_by_level.get(name, "")),
              "status": lbl, "color": color, "early_tag": tag,
              "early_tip": (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
                            if tag else ""),

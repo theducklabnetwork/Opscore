@@ -74,12 +74,13 @@ class Fixture(unittest.TestCase):
 
 class DailyAchievementLabelTests(Fixture):
     def test_achievement_is_mtd_over_level1(self):
-        """MTD 23,500 / Level 1 210,000 = 11.19% -> '11.2%'."""
+        """MTD 23,500 / Level 1 210,000 = 11.19% -> '11.1%' (below
+        target: rounded down, S3)."""
         self.record(1, sales_cents=rm(12000))
         self.record(2, sales_cents=rm(11500))
         k = self.daily_kpis()
         self.assertEqual(k["mtd"], "RM 23,500.00")
-        self.assertEqual(k["achievement"], "11.2%")
+        self.assertEqual(k["achievement"], "11.1%")
         # projected achievement is a separate figure: 23,500 / 2 * 31 =
         # 364,250 / 210,000 = 173.5%
         self.assertEqual(k["proj_achievement"], "173.5%")
@@ -175,7 +176,7 @@ class SalesPageTests(Fixture):
         self.record(1, sales_cents=rm(12000))
         self.record(2, sales_cents=rm(11500))
         st = self.sales_state()
-        self.assertEqual(st.sp_mtd_achievement, "11.2%")
+        self.assertEqual(st.sp_mtd_achievement, "11.1%")   # same as Daily
         self.assertEqual(st.sp_l1_achievement, "173.5%")
         self.assertEqual(st.sp_proj_status, "Projected: Achieved")
         self.assertEqual(st.sp_early_tag, "Early estimate")

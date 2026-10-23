@@ -8,10 +8,11 @@ green/amber/red), which automatically adapt to dark and light mode.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import ROUND_FLOOR, Decimal
 
 import reflex as rx
 
-from ducklab.kpi import KL_TZ
+from ducklab.kpi import KL_TZ, SALES_BELOW, to_decimal
 
 # --- Tokens (semantic Radix scales: dark/light adaptive) -------------------
 BG = rx.color("slate", 1)            # app background (deep navy-charcoal dark)
@@ -92,6 +93,18 @@ def fmt_pct(ratio, dash="—") -> str:
     if ratio is None:
         return dash
     return f"{float(ratio) * 100:,.1f}%"
+
+
+def fmt_achievement(ratio, status: str, dash="—") -> str:
+    """Achievement vs a target level, 1 decimal. A shortfall is never
+    rounded up: when the level's status is Below target the percentage is
+    rounded DOWN (350,819 / 350,819.30 -> '99.9%', not '100.0%')."""
+    if ratio is None:
+        return dash
+    if status != SALES_BELOW:
+        return fmt_pct(ratio, dash)
+    pct = (to_decimal(ratio) * 100).quantize(Decimal("0.1"), ROUND_FLOOR)
+    return f"{pct:,.1f}%"
 
 
 def fmt_num(value, dash="—") -> str:
