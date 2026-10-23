@@ -300,9 +300,9 @@ class SalesState(StoresState):
         # ("No reference" never gets the prefix or the tag)
         self.sp_comparisons = []
         for label, growth, gstatus in (
-                ("vs Same Month Last Year", s.growth_last_year,
+                ("SSSG/Year", s.growth_last_year,
                  s.growth_status_last_year),
-                ("vs Last Month", s.growth_last_month,
+                ("SSSG/Month", s.growth_last_month,
                  s.growth_status_last_month)):
             g_lbl, g_color, g_tag = ds.projection_style(pstate, gstatus)
             self.sp_comparisons.append({
@@ -348,8 +348,7 @@ class SalesState(StoresState):
             return
         if not entered:
             return
-        self.sp_level = (f"Level {level} of {total}" if level
-                         else "Below Level 1")
+        self.sp_level = f"Level {level}" if level else "Below Level 1"
         if pstate != "actual":
             # "Projected: Level 2" — same amber chip as projection_style
             self.sp_level_chip = ds.level_reached_text(level, pstate)

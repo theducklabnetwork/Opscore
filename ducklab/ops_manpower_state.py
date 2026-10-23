@@ -257,8 +257,10 @@ class ManpowerState(ExpensesState):
             "resigned": ds.fmt_num(m.resigned),
             "closing": ds.fmt_num(m.closing_headcount),
             "budget": ds.fmt_num(cfg.budget_headcount),
+            # "+2" / "-1"; zero reads "0" (never "+0")
             "variance": ("—" if m.headcount_variance is None
-                         else f"{m.headcount_variance:+,}"),
+                         else f"{m.headcount_variance:+,}"
+                         if m.headcount_variance else "0"),
             "status": m.headcount_status,
             "status_color": ds.status_color(m.headcount_status),
             # turnover lives with headcount movement (shown once)
@@ -307,8 +309,8 @@ class ManpowerState(ExpensesState):
                 "ratio": ds.fmt_pct(m.salary_ratio_store),
                 "ratio_support": ds.fmt_pct(m.salary_ratio_incl_support),
                 "target": ds.fmt_pct(cfg.salary_ratio_target),
-                "budget": ds.fmt_rm0(budget),
-                "variance": ds.fmt_rm0(variance),
+                "budget": ds.fmt_rm(budget),       # one money format
+                "variance": ds.fmt_rm(variance),
                 # incomplete month: the ratio uses sales to date, so the
                 # status is labelled "Month to date" (engine value as is)
                 "status": (f"Month to date: {m.salary_ratio_status}"

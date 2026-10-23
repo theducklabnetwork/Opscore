@@ -105,10 +105,10 @@ class NegativeMoneyTests(unittest.TestCase):
 class ChipColourTests(unittest.TestCase):
     def test_treatment_chips_are_not_the_accent(self):
         colours = {t: ds.status_color(t)
-                   for t in ("Included", "Offset", "Info only")}
+                   for t in ("Included", "Offset", "Info Only")}
         # V5: Offset green (as the composition chart), the others gray
         self.assertEqual(colours, {"Included": "gray", "Offset": "green",
-                                   "Info only": "gray"})
+                                   "Info Only": "gray"})
         self.assertNotIn("indigo", colours.values())
 
 

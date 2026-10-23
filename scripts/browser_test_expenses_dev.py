@@ -112,10 +112,14 @@ def main() -> int:
         check("category statuses present",
               "OVER BUDGET" in body and "Watch" in body
               and "No budget" in body)
-        check("data checks shown", "Missing paid date" in body
-              and "Disputed" in body and "Unverified" in body)
-        check("validation summary line",
-              "Missing paid date" in body and "Disputed: 1" in body)
+        # P1: one "Needs Review: N" line; it filters the register
+        check("needs review line shown", "Needs Review: " in body)
+        page.click("#needs-review")
+        page.wait_for_timeout(1200)
+        check("needs review filter applied",
+              page.locator("#needs-review-clear").count() == 1)
+        page.click("#needs-review-clear")
+        page.wait_for_timeout(800)
 
         # --- add expense via dialog ---
         page.locator("#add-expense").scroll_into_view_if_needed()
