@@ -87,13 +87,14 @@ def main() -> int:
         body = page.locator("body").inner_text()
         check("projected label on partial month",
               "Projected: " in body)
-        check("Sales MTD seeded (RM 115,200.00)", "RM 115,200" in body)
-        print("DEBUG MTD line:", [l for l in body.splitlines() if "Sales MTD" in l])
-        check("days entered 19 of 31", "19 of 31 days reported" in body)
+        check("Sales seeded (RM 115,200.00)", "RM 115,200.00" in body)
+        check("Projected Sales tile on a partial month (P1)",
+              "Projected Sales" in body
+              and "days reported" not in body)
         check("Level 1 status badge", "Achieved" in body
               or "Below target" in body)
-        check("comparison rows", "vs Same Month Last Year" in body
-              and "vs Last Month" in body)
+        check("comparison rows", "SSSG/Year" in body
+              and "SSSG/Month" in body)
         check("unreported days collapsed into one row",
               "12 days not reported" in body)
         page.click("#sales-hidden-toggle")
@@ -103,7 +104,7 @@ def main() -> int:
               .count() == 1
               and page.locator("#sales-row-2026-10-05 >> text=Zero sales")
               .count() == 1)
-        check("basket metrics section", "Sales per Receipt (SPR)" in body)
+        check("basket section", "Basket" in body and "SPR" in body)
 
         # edit deep link for the 1st of the month
         page.click("#sales-row-2026-10-01 >> text=Edit")
@@ -121,7 +122,7 @@ def main() -> int:
         page.wait_for_timeout(2500)
         body2 = page.locator("body").inner_text()
         check("store switch works (S01 MTD gone, A01 loaded)",
-              "RM 115,200" not in body2 and "Sales MTD" in body2)
+              "RM 115,200" not in body2 and "Level Reached" in body2)
 
         # screenshots
         goto_sales(page)

@@ -31,7 +31,7 @@ class TestOpsCharts(unittest.TestCase):
         traces = {t["name"]: t for t in fig.to_plotly_json()["data"]}
         self.assertEqual(list(traces["Actual"]["y"]),
                          [10.0, 20.0, None, None, None])
-        self.assertEqual(list(traces["Level 1 budget pace"]["y"]),
+        self.assertEqual(list(traces["Target"]["y"]),   # P1 legend
                          [5.0, 10.0, 15.0, 20.0, 25.0])
 
     # 3 ------------------------------------------------------------------
@@ -45,18 +45,18 @@ class TestOpsCharts(unittest.TestCase):
         ]
         fig = ops_charts.composition(items, dark=True)
         names = {t["name"] for t in fig.to_plotly_json()["data"]}
-        self.assertIn("In Total Loss", names)
-        self.assertIn("Offsets Total Loss", names)
-        self.assertIn("Info only", names)
+        self.assertIn("Total Loss", names)
+        self.assertIn("Offset", names)
+        self.assertIn("Info Only", names)
         by_name = {t["name"]: t for t in fig.to_plotly_json()["data"]}
         # offsets plotted from their absolute value, distinct trace
-        self.assertEqual(list(by_name["Offsets Total Loss"]["x"]), ["EXTRA"])
-        self.assertEqual(list(by_name["Offsets Total Loss"]["y"]), [12.0])
+        self.assertEqual(list(by_name["Offset"]["x"]), ["EXTRA"])
+        self.assertEqual(list(by_name["Offset"]["y"]), [12.0])
         # info-only visually distinct: lower opacity
-        self.assertLess(by_name["Info only"]["opacity"],
-                        by_name["In Total Loss"]["opacity"])
+        self.assertLess(by_name["Info Only"]["opacity"],
+                        by_name["Total Loss"]["opacity"])
         self.assertIn("not in Total Loss",
-                      by_name["Info only"]["hovertemplate"])
+                      by_name["Info Only"]["hovertemplate"])
 
     # 4 ------------------------------------------------------------------
     def test_blank_budget_produces_no_bar(self):
@@ -64,7 +64,9 @@ class TestOpsCharts(unittest.TestCase):
             ["Water", "Electricity"], [None, 320000], [14500, 285000],
             dark=True)
         budget = next(t for t in fig.to_plotly_json()["data"] if t["name"] == "Budget")
-        self.assertEqual(list(budget["y"]), [None, 3200.0])
+        # horizontal bars (P1): values on x, categories on y
+        self.assertEqual(list(budget["x"]), [None, 3200.0])
+        self.assertEqual(list(budget["y"]), ["Water", "Electricity"])
 
     # 5 ------------------------------------------------------------------
     def test_hover_money_formatting(self):

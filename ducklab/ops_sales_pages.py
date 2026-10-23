@@ -39,8 +39,7 @@ def _level_item(n: int) -> rx.Component:
 def _compare_control() -> rx.Component:
     # Sales Performance only; Overview and Monthly Report stay on Level 1
     return rx.hstack(
-        rx.text("Compare against:", size="2", color=ds.TEXT_MUTED,
-                weight="medium"),
+        rx.text("Target:", size="2", color=ds.TEXT_MUTED, weight="medium"),
         rx.segmented_control.root(
             *[_level_item(n) for n in (1, 2, 3, 4)],
             value=S.sp_compare,
@@ -52,67 +51,53 @@ def _compare_control() -> rx.Component:
     )
 
 
-# --- headline tiles: built per layout (a component is placed once) ---------
-def _sales_mtd() -> rx.Component:
-    return ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
-                       compact=S.sp_sales_mtd_compact,
-                       exact=S.sp_sales_mtd_exact, sub=S.sp_sales_mtd_sub)
-
-
-def _month_end() -> rx.Component:
-    return ui.kpi_tile("Month-end sales", S.sp_month_end,
-                       compact=S.sp_month_end_compact,
-                       exact=S.sp_month_end_exact, sub=S.sp_month_end_sub)
+# --- headline tiles: built per layout (a component is placed once). Plain
+# label + full value (RM 350,819.00); status chips stay, no sub-lines -------
+def _tile(label, value, id=None, **kw) -> rx.Component:
+    # a size down on wide screens too: exact money fits five across
+    return ui.kpi_tile(label, value, id=id, size="6", size_narrow="4", **kw)
 
 
 def _achievement() -> rx.Component:
     # selected level's engine status chip (actual or "Projected: ...")
-    return ui.kpi_tile(S.sp_l1_achievement_label, S.sp_l1_achievement,
-                       chip=_PROJ_CHIP, tag=S.sp_early_tag,
-                       tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub,
-                       id="sales-achievement")
+    return _tile("Achievement", S.sp_l1_achievement, id="sales-achievement",
+                 chip=_PROJ_CHIP, tag=S.sp_early_tag, tag_tip=S.sp_early_tip)
 
 
 def _level_reached() -> rx.Component:
-    return ui.kpi_tile("Level reached", S.sp_level,
-                       chip=(S.sp_level_chip, S.sp_level_chip_color),
-                       tag=S.sp_early_tag, tag_tip=S.sp_early_tip,
-                       sub=S.sp_level_sub, sub2=S.sp_level_sub2,
-                       id="sales-level")
+    return _tile("Level Reached", S.sp_level, id="sales-level",
+                 chip=(S.sp_level_chip, S.sp_level_chip_color),
+                 tag=S.sp_early_tag, tag_tip=S.sp_early_tip)
 
 
-def _avg_day(md_span: str) -> rx.Component:
-    # last tile closes the row: full width on phones (2 columns)
+def _avg_day(span_md: str) -> rx.Component:
+    # closes the last row: full width on phones (2 columns)
     return rx.box(
-        ui.kpi_tile("Avg per reported day", S.sp_avg_day,
-                    compact=S.sp_avg_day_compact,
-                    exact=S.sp_avg_day_exact),
-        grid_column=rx.breakpoints(initial="span 2", md=md_span),
+        _tile("Daily Sales (Avg.)", S.sp_avg_day_exact),
+        grid_column=rx.breakpoints(initial="span 2", md=span_md),
         min_width="0", id="sales-avg-day",
     )
 
 
 def _kpi_tiles() -> rx.Component:
-    # top row: the month-end story (sales, month-end, achievement vs the
-    # selected level, level reached). No empty slots at any width:
-    # complete month -> 5 tiles (5 columns; 2+2+1 wide on phones);
-    # incomplete -> 7 tiles (4 + 2 + avg x2; 2+2+2+1 wide on phones).
+    # complete month: 4 tiles (4 across; 2 + 2 on phones);
+    # incomplete: 5 tiles with Projected Sales (5 across; 2 + 2 + 1 wide)
     complete = ui.kpi_grid(
-        _sales_mtd(), _month_end(), _achievement(), _level_reached(),
-        _avg_day("auto"),
-        columns=rx.breakpoints(initial="2", md="5"),
+        _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
+        _achievement(),
+        _level_reached(),
+        rx.box(_tile("Daily Sales (Avg.)", S.sp_avg_day_exact),
+               min_width="0", id="sales-avg-day"),
+        columns=rx.breakpoints(initial="2", md="4"),
         id="sales-kpis",
     )
     incomplete = ui.kpi_grid(
-        _sales_mtd(), _month_end(), _achievement(), _level_reached(),
-        ui.kpi_tile(S.sp_mtd_achievement_label, S.sp_mtd_achievement,
-                    sub=S.sp_mtd_achievement_sub,
-                    id="sales-mtd-achievement"),
-        ui.kpi_tile(S.sp_needed_label, S.sp_needed,
-                    compact=S.sp_needed_compact, exact=S.sp_needed_exact,
-                    sub=S.sp_needed_sub, id="sales-needed"),
-        _avg_day("span 2"),
-        columns=rx.breakpoints(initial="2", md="4"),
+        _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
+        _tile("Projected Sales", S.sp_month_end_exact, id="sales-projected"),
+        _achievement(),
+        _level_reached(),
+        _avg_day("auto"),
+        columns=rx.breakpoints(initial="2", md="5"),
         id="sales-kpis",
     )
     return rx.cond(S.sp_complete, complete, incomplete)
@@ -121,26 +106,21 @@ def _kpi_tiles() -> rx.Component:
 def _basket() -> rx.Component:
     return ui.section_card(
         rx.grid(
-            ui.stat("Sales per Receipt (SPR)", S.sp_spr, size="6"),
-            ui.stat("Units per Transaction (UPT)", S.sp_upt, size="6"),
-            ui.stat("Average Selling Price (ASP)", S.sp_asp, size="6"),
-            columns=rx.breakpoints(initial="1", sm="3"),
-            spacing="5", width="100%",
+            ui.stat("SPR", S.sp_spr, size="6"),
+            ui.stat("UPT", S.sp_upt, size="6"),
+            ui.stat("ASP", S.sp_asp, size="6"),
+            columns="3", spacing="5", width="100%",
         ),
-        title="Basket Metrics", id="basket-section",
+        title="Basket", id="basket-section",
     )
 
 
 def _pace_chart() -> rx.Component:
     return ui.chart_card(
-        "Pace vs Level Targets",
+        "Sales Trend",
         rx.cond(S.is_dark, ops_charts.chart(S.sp_fig_dark),
                 ops_charts.chart(S.sp_fig_light)),
         ready=S.sp_chart_ready,
-        subtitle="Cumulative sales (RM) against each level's daily "
-                 "run-rate (selected level bold)",
-        detail="The pace chart appears once 3 days are reported. "
-               "Unreported days are never interpolated.",
         id="pace-section",
     )
 
@@ -183,17 +163,14 @@ def _target_ladder() -> rx.Component:
             rx.foreach(S.sp_comparisons, _comparison_row),
             phone=("Level", "Achievement", "Status"),
         ),
-        title="Target Ladder & Comparisons",
-        extra=_levels_warning("ladder-levels-missing"),
-        subtitle="Achievement and gap use the projected month-end until "
-                 "every day is entered",
+        title="Targets",
         id="ladder-section",
     )
 
 
-_DAILY_COLS = ["Date", ("Sales", True), ("Trans.", True),
+_DAILY_COLS = ["Date", ("Sales", True), ("Transactions", True),
                ("Units", True), ("SPR", True), ("UPT", True), ("ASP", True),
-               ("vs Budget", True), "Status", ""]
+               ("Variance", True), "Status", ""]
 
 
 def _daily_row(row) -> rx.Component:
@@ -229,12 +206,9 @@ def _daily_table() -> rx.Component:
                              toggle_id="sales-hidden-toggle"),
                 phone=("Date", "Sales", "Status", ""),
             ),
-            ui.empty_state("No daily records yet",
-                           "Enter daily sales in Daily Operations.",
-                           icon="calendar"),
+            ui.empty_state("No Records", icon="calendar"),
         ),
-        ui.status_legend(note="An entered 0 counts as reported. vs Budget "
-                              "= sales minus the Level 1 daily run-rate."),
+        ui.status_legend(),
         title="Daily Sales", id="sales-daily-section",
     )
 
@@ -261,7 +235,4 @@ def sales_page() -> rx.Component:
         ),
         on_store=S.select_store,
         on_month=S.select_month,
-        description="Sales against the monthly Level 1–4 targets. The "
-                    "month-end figure is projected until every day is "
-                    "entered.",
     )

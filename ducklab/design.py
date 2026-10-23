@@ -204,8 +204,8 @@ STATUS_COLOR: dict[str, str] = {
     # expense transaction status
     "Paid": "green", "Pending": "amber", "Cancelled": "gray",
     # stock-loss code treatment (see TREATMENT): Offset green as in the
-    # composition chart; Included and Info only neutral gray
-    "Included": "gray", "Offset": "green", "Info only": "gray",
+    # composition chart; Included and Info Only neutral gray
+    "Included": "gray", "Offset": "green", "Info Only": "gray",
     # actions
     "Open": "blue", "In progress": "amber", "Blocked": "red",
     "Done": "green",
@@ -232,7 +232,7 @@ STATUS_COLOR: dict[str, str] = {
 
 # Stock-loss code treatment by contribution sign (store_ops_db
 # STOCK_LOSS_CODES): one label everywhere (Stock page, Monthly Report).
-TREATMENT = {1: "Included", -1: "Offset", 0: "Info only"}
+TREATMENT = {1: "Included", -1: "Offset", 0: "Info Only"}
 
 # Daily Entry: stock codes in workbook column order, with display labels
 # (MISSING / EXTRA read as words; the stored code is unchanged)

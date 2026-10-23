@@ -267,12 +267,12 @@ class CompareSelectorTests(Fixture):
                          "Level 3 required run-rate: RM 7,097")
         # highlighted line = Level 3 (strong, in the legend)
         by_name = {t.name: t for t in st.sp_fig_dark.data}
-        l1, l3 = by_name["Level 1 budget pace"], by_name["Level 3 pace"]
+        l1, l3 = by_name["Level 1"], by_name["Target"]   # P1 legend
         self.assertGreater(l3.line.width, l1.line.width)
         self.assertTrue(l3.showlegend)
         self.assertFalse(l1.showlegend)
         # the level reached tile and the ladder do not depend on it
-        self.assertEqual(st.sp_level, "Level 2 of 4")
+        self.assertEqual(st.sp_level, "Level 2")
         self.assertEqual(len(st.sp_ladder), 4)
         # the daily vs-budget column stays on Level 1 (budget achievement)
         # 6,900 - 200,000 / 31 = 448.387 (truncated to the cent, as before)
@@ -349,7 +349,7 @@ class LevelReachedSubLineTests(Fixture):
     def test_achievement_vs_next_level(self):
         self.september()
         st = self.sales("2026-09", compare="2")
-        self.assertEqual(st.sp_level, "Level 3 of 4")      # unchanged
+        self.assertEqual(st.sp_level, "Level 3")      # unchanged
         self.assertEqual(st.sp_level_sub, "RM 0.30 short of Level 4")
         self.assertEqual(st.sp_level_sub2, "99.9% of Level 4")   # S3 floor
 
@@ -358,7 +358,7 @@ class LevelReachedSubLineTests(Fixture):
         self.app.configure_month(self.admin, self.sid, "2026-09",
                                  level4_pct=0.25)  # L4 337,326.25
         st = self.sales("2026-09")
-        self.assertEqual(st.sp_level, "Level 4 of 4")
+        self.assertEqual(st.sp_level, "Level 4")
         self.assertEqual(st.sp_level_sub, "All levels reached")
         self.assertEqual(st.sp_level_sub2, "")
 

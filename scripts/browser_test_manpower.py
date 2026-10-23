@@ -105,9 +105,9 @@ def main() -> int:
 
         body = page.inner_text("body")
         check("5. headcount metrics visible",
-              "Opening headcount" in body and "Closing headcount" in body)
-        check("hc status badge (Vacancy or On budget etc.)",
-              page.locator("#hc-status").inner_text() != "")
+              "Opening Headcount" in body and "Closing Headcount" in body)
+        check("no section-header status chip (P1)",
+              page.locator("#hc-status").count() == 0)
         # seeded: opening 10, +1 hire, -1 resignation -> closing 10, budget 12
         check("vacancy warning shown (10 < 12)",
               page.locator("#vacancy-warning").count() == 1)
@@ -123,8 +123,9 @@ def main() -> int:
         # payroll visible for admin
         check("payroll section shows salary for admin",
               "13,275.75" in page.locator("#payroll-section").inner_text())
-        check("salary ratio status badge present",
-              page.locator("#ratio-status").inner_text() != "")
+        check("salary section titled Salary, no header chip (P1)",
+              "Salary" in page.locator("#payroll-section").inner_text()
+              and page.locator("#ratio-status").count() == 0)
         shot(page, "03-salary-ratio-monitoring")
 
         # configuration editor

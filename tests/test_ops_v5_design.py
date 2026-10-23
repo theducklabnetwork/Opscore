@@ -93,9 +93,9 @@ class Fixture(unittest.TestCase):
 PHONE_SETS = {
     # page module, table builder -> labels that must show at 390px
     ("ops_actions_pages", "_table"): ("Issue", "Priority", "Status", ""),
-    ("ops_stock_pages", "_category_section"): ("Code", "Monthly total",
+    ("ops_stock_pages", "_category_section"): ("Code", "Total",
                                                "Treatment"),
-    ("ops_stock_pages", "_daily_section"): ("Date", "Total loss", "Status",
+    ("ops_stock_pages", "_daily_section"): ("Date", "Total Loss", "Status",
                                             ""),
     ("ops_expenses_pages", "_register"): ("Incurred", "Description",
                                           "Amount", "Status", ""),
@@ -165,7 +165,7 @@ class TreatmentTests(Fixture):
             self.assertEqual(codes["EXTRA"]["treatment_color"], "green")
             self.assertEqual(codes["DMO"]["treatment"], "Included")
             self.assertEqual(codes["DMO"]["treatment_color"], "gray")
-            self.assertEqual(codes["DPI"]["treatment"], "Info only")
+            self.assertEqual(codes["DPI"]["treatment"], "Info Only")
             self.assertEqual(codes["DPI"]["treatment_color"], "gray")
 
     def test_extra_is_offset_on_stock_page(self):
@@ -180,7 +180,7 @@ class TreatmentTests(Fixture):
     def test_chip_colours(self):
         self.assertEqual({t: ds.status_color(t) for t in ds.TREATMENT.values()},
                          {"Included": "gray", "Offset": "green",
-                          "Info only": "gray"})
+                          "Info Only": "gray"})
 
 
 class ReportTests(Fixture):

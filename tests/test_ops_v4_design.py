@@ -60,12 +60,12 @@ class ChartTests(unittest.TestCase):
         self.assertEqual(ops_charts.wrap_label("Water"), "Water")
         self.assertEqual(ops_charts.wrap_label("Repairs & Maintenance"),
                          "Repairs &<br>Maintenance")
+        # P1: the budget chart is horizontal, so the full name reads on
+        # the category axis without wrapping or rotation
         fig = ops_charts.budget_vs_actual(["Repairs & Maintenance"], [None],
                                           [5000], dark=True)
-        self.assertEqual(list(fig.data[1].x), ["Repairs &<br>Maintenance"])
-        # hover keeps the full name
-        self.assertEqual(list(fig.data[1].customdata),
-                         ["Repairs & Maintenance"])
+        self.assertEqual(list(fig.data[1].y), ["Repairs & Maintenance"])
+        self.assertEqual(fig.data[1].orientation, "h")
 
     def test_composition_omits_zero_categories(self):
         items = [
@@ -81,7 +81,7 @@ class ChartTests(unittest.TestCase):
         codes = [c for trace in fig.data for c in trace.x]
         self.assertEqual(codes, ["DMO", "EXTRA"])
         self.assertEqual([t.name for t in fig.data],
-                         ["In Total Loss", "Offsets Total Loss"])
+                         ["Total Loss", "Offset"])
 
 
 class ChipTests(unittest.TestCase):

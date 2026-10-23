@@ -105,7 +105,7 @@ class AchievementTileTests(Fixture):
                          ("Below target", "red"))
         self.assertEqual(st.sp_l1_achievement_sub, "Gap −RM 0.30")
         # Level reached unchanged; "x% of Level 4" dropped (selected)
-        self.assertEqual(st.sp_level, "Level 3 of 4")
+        self.assertEqual(st.sp_level, "Level 3")
         self.assertEqual(st.sp_level_sub, "RM 0.30 short of Level 4")
         self.assertEqual(st.sp_level_sub2, "")
         # target ladder: same rule
@@ -168,12 +168,13 @@ class PageLayoutTests(unittest.TestCase):
             self.assertIn(f'"L{n}"', page)        # phones
 
     def test_complete_month_has_no_needed_tile(self):
+        # P1: no needed / to-date tiles at all; Projected Sales only in
+        # the incomplete layout; the average closes both layouts
         from ducklab.ops_sales_pages import _kpi_tiles
         tiles = str(_kpi_tiles())
-        # rendered once, in the incomplete-month layout only
-        self.assertEqual(tiles.count("sales-needed"), 1)
-        self.assertEqual(tiles.count("sales-mtd-achievement"), 1)
-        # the last tile spans 2 columns on phones in both layouts
+        self.assertEqual(tiles.count("sales-needed"), 0)
+        self.assertEqual(tiles.count("sales-mtd-achievement"), 0)
+        self.assertEqual(tiles.count('"Projected Sales"'), 1)
         self.assertEqual(tiles.count("sales-avg-day"), 2)
 
 

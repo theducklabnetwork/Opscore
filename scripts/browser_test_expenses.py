@@ -229,14 +229,14 @@ def main() -> int:
               all("\tPaid\t" in r for r in rows)
               and not any("\tPending\t" in r or "\tCancelled\t" in r
                           for r in rows) and len(rows) > 0)
-        select_option(page, "#filter-status", "All statuses")
+        select_option(page, "#filter-status", "All Statuses")
         page.wait_for_timeout(800)
-        select_option(page, "#filter-period", "Outstanding (pending)")
+        select_option(page, "#filter-period", "Pending")
         page.wait_for_timeout(1200)
         body = page.locator("#expense-register").inner_text()
         check("outstanding view shows only pending",
               "Cleaning supplies" in body and "TNB" not in body)
-        select_option(page, "#filter-period", "Incurred this month")
+        select_option(page, "#filter-period", "Incurred This Month")
         page.wait_for_timeout(1200)
         page.fill("#filter-search", "TNB")
         page.wait_for_timeout(800)
