@@ -336,8 +336,8 @@ class ClearBudgetTests(Fixture):
         # blanking a saved budget without ticking clear is rejected
         rows[0]["value"] = ""
         self.assertEqual(_parse_budget_rows(rows), ({}, [
-            "Budget for Elec: enter a budget amount, or tick "
-            "“Clear saved value” to remove it (No budget)."]))
+            "Budget for Elec: enter a budget amount, or use "
+            "× to clear it (No budget)."]))
 
     def test_budget_save_value(self):
         from ducklab.ops_expenses_state import _budget_save_value
@@ -345,14 +345,14 @@ class ClearBudgetTests(Fixture):
         with self.assertRaises(ValueError) as clash:
             _budget_save_value("3200.00", True)
         self.assertEqual(str(clash.exception),
-                         "Untick 'Clear saved value' to set an amount")
+                         "Enter an amount, or use × to clear")
         self.assertEqual(_budget_save_value("3200.00", False), 320000)
         with self.assertRaises(ValueError) as ctx:
             _budget_save_value("  ", False)
         self.assertEqual(
             str(ctx.exception),
-            "Enter a budget amount, or tick “Clear saved value” to remove "
-            "it. A missing budget is distinct from RM 0.")
+            "Enter a budget amount, or use × to clear it. A missing budget "
+            "is distinct from RM 0.")
 
     def test_monthly_setup_clear_reads_back_none(self):
         from ducklab.ops_stores_state import _parse_budget_rows

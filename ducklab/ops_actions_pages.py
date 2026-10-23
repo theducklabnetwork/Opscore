@@ -23,13 +23,12 @@ A = ActionsState
 def _cards() -> rx.Component:
     # keep the open count the first number in #action-cards (suite parses it)
     return ui.kpi_grid(
-        ui.kpi_tile("Open", A.n_open, sub="Incl. In progress and Blocked"),
+        ui.kpi_tile("Open", A.n_open),
         rx.box(
             ui.kpi_tile("Overdue", A.n_overdue,
-                        chip=(rx.cond(A.n_overdue != "0", "Needs attention",
+                        chip=(rx.cond(A.n_overdue != "0", "Needs Attention",
                                       ""), "red"),
-                        chip_id="overdue-attention",
-                        sub="Due before today, not Done/Cancelled"),
+                        chip_id="overdue-attention"),
             id="card-overdue", height="100%"),
         ui.kpi_tile("Completed", A.n_done),
         columns=rx.breakpoints(initial="3"),
@@ -52,7 +51,7 @@ def _filters() -> rx.Component:
         rx.hstack(
             rx.checkbox(checked=A.f_overdue_only,
                         on_change=A.set_f_overdue_only, id="f-overdue"),
-            rx.text("Overdue only", size="2"),
+            rx.text("Overdue Only", size="2"),
             spacing="2", align="center"),
         wrap="wrap", spacing="3", width="100%", align="center",
     )
@@ -63,7 +62,7 @@ _PHONE = ("Issue", "Priority", "Status", "")
 _COLS = ["Raised", ("Pillar", False, True), "Issue",
          "Priority",
          "Status",
-         "Person in charge", "Due", "Completed",
+         "Owner", "Due", "Completed",
          ""]
 
 
@@ -75,7 +74,7 @@ def _row(row) -> rx.Component:
             rx.text(row["issue"], size="2"),
             rx.hstack(
                 rx.cond(row["carried"],
-                        rx.badge("Carried over", size="1", variant="outline",
+                        rx.badge("Carried Over", size="1", variant="outline",
                                  color_scheme="violet", radius="full")),
                 # the Due column is off on phones: its badge moves here
                 rx.cond(row["overdue"],
@@ -107,25 +106,17 @@ def _table() -> rx.Component:
         rx.cond(
             A.loaded & (A.rows.length() > 0),
             ui.data_table(_COLS, rx.foreach(A.filtered_rows, _row),
-                          phone=_PHONE,
-                          hidden_note="Pillar shows from 1536px wide and "
-                                      "in each action's Edit dialog."),
-            ui.empty_state("No actions for this month",
-                           "Raise a follow-up with Add action; open items "
-                           "from earlier months appear here automatically.",
-                           icon="list-checks"),
+                          phone=_PHONE),
+            ui.empty_state("No Actions", icon="list-checks"),
         ),
         rx.cond(A.notice != "",
                 rx.callout(A.notice, icon="circle-check",
                            color_scheme="green", variant="soft",
                            id="act-notice")),
         title="Actions",
-        subtitle="Raised this month plus open actions from earlier months "
-                 "(labelled Carried over). Never part of finalized "
-                 "snapshots.",
         extra=rx.cond(
             A.can_write_actions,
-            rx.button(rx.icon("plus", size=14), "Add action",
+            rx.button(rx.icon("plus", size=14), "Add Action",
                       on_click=A.open_add, id="add-action")),
         id="actions-table",
     )
@@ -138,8 +129,8 @@ def _table() -> rx.Component:
 def _dialog() -> rx.Component:
     return ui.form_dialog(
         ui.form_section(
-            "Issue",
-            ui.form_field("Issue / observation",
+            "Details",
+            ui.form_field("Issue",
                           rx.text_area(value=A.a_issue,
                                        on_change=A.set_a_issue,
                                        id="a-issue", rows="3"),
@@ -160,32 +151,31 @@ def _dialog() -> rx.Component:
                 columns="3"),
         ),
         ui.form_section(
-            "Owner & dates",
+            "Schedule",
             ui.form_grid(
-                ui.form_field("Person in charge",
+                ui.form_field("Owner",
                               rx.input(value=A.a_pic, on_change=A.set_a_pic,
                                        id="a-pic"),
                               required=True),
-                ui.form_field("Raised date",
+                ui.form_field("Raised",
                               rx.input(type="date", value=A.a_raised,
                                        on_change=A.set_a_raised,
                                        id="a-raised")),
-                ui.form_field("Due date",
+                ui.form_field("Due",
                               rx.input(type="date", value=A.a_due,
                                        on_change=A.set_a_due, id="a-due"),
                               required=True),
                 rx.cond(
                     A.a_status == "Done",
-                    ui.form_field("Completion date",
+                    ui.form_field("Completed",
                                   rx.input(type="date", value=A.a_completion,
                                            on_change=A.set_a_completion,
-                                           id="a-completion"),
-                                  "Defaults to today.")),
+                                           id="a-completion"))),
                 columns="3"),
         ),
         ui.form_section(
-            "Follow-up",
-            ui.form_field("Corrective action / next step",
+            "Follow Up",
+            ui.form_field("Next Step",
                           rx.text_area(value=A.a_corrective,
                                        on_change=A.set_a_corrective,
                                        id="a-corrective", rows="2")),
@@ -198,12 +188,10 @@ def _dialog() -> rx.Component:
         on_open_change=A.set_form_open,
         on_escape_key_down=A.set_form_open(False),
         title=A.form_title,
-        subtitle="Person in charge and due date are required.",
         close_id="a-close",
         notices=[
             rx.cond(~A.can_write_actions, rx.callout(
-                "You have read-only access. Contact an administrator to "
-                "modify actions.",
+                "Read Only",
                 icon="lock", color_scheme="gray", variant="soft",
                 width="100%")),
             rx.cond(A.form_error != "", ds.error_callout(A.form_error)),
@@ -228,7 +216,4 @@ def actions_page() -> rx.Component:
         ),
         on_store=A.select_store,
         on_month=A.select_month,
-        description="Follow-up actions per store. Owner and due date are "
-                    "required; overdue = due before today and not "
-                    "Done/Cancelled.",
     )

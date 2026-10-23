@@ -393,18 +393,15 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     visible = kpi.actions_in_month_scope(actions, month)
     acounts = kpi.action_counts([a.input for a in visible], as_of=as_of)
     avg = s.average_per_day
+    # full values ("RM 10,800.00"), never the short form
     glance_pairs = [
         ("Daily Sales (Avg.)",
-         ops_charts.fmt_money_compact(avg), ds.fmt_rm0(avg), "/ops/sales"),
+         ds.fmt_rm(int(avg) if avg is not None else None), "", "/ops/sales"),
     ]
     if exp_reported:
         glance_pairs += [
-            ("Incurred",
-             ops_charts.fmt_money_compact(e.incurred_cents),
-             ds.fmt_rm(e.incurred_cents), "/ops/expenses"),
-            ("Unpaid",
-             ops_charts.fmt_money_compact(e.open_cents),
-             ds.fmt_rm(e.open_cents), "/ops/expenses"),
+            ("Incurred", ds.fmt_rm(e.incurred_cents), "", "/ops/expenses"),
+            ("Unpaid", ds.fmt_rm(e.open_cents), "", "/ops/expenses"),
         ]
     glance_pairs += [
         ("Open Actions", str(kpi.open_actions(acounts)), "", "/ops/actions"),

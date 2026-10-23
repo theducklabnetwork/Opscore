@@ -45,9 +45,9 @@ MAX_ROWS = 100
 
 # All status colors: ds.status_color (design.py shared map)
 
-# "Clear saved value" ticked while an amount is typed (also used by
-# Monthly Setup, ops_stores_state._parse_budget_rows).
-BUDGET_CLEAR_CONFLICT = "Untick 'Clear saved value' to set an amount"
+# cleared with × while an amount is typed (also used by Monthly Setup,
+# ops_stores_state._parse_budget_rows)
+BUDGET_CLEAR_CONFLICT = "Enter an amount, or use × to clear"
 
 
 class ExpensesState(DailyState):
@@ -73,6 +73,7 @@ class ExpensesState(DailyState):
     filter_status: str = ""
     filter_verification: str = ""
     search_text: str = ""
+    filter_paid_date: str = ""      # ISO; set from Daily (?paid=), "" = off
     sort_key: str = "incurred"      # incurred | paid | amount
     sort_desc: bool = True
 
@@ -98,7 +99,7 @@ class ExpensesState(DailyState):
     # --- budget form -------------------------------------------------------
     b_category: str = ""
     b_amount: str = ""
-    b_clear: bool = False     # "Clear saved value": budget -> NULL
+    b_clear: bool = False     # cleared with ×: budget -> NULL
     b_error: str = ""
     b_notice: str = ""
     b_saving: bool = False
@@ -118,8 +119,20 @@ class ExpensesState(DailyState):
     def filter_period_label(self) -> str:
         return dict(PERIOD_OPTIONS)[self.filter_period]
 
+    @rx.var
+    def filter_paid_label(self) -> str:
+        if not self.filter_paid_date:
+            return ""
+        return "Paid " + date.fromisoformat(
+            self.filter_paid_date).strftime("%d %b %Y")
+
+    @rx.event
+    def clear_filter_paid_date(self):
+        self.filter_paid_date = ""
+
     @rx.event
     def set_filter_period_label(self, label: str):
+        self.filter_paid_date = ""
         for k, v in PERIOD_OPTIONS:
             if v == label:
                 self.filter_period = k
@@ -150,7 +163,10 @@ class ExpensesState(DailyState):
         """Filtered/sorted register rows (deterministic ordering)."""
         rows = list(self.all_expense_rows)
         month = self._selected_month()
-        if self.filter_period == "paid" and month:
+        if self.filter_paid_date:
+            # one paid date (from Daily): replaces the period filter
+            rows = [r for r in rows if r["paid_iso"] == self.filter_paid_date]
+        elif self.filter_period == "paid" and month:
             rows = [r for r in rows if r["paid_iso"][:7] == month]
         elif self.filter_period == "incurred" and month:
             rows = [r for r in rows if r["incurred_iso"][:7] == month]
@@ -190,6 +206,7 @@ class ExpensesState(DailyState):
         if label == self.selected_store_label:
             return
         self.selected_store_label = label
+        self.filter_paid_date = ""
         self.exp_form_open = False
         self.exp_notice = ""
         self._clear_report()
@@ -201,6 +218,7 @@ class ExpensesState(DailyState):
         if label == self.selected_month_label:
             return
         self.selected_month_label = label
+        self.filter_paid_date = ""
         self.exp_form_open = False
         self.exp_notice = ""
         self._clear_report()
@@ -215,6 +233,10 @@ class ExpensesState(DailyState):
         guard = self.require_auth()
         if guard is not None:
             return guard
+        self.filter_paid_date = _paid_param(
+            self.router.page.params.get("paid", ""))
+        if self.filter_paid_date:
+            self.filter_period = "all"     # the select matches the chip
         yield OpsState.load_ops()
         yield ExpensesState.load_expenses_data()
 
@@ -505,9 +527,18 @@ class ExpensesState(DailyState):
     @rx.event
     def set_b_category(self, v: str): self.b_category = v
     @rx.event
-    def set_b_amount(self, v: str): self.b_amount = v
+    def set_b_amount(self, v: str):
+        self.b_amount = v
+        if v.strip():
+            self.b_clear = False   # typing an amount undoes the ×
     @rx.event
     def set_b_clear(self, v: bool): self.b_clear = bool(v)
+
+    @rx.event
+    def clear_budget(self):
+        """× in the budget amount: save writes NULL ("No budget")."""
+        self.b_amount = ""
+        self.b_clear = True
 
     # ------------------------------------------------------------------
     # save expense
@@ -696,16 +727,24 @@ class ExpensesState(DailyState):
         yield ExpensesState.refresh_report()
 
 
+def _paid_param(raw) -> str:
+    """?paid=YYYY-MM-DD from Daily Operations; anything else is ignored."""
+    try:
+        return date.fromisoformat(str(raw)).isoformat()
+    except ValueError:
+        return ""
+
+
 def _budget_save_value(amount: str, clear: bool) -> Optional[int]:
-    """Budget form -> cents to save. A ticked "Clear saved value" -> None
-    (NULL = "No budget", never 0); ticking it while an amount is typed is
-    rejected; otherwise an amount is required."""
+    """Budget form -> cents to save. Cleared with × -> None (NULL = "No
+    budget", never 0); cleared while an amount is typed is rejected;
+    otherwise an amount is required."""
     if clear:
         if amount.strip():
             raise ValueError(BUDGET_CLEAR_CONFLICT)
         return None
     if not amount.strip():
         raise ValueError(
-            "Enter a budget amount, or tick “Clear saved value” to remove "
-            "it. A missing budget is distinct from RM 0.")
+            "Enter a budget amount, or use × to clear it. A missing budget "
+            "is distinct from RM 0.")
     return _parse_money(amount)

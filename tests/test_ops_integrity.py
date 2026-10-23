@@ -142,8 +142,8 @@ class Fixture(unittest.TestCase):
         updates, errors = StoresState._parse_budgets(st)
         self.assertEqual(updates, {9: 12345})
         self.assertEqual(errors, [
-            "Budget for Water: enter a budget amount, or tick "
-            "“Clear saved value” to remove it (No budget)."])
+            "Budget for Water: enter a budget amount, or use "
+            "× to clear it (No budget)."])
 
     # 3 ------------------------------------------------------------------
     def test_unchanged_blank_field_does_not_overwrite(self):

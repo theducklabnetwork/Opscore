@@ -457,7 +457,7 @@ class FlagResetTests(Fixture):
         st.a_raised = "21/10/2026"                 # malformed date
         self.bound(mod, ActionsState, lambda: list(st.save_action()))
         self.assertEqual(st.form_error,
-                         "Raised date: enter a date as YYYY-MM-DD")
+                         "Raised: enter a date as YYYY-MM-DD")
         self.assertFalse(st.saving)
         self.assertEqual(self.app.get_actions(self.admin, self.sid), [])
 

@@ -25,7 +25,7 @@ from ducklab.app_service import AppService
 
 TODAY = date(2026, 10, 21)
 ROOT = Path(__file__).resolve().parent.parent
-CLEAR_CONFLICT = "Untick 'Clear saved value' to set an amount"
+CLEAR_CONFLICT = "Enter an amount, or use × to clear"
 
 
 def rm(v):
@@ -535,7 +535,7 @@ class BudgetClearConflictTests(Fixture):
         row = {"id": str(self.cat), "name": "Elec", "value": "600.00",
                "original": "500.00", "clear": "1"}
         self.assertEqual(_parse_budget_rows([row]), ({}, [
-            "Budget for Elec: Untick 'Clear saved value' to set an amount"]))
+            "Budget for Elec: Enter an amount, or use × to clear"]))
         # ticked, amount left as saved -> clear (NULL)
         row["value"] = "500.00"
         self.assertEqual(_parse_budget_rows([row]), ({self.cat: None}, []))
@@ -555,7 +555,7 @@ class BudgetClearConflictTests(Fixture):
                        lambda: list(st.save_setup()))
         self.assertEqual(
             st.setup_error,
-            "Budget for Elec: Untick 'Clear saved value' to set an amount")
+            "Budget for Elec: Enter an amount, or use × to clear")
         self.assertEqual(self.budgets(), {self.cat: 50000})   # unchanged
 
     def test_expenses_page_save_writes_nothing(self):

@@ -96,13 +96,13 @@ def _budget_editor() -> rx.Component:
                 rx.select(E.category_names, value=E.b_category,
                           on_change=E.set_b_category,
                           placeholder="Select category", id="b-category"),
-                rx.input(value=E.b_amount, on_change=E.set_b_amount,
-                         placeholder="Monthly budget (RM)",
+                rx.input(ui.clear_x((E.b_category != "") & ~E.b_clear,
+                                    E.clear_budget, id="b-clear"),
+                         value=E.b_amount, on_change=E.set_b_amount,
+                         placeholder=rx.cond(E.b_clear, "No budget",
+                                             "Monthly budget (RM)"),
                          input_mode="decimal", id="b-amount",
-                         disabled=E.b_clear, width="12em"),
-                rx.checkbox("Clear saved value", checked=E.b_clear,
-                            on_change=E.set_b_clear, size="1",
-                            id="b-clear"),
+                         width="12em"),
                 rx.button(
                     rx.cond(E.b_saving, rx.spinner(size="1"),
                             rx.icon("save", size=14)),
@@ -158,6 +158,16 @@ def _budget_monitor() -> rx.Component:
 
 def _filters() -> rx.Component:
     return rx.hstack(
+        # one paid date, opened from a Daily Operations amount
+        rx.cond(
+            E.filter_paid_date != "",
+            rx.badge(E.filter_paid_label,
+                     rx.icon("x", size=12, cursor="pointer",
+                             on_click=E.clear_filter_paid_date,
+                             id="filter-paid-clear"),
+                     size="2", variant="soft", radius="full",
+                     id="filter-paid"),
+        ),
         rx.select(E.period_options, value=E.filter_period_label,
                   on_change=E.set_filter_period_label, id="filter-period"),
         rx.select(E.filter_category_options,

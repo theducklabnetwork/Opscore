@@ -341,7 +341,8 @@ def _sales_section() -> rx.Component:
                 _stat("Sales", sales["mtd"], size="6"),
                 _stat("Projected Sales", sales["projected"], size="6"),
                 _stat("Level 1 Target", sales["target_l1"], size="6"),
-                _stat("Achievement", sales["achievement_l1"], size="6"),
+                _stat("Projected Achievement", sales["achievement_l1"],
+                      size="6"),
                 columns=rx.breakpoints(initial="2", md="4"),
             ),
         ),
@@ -391,6 +392,8 @@ def _expenses_section() -> rx.Component:
 
 def _manpower_section() -> rx.Component:
     mp = R.manpower
+    # incomplete month: the ratios cover the days so far
+    complete = R.sales["projection_state"] == "actual"
     return ui.section_card(
         _grid(
             _stat("Opening Headcount", mp["opening"], size="6"),
@@ -405,8 +408,12 @@ def _manpower_section() -> rx.Component:
             _stat("Salary Cost", mp["salary"], size="6",
                   sub=rx.cond(mp["salary"] == "—",
                               "Awaiting Payroll", "")),
-            _stat("Salary Ratio", mp["ratio"], size="6"),
-            _stat("Total Salary Ratio", mp["ratio_support"], size="6"),
+            _stat(rx.cond(complete, "Salary Ratio",
+                          "Salary Ratio (To Date)"),
+                  mp["ratio"], size="6"),
+            _stat(rx.cond(complete, "Total Salary Ratio",
+                          "Total Salary Ratio (To Date)"),
+                  mp["ratio_support"], size="6"),
             _stat("Turnover", mp["turnover"], size="6"),
             _stat("Leave Days", mp["leave_days"], size="6"),
             columns=_COLS5,

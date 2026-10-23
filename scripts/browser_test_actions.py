@@ -104,8 +104,8 @@ def main() -> int:
                  if t.isdigit()]
         open0 = int(nums0[0])
         check("cards: open count >= 6 (seeded 6 + reruns)", open0 >= 6)
-        check("overdue card highlights 2", "Needs attention" in body)
-        check("carried-over label shown", "Carried over" in body)
+        check("overdue card highlights 2", "Needs Attention" in body)
+        check("carried-over label shown", "Carried Over" in body)
         check("overdue badge in table", "Overdue" in body)
         check("priority badge Critical shown", "Critical" in body)
         check("status badge Cancelled shown", "Cancelled" in body)
@@ -125,7 +125,7 @@ def main() -> int:
         check("status filter Done -> >=1 rows, all Done", rows >= 1 and
               all("Done" in page.locator("#actions-table tbody tr").nth(i)
                   .inner_text() for i in range(rows)))
-        choose(page, "#f-status", "All statuses")
+        choose(page, "#f-status", "All Statuses")
         page.wait_for_timeout(600)
 
         # add an action via the centered dialog
@@ -184,7 +184,7 @@ def main() -> int:
         page.wait_for_timeout(3000)
         body = page.locator("body").inner_text()
         check("store switch clears data (B02 empty)",
-              "No actions for this month" in body)
+              "No Actions" in body)
         check("B02 cards show 0 open",
               page.locator("#action-cards").inner_text().count("0") >= 2)
 
