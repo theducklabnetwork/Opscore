@@ -285,6 +285,16 @@ def projection_style(state: str, status: str) -> tuple[str, str, str]:
     return f"Projected: {status}", "amber", tag
 
 
+# warning chip wherever levels are shown, for months saved without uplift
+LEVELS_MISSING = "Levels 2–4 missing in Monthly Setup"
+COMPARE_LEVELS = ("1", "2", "3", "4")
+
+
+def compare_level(value) -> int:
+    """Sales Performance "Compare against" choice -> 1-4 (default 1)."""
+    return int(value) if str(value) in COMPARE_LEVELS else 1
+
+
 def level_reached_text(level, state: str) -> str:
     """'Level 3 reached' for a complete month, else 'Projected: Level 2'
     (level from kpi.highest_level_achieved; None = below Level 1)."""

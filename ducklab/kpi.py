@@ -460,18 +460,23 @@ def needed_per_remaining_day_for_level(
         targets.get(f"level{level}"), mtd_cents, entered, days_in_month)
 
 
-def levels_configured(cfg: MonthConfig) -> bool:
-    """True when any Level 2-4 uplift is set. Without one the levels equal
-    Level 1 (base x (1 + 0)) and pages show Level 1 only."""
-    return bool(cfg.level2_pct or cfg.level3_pct or cfg.level4_pct)
+def levels_missing(cfg: MonthConfig) -> bool:
+    """True for a month saved before four levels were required: a Level 1
+    base target but a blank Level 2/3/4 uplift. The workbook rule still
+    applies (blank uplift = base x (1 + 0)); pages flag the month."""
+    return cfg.level1_base_cents is not None and any(
+        p is None for p in (cfg.level2_pct, cfg.level3_pct, cfg.level4_pct))
 
 
-def shown_level_targets(cfg: MonthConfig, targets: dict) -> dict:
-    """The levels a page shows: all four, or Level 1 only when no
-    Level 2-4 uplift is set (levels_configured)."""
-    if levels_configured(cfg):
-        return dict(targets)
-    return {"level1": targets.get("level1")}
+def drawn_level(targets: dict, level: int) -> int:
+    """The pace-chart line that shows ``level``: itself, or the lower
+    level with the same target when it is not drawn twice
+    (distinct_level_targets)."""
+    t = to_decimal(targets.get(f"level{level}"))
+    for n, seen in distinct_level_targets(targets):
+        if seen == t:
+            return n
+    return 1
 
 
 def distinct_level_targets(targets: dict) -> list[tuple[int, Decimal]]:

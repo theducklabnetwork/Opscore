@@ -214,12 +214,14 @@ def pace_chart(days: Sequence[int],
                dark: bool,
                y_title: str = "RM (cumulative)",
                levels: Sequence[tuple[int, Sequence[Optional[float]]]] = (),
+               highlight: int = 1,
                ) -> go.Figure:
     """Actual line stops at the last reported day (None afterwards).
 
     ``levels``: (level, cumulative pace) for Levels 2-4 (kpi.level_pace_lines,
-    already de-duplicated) — lighter dashed lines next to the stronger
-    Level 1 budget pace; every target line is labelled at the right edge."""
+    already de-duplicated) — lighter dashed lines; the ``highlight`` level
+    (default Level 1, the budget pace) is the stronger line and the one in
+    the legend. Every target line is labelled at the right edge."""
     pal = _pal(dark)
     fig = go.Figure()
     x = list(days)
@@ -228,10 +230,10 @@ def pace_chart(days: Sequence[int],
 
     def _target_line(n: int, pace) -> None:
         y = [None if v is None else v / 100 for v in pace]
-        strong = n == 1
+        strong = n == highlight
         fig.add_trace(go.Scatter(
             x=x, y=y, mode="lines",
-            name="Level 1 budget pace" if strong else f"Level {n} pace",
+            name="Level 1 budget pace" if n == 1 else f"Level {n} pace",
             showlegend=strong,
             opacity=1.0 if strong else 0.55,
             line=dict(color=pal["budget"], dash="dash",

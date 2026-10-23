@@ -35,10 +35,10 @@ class StockFixture(unittest.TestCase):
         self.sb = self.app.register_store(self.admin, "B02", "Beta")
         for sid in (self.sa, self.sb):
             self.app.configure_month(
-                self.admin, sid, "2026-09", level1_base_cents=rm(200000),
+                self.admin, sid, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 stock_loss_target=TARGET, part_timer_factor=0.5)
             self.app.configure_month(
-                self.admin, sid, "2026-10", level1_base_cents=rm(210000),
+                self.admin, sid, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 stock_loss_target=TARGET, part_timer_factor=0.5)
 
     def tearDown(self):

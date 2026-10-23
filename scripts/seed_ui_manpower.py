@@ -36,7 +36,7 @@ def main() -> None:
     b = app.register_store(admin, "B02", "Beta Galleria")
     # 2026-10: store A fully configured + payroll; store B awaiting payroll
     app.configure_month(
-        admin, a, "2026-10", level1_base_cents=rm(210000),
+        admin, a, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
         opening_headcount_ft=10, budget_headcount=12,
         turnover_threshold=0.45, stock_loss_target=0.015,
         salary_ratio_target=0.06818, part_timer_factor=0.5,
@@ -44,13 +44,13 @@ def main() -> None:
         overtime_cents=rm(4198.50),
         support_team_cost_cents=rm(500))
     app.configure_month(
-        admin, b, "2026-10", level1_base_cents=rm(180000),
+        admin, b, "2026-10", level1_base_cents=rm(180000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
         opening_headcount_ft=8, budget_headcount=8,
         turnover_threshold=0.45, stock_loss_target=0.015,
         salary_ratio_target=0.06818, part_timer_factor=0.5)
     # 2026-09: historical month for A (different headcount + payroll)
     app.configure_month(
-        admin, a, "2026-09", level1_base_cents=rm(200000),
+        admin, a, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
         opening_headcount_ft=9, budget_headcount=9,
         turnover_threshold=0.45, stock_loss_target=0.015,
         salary_ratio_target=0.06818, part_timer_factor=0.5,

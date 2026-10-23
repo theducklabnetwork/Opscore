@@ -90,7 +90,7 @@ class EngineFixture(unittest.TestCase):
         self.sa = self.app.register_store(self.admin, "A01", "Alpha")
         self.month = "2026-10"
         self.app.configure_month(
-            self.admin, self.sa, self.month, level1_base_cents=rm(200000),
+            self.admin, self.sa, self.month, level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             turnover_threshold=0.05,
@@ -152,7 +152,7 @@ class EngineFixture(unittest.TestCase):
         of 30 Sep everywhere. A (due 25 Sep) is overdue; B (due 5 Oct)
         is not yet — it would be if 'today' were used."""
         self.app.configure_month(self.admin, self.sa, "2026-09",
-                                 level1_base_cents=rm(200000))
+                                 level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self._act(date(2026, 9, 10), "Open", date(2026, 9, 25), "A")
         self._act(date(2026, 9, 12), "Open", date(2026, 10, 5), "B")
         # Report (AppService default reporting date = month end)
@@ -238,7 +238,7 @@ class EngineFixture(unittest.TestCase):
         self.assertEqual(review, 1)
         # September's report includes the old line
         self.app.configure_month(
-            self.admin, self.sa, "2026-09", level1_base_cents=rm(200000),
+            self.admin, self.sa, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             turnover_threshold=0.05,

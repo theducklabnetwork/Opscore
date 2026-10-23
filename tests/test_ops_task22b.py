@@ -42,7 +42,7 @@ class Fixture(unittest.TestCase):
             "admin@ducklab.com", "Root", "Sup3rSecure!x")
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         self.app.configure_month(
-            self.admin, self.sid, "2026-10", level1_base_cents=rm(100000),
+            self.admin, self.sid, "2026-10", level1_base_cents=rm(100000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000))
         self.cat = self.app.add_expense_category(self.admin, self.sid,
@@ -169,7 +169,8 @@ class OversizedInputTests(Fixture):
                 "Level 2 uplift (%): enter a non-negative number "
                 "(or leave blank)")
             self.assertFalse(st.setup_saving)
-            self.assertIsNone(self.config().level2_pct)   # unchanged
+            self.assertEqual(self.config().level2_pct,
+                             Decimal("0.1"))              # unchanged
 
     def test_expense_save_rejects_1e20(self):
         import ducklab.ops_expenses_state as mod

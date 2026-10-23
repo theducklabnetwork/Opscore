@@ -48,14 +48,14 @@ def main() -> None:
 
     # October: A01 only (B02 unconfigured -> "No report available" empty state).
     app.configure_month(
-        admin, a, "2026-10", level1_base_cents=rm(210000),
+        admin, a, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
         opening_headcount_ft=10, stock_loss_target=0.015,
         salary_ratio_target=0.06818, part_timer_factor=0.5,
         salary_basic_allowance_cents=rm(10500), overtime_cents=rm(1000))
     # September: both stores configured.
     for sid in (a, b):
         app.configure_month(
-            admin, sid, "2026-09", level1_base_cents=rm(200000),
+            admin, sid, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))

@@ -82,7 +82,7 @@ class TestConfigWrites(WriteFixture):
         self.sid = self.svc.register_store("ZI68", "SLP")
 
     def test_create_update_partial(self):
-        self.svc.configure_month(self.sid, "2026-09", level1_base_cents=rm(269861),
+        self.svc.configure_month(self.sid, "2026-09", level1_base_cents=rm(269861), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                                  salary_ratio_target=0.06818)
         # Partial update: only opening headcount changes.
         self.svc.configure_month(self.sid, "2026-09", opening_headcount_ft=9)
@@ -356,7 +356,7 @@ class TestReadAfterWriteIntegration(WriteFixture):
             salary_basic_allowance_cents=rm(1000), overtime_cents=rm(0),
             part_timer_factor=0.5)
         other = self.svc.register_store("B02", "B")
-        self.svc.configure_month(other, "2026-09", level1_base_cents=rm(999999))
+        self.svc.configure_month(other, "2026-09", level1_base_cents=rm(999999), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
 
         self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(10000),
                               transactions=100, units=300, ft_working=7,

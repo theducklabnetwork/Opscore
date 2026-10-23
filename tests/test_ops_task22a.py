@@ -194,7 +194,7 @@ class PartTimerFactorTests(Fixture):
         self.assertIsNone(kpi.sales_per_staff_cents(with_pt, None))
 
     def _month(self, factor, pt):
-        fields = {"level1_base_cents": rm(100000), "opening_headcount_ft": 9}
+        fields = {"level1_base_cents": rm(100000), "opening_headcount_ft": 9, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3}
         if factor is not None:
             fields["part_timer_factor"] = factor
         self.app.configure_month(self.admin, self.sid, "2026-10", **fields)
@@ -287,7 +287,7 @@ class StockStatusEverywhereTests(Fixture):
     Overview."""
 
     def _config(self, target=0.015):
-        fields = {"level1_base_cents": rm(100000)}
+        fields = {"level1_base_cents": rm(100000), "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3}
         if target is not None:
             fields["stock_loss_target"] = target
         self.app.configure_month(self.admin, self.sid, "2026-10", **fields)
@@ -356,7 +356,7 @@ class OverviewProjectionTests(Fixture):
         # 3,100,008.75 -> Achieved (int() truncation would say 99.99998%).
         self.app.configure_month(
             self.admin, self.sid, "2026-10", level1_base_cents=2480007,
-            level2_pct=0.25)
+            level2_pct=0.25, level3_pct=0.5, level4_pct=0.75)
         for d in range(1, 7):
             self.app.record_daily(self.admin, self.sid, date(2026, 10, d),
                                   sales_cents=100000)
@@ -408,7 +408,7 @@ class ReportCardLabelTests(Fixture):
     def setUp(self):
         super().setUp()
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(100000))
+                                 level1_base_cents=rm(100000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
 
     def _sales(self):
         from ducklab.ops_state import _serialize_live
@@ -464,7 +464,7 @@ class DailyMonthTotalsTests(Fixture):
     def setUp(self):
         super().setUp()
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(100000))
+                                 level1_base_cents=rm(100000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
 
     def _kpis(self):
         import ducklab.ops_daily_state as mod
@@ -521,7 +521,7 @@ class BudgetClearConflictTests(Fixture):
     def setUp(self):
         super().setUp()
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(1000))
+                                 level1_base_cents=rm(1000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.cat = self.app.add_expense_category(self.admin, self.sid,
                                                  "Elec", sort_order=1)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10",

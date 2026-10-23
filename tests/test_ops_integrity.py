@@ -34,7 +34,7 @@ class Fixture(unittest.TestCase):
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         self.month = "2026-10"
         self.app.configure_month(
-            self.admin, self.sid, self.month, level1_base_cents=rm(200000),
+            self.admin, self.sid, self.month, level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             turnover_threshold=0.05)
@@ -79,7 +79,7 @@ class Fixture(unittest.TestCase):
         with self.assertRaises(ValidationError) as ctx:
             self.app.configure_month_with_budgets(
                 self.admin, self.sid, self.month,
-                {"level1_base_cents": 12345600},
+                {"level1_base_cents": 12345600, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3},
                 {cat: -500})
         self.assertEqual(str(ctx.exception),
                          f"Budget for category {cat} cannot be negative")
@@ -97,7 +97,7 @@ class Fixture(unittest.TestCase):
                                            sort_order=2)
         self.app.configure_month_with_budgets(
             self.admin, self.sid, self.month,
-            {"level1_base_cents": 12345600}, {c1: 50000, c2: 12345})
+            {"level1_base_cents": 12345600, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3}, {c1: 50000, c2: 12345})
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, self.month),
             {c1: 50000, c2: 12345})

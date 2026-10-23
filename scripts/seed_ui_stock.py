@@ -38,7 +38,7 @@ def seed(app, admin, label=""):
     for sid in (a, b):
         for month, base in (("2026-09", 200000), ("2026-10", 210000)):
             app.configure_month(
-                admin, sid, month, level1_base_cents=rm(base),
+                admin, sid, month, level1_base_cents=rm(base), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 stock_loss_target=0.015, part_timer_factor=0.5)
 
     def rec(store, y, m, d, sales=None, **losses):

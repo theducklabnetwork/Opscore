@@ -47,13 +47,13 @@ class VisualFixture(unittest.TestCase):
             "admin@ducklab.com", "Root", "Sup3rSecure!x")
         self.sa = self.app.register_store(self.admin, "A01", "Alpha")
         self.app.configure_month(
-            self.admin, self.sa, "2026-10", level1_base_cents=rm(200000),
+            self.admin, self.sa, "2026-10", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             turnover_threshold=0.05,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
         self.app.configure_month(
-            self.admin, self.sa, "2026-09", level1_base_cents=rm(200000),
+            self.admin, self.sa, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             turnover_threshold=0.05,
@@ -109,25 +109,25 @@ class VisualFixture(unittest.TestCase):
         self.assertEqual(ov["in_progress"], "")
 
     # 4 ------------------------------------------------------------------
-    def test_levels_collapse_when_no_uplift(self):
-        # uplift blank (this fixture) -> Level 1 only + note
+    def test_four_levels_and_warning_when_no_uplift(self):
+        # S2: no collapse. This fixture has all three uplifts -> no chip
         ov = self.overview()
-        self.assertEqual(ov["levels_configured"], "")
-        self.assertEqual([t["label"] for t in ov["targets"]], ["Level 1"])
-        # set Level 2 uplift -> all four levels shown
-        self.app.configure_month(
-            self.admin, self.sa, "2026-10", level1_base_cents=rm(200000),
-            level2_pct=0.10, level3_pct=0.20, level4_pct=0.30,
-            opening_headcount_ft=9, stock_loss_target=0.015,
-            salary_ratio_target=0.06818, part_timer_factor=0.5,
-            turnover_threshold=0.05,
-            salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
-        ov = self.overview()
-        self.assertEqual(ov["levels_configured"], "1")
+        self.assertEqual(ov["levels_missing"], "")
         self.assertEqual([t["label"] for t in ov["targets"]],
                          ["Level 1", "Level 2", "Level 3", "Level 4"])
         self.assertNotEqual(ov["targets"][0]["target"],
                             ov["targets"][1]["target"])
+        # a month saved before four levels were required: still four
+        # levels (workbook rule, L2-4 = L1) + "Levels 2-4 missing" chip
+        self.app.write.repo.save_month_config(
+            self.sa, "2026-10", level2_pct=None, level3_pct=None,
+            level4_pct=None)
+        ov = self.overview()
+        self.assertEqual(ov["levels_missing"], "1")
+        self.assertEqual([t["label"] for t in ov["targets"]],
+                         ["Level 1", "Level 2", "Level 3", "Level 4"])
+        self.assertEqual(ov["targets"][0]["target"],
+                         ov["targets"][3]["target"])
 
     # 5 ------------------------------------------------------------------
     def test_chip_style_projected_neutral_until_complete(self):

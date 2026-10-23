@@ -18,10 +18,37 @@ S = SalesState
 _PROJ_CHIP = (S.sp_proj_status, S.sp_proj_color)
 
 
+def _levels_warning(id: str) -> rx.Component:
+    """Months saved before four levels were required."""
+    return rx.cond(S.sp_levels_missing,
+                   ui.status_chip(ds.LEVELS_MISSING, "amber", id=id,
+                                  wrap=True))
+
+
+def _compare_control() -> rx.Component:
+    # Sales Performance only; Overview and Monthly Report stay on Level 1
+    return rx.hstack(
+        rx.text("Compare against:", size="2", color=ds.TEXT_MUTED,
+                weight="medium"),
+        rx.segmented_control.root(
+            rx.segmented_control.item("Level 1", value="1"),
+            rx.segmented_control.item("2", value="2"),
+            rx.segmented_control.item("3", value="3"),
+            rx.segmented_control.item("4", value="4"),
+            value=S.sp_compare,
+            on_change=S.select_compare,
+            size="1", id="compare-level",
+        ),
+        _levels_warning("levels-missing"),
+        spacing="3", align="center", wrap="wrap", width="100%",
+    )
+
+
 def _kpi_tiles() -> rx.Component:
-    # top row: the month-end story (sales, month-end, achievement, level
-    # reached); the projection chip + early-estimate tag sit on the
-    # projected tiles (same tiles and names as Daily)
+    # top row: the month-end story (sales, month-end, achievement vs the
+    # selected level, level reached). A complete month has one achievement
+    # tile (actual, no chip) and "Month complete" instead of a dash; the
+    # projection chip + early-estimate tag sit on the projected tiles.
     return ui.kpi_grid(
         ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
                     compact=S.sp_sales_mtd_compact,
@@ -29,15 +56,19 @@ def _kpi_tiles() -> rx.Component:
         ui.kpi_tile("Month-end sales", S.sp_month_end,
                     compact=S.sp_month_end_compact,
                     exact=S.sp_month_end_exact, sub=S.sp_month_end_sub),
-        ui.kpi_tile("Projected achievement", S.sp_l1_achievement,
+        ui.kpi_tile(S.sp_l1_achievement_label, S.sp_l1_achievement,
                     chip=_PROJ_CHIP, tag=S.sp_early_tag,
-                    tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub),
+                    tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub,
+                    id="sales-achievement"),
         ui.kpi_tile("Level reached", S.sp_level,
                     chip=(S.sp_level_chip, S.sp_level_chip_color),
                     tag=S.sp_early_tag, tag_tip=S.sp_early_tip,
-                    sub=S.sp_level_sub, id="sales-level"),
-        ui.kpi_tile("Achievement to date", S.sp_mtd_achievement,
-                    sub=S.sp_mtd_achievement_sub),
+                    sub=S.sp_level_sub, sub2=S.sp_level_sub2,
+                    id="sales-level"),
+        rx.cond(~S.sp_complete,
+                ui.kpi_tile(S.sp_mtd_achievement_label, S.sp_mtd_achievement,
+                            sub=S.sp_mtd_achievement_sub,
+                            id="sales-mtd-achievement")),
         ui.kpi_tile(S.sp_needed_label, S.sp_needed,
                     compact=S.sp_needed_compact, exact=S.sp_needed_exact,
                     sub=S.sp_needed_sub, id="sales-needed"),
@@ -69,7 +100,7 @@ def _pace_chart() -> rx.Component:
                 ops_charts.chart(S.sp_fig_light)),
         ready=S.sp_chart_ready,
         subtitle="Cumulative sales (RM) against each level's daily "
-                 "run-rate (Level 1 bold)",
+                 "run-rate (selected level bold)",
         detail="The pace chart appears once 3 days are reported. "
                "Unreported days are never interpolated.",
         id="pace-section",
@@ -114,9 +145,8 @@ def _target_ladder() -> rx.Component:
             rx.foreach(S.sp_comparisons, _comparison_row),
             phone=("Level", "Achievement", "Status"),
         ),
-        rx.cond(~S.sp_levels_configured,
-                ui.note("Levels 2-4: no uplift set in Monthly Setup")),
         title="Target Ladder & Comparisons",
+        extra=_levels_warning("ladder-levels-missing"),
         subtitle="Achievement and gap use the projected month-end until "
                  "every day is entered",
         id="ladder-section",
@@ -183,6 +213,7 @@ def sales_page() -> rx.Component:
                         icon="lock", color_scheme="amber", variant="soft",
                         width="100%")),
             rx.cond(S.sp_error != "", ds.error_callout(S.sp_error)),
+            _compare_control(),
             _kpi_tiles(),
             _basket(),
             _pace_chart(),

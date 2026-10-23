@@ -24,7 +24,8 @@ def rm(v):
 
 
 class Fixture(unittest.TestCase):
-    config = dict(level1_base_cents=rm(210000), opening_headcount_ft=10,
+    config = dict(level1_base_cents=rm(210000), level2_pct=0.1,
+                  level3_pct=0.2, level4_pct=0.3, opening_headcount_ft=10,
                   stock_loss_target=0.015, salary_ratio_target=0.06818,
                   part_timer_factor=0.5,
                   salary_basic_allowance_cents=rm(10500))
@@ -83,11 +84,17 @@ class ProjectionRuleTests(unittest.TestCase):
 
 
 class SalesLadderTests(Fixture):
-    def test_levels_collapse_without_uplift(self):
+    def test_month_without_uplift_keeps_four_levels_with_warning(self):
+        # S2: no collapse — a month saved before four levels were required
+        # shows all four levels (workbook rule) and the warning chip
+        self.app.write.repo.save_month_config(
+            self.sid, "2026-10", level2_pct=None, level3_pct=None,
+            level4_pct=None)
         self.record(1, sales_cents=rm(12000))
         st = self.load("ops_sales_state", "SalesState", "load_sales_data")
-        self.assertFalse(st.sp_levels_configured)
-        self.assertEqual([r["level"] for r in st.sp_ladder], ["Level 1"])
+        self.assertTrue(st.sp_levels_missing)
+        self.assertEqual([r["level"] for r in st.sp_ladder],
+                         ["Level 1", "Level 2", "Level 3", "Level 4"])
         # missing references: plain "No reference", no tag
         self.assertEqual([(r["status"], r["early_tag"])
                           for r in st.sp_comparisons],
@@ -97,12 +104,9 @@ class SalesLadderTests(Fixture):
         self.assertEqual(st.sp_proj_status, "Projected: Achieved")
 
     def test_all_levels_with_uplift(self):
-        self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level2_pct=0.05, level3_pct=0.1,
-                                 level4_pct=0.15)
         self.record(1, sales_cents=rm(12000))
         st = self.load("ops_sales_state", "SalesState", "load_sales_data")
-        self.assertTrue(st.sp_levels_configured)
+        self.assertFalse(st.sp_levels_missing)
         self.assertEqual(len(st.sp_ladder), 4)
 
 

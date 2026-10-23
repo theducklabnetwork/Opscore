@@ -30,7 +30,7 @@ class Fixture(unittest.TestCase):
             "admin@ducklab.com", "Root", "Sup3rSecure!x")
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(210000))
+                                 level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
 
     def tearDown(self):
         self._tmp.cleanup()

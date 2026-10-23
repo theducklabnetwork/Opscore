@@ -27,6 +27,7 @@ def make_workbook(path: Path, blank_sales: bool) -> None:
     setup["B6"] = "Test Store One"
     setup["B11"] = date(2026, 10, 1)
     setup["B16"] = 100000
+    setup["B17"], setup["B18"], setup["B19"] = 0.1, 0.2, 0.3
     setup["B47"] = 0.5
     setup["A33"] = "Electricity"
     setup["B33"] = 1000

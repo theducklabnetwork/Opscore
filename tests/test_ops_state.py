@@ -33,7 +33,7 @@ class OpsFixture(unittest.TestCase):
         self.store_b = self.app.register_store(self.admin, "B02", "Beta")
         for sid in (self.store_a, self.store_b):
             self.app.configure_month(
-                self.admin, sid, "2026-09", level1_base_cents=rm(200000),
+                self.admin, sid, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=9, stock_loss_target=0.015,
                 salary_ratio_target=0.06818,
                 salary_basic_allowance_cents=rm(10000),

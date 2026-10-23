@@ -74,7 +74,7 @@ class TestStoreCrud(StoresFixture):
     def test_deactivate_and_reactivate_preserves_data(self):
         sid = self.app.register_store(self.admin, "F06", "Foxtrot")
         self.app.configure_month(self.admin, sid, "2026-10",
-                                 level1_base_cents=rm(100000))
+                                 level1_base_cents=rm(100000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.app.write.deactivate_store(sid)
         st = self.app.read_repo.get_store(sid)
         self.assertFalse(st.active)
@@ -134,7 +134,7 @@ class TestSetup(StoresFixture):
 
     def test_blank_vs_explicit_zero(self):
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(100000))
+                                 level1_base_cents=rm(100000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.app.configure_month(self.admin, self.sid, "2026-10",
                                  overtime_cents=0)
         cfg = self.app.get_month_config(self.admin, self.sid, "2026-10")
@@ -156,7 +156,7 @@ class TestSetup(StoresFixture):
         from ducklab import kpi
         self.app.configure_month(
             self.admin, self.sid, "2026-10",
-            level1_base_cents=rm(200000), stock_loss_target=0.015,
+            level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3, stock_loss_target=0.015,
             part_timer_factor=0.5)
         self.app.record_daily(self.admin, self.sid, date(2026, 10, 1),
                               stock_losses={"DMO": rm(50)},
@@ -167,7 +167,7 @@ class TestSetup(StoresFixture):
         # without target -> status carries no target verdict
         sid2 = self.app.register_store(self.admin, "L12", "Lima")
         self.app.configure_month(self.admin, sid2, "2026-10",
-                                 level1_base_cents=rm(200000))
+                                 level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.app.record_daily(self.admin, sid2, date(2026, 10, 1),
                               sales_cents=rm(10000))
         rep2 = self.app.preview_month(self.admin, sid2, "2026-10",
@@ -212,7 +212,7 @@ class TestSetup(StoresFixture):
     def test_finalized_snapshot_unchanged_after_setup_edit(self):
         self.app.configure_month(
             self.admin, self.sid, "2026-10",
-            level1_base_cents=rm(200000), stock_loss_target=0.015)
+            level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3, stock_loss_target=0.015)
         self.app.finalize_month(self.admin, self.sid, "2026-10",
                                 as_of=date(2026, 10, 31))
         before = self.app.get_finalized_report(

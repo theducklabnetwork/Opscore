@@ -32,7 +32,7 @@ def main() -> None:
     for sid in (a, b):
         for month, l1 in (("2026-10", 210000), ("2026-09", 200000)):
             app.configure_month(
-                admin, sid, month, level1_base_cents=rm(l1),
+                admin, sid, month, level1_base_cents=rm(l1), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=10, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 salary_basic_allowance_cents=rm(10500),

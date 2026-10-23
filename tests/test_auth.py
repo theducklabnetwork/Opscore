@@ -46,7 +46,7 @@ class AuthFixture(unittest.TestCase):
     def make_store(self, code="A01") -> int:
         sid = self.app.write.register_store(code, f"Store {code}")
         self.app.write.configure_month(sid, "2026-09",
-                                       level1_base_cents=20000000,
+                                       level1_base_cents=20000000, level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                                        opening_headcount_ft=9)
         return sid
 
