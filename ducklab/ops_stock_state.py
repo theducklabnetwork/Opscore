@@ -179,7 +179,8 @@ class StockState(ManpowerState):
             return
         name = next((r["name"] for r in self.cat_rows if r["code"] == sel),
                     sel)
-        self.selected_code_name = f"{sel} — {name}"
+        self.selected_code_name = (
+            f"{ds.STOCK_CODE_LABELS.get(sel, sel)} · {name}")
         self.selected_code_total = next(
             (r["total"] for r in self.cat_rows if r["code"] == sel), "—")
         try:
@@ -284,7 +285,9 @@ class StockState(ManpowerState):
 
         # --- category breakdown ------------------------------------------
         rows: list[dict[str, str]] = []
-        for c in codes:
+        order = {k: i for i, k in enumerate(ds.STOCK_CODE_ORDER)}
+        for c in sorted(codes, key=lambda c: (order.get(c["code"], 99),
+                                              c["code"])):
             code, sign = c["code"], c["contribution_sign"]
             total = st.totals_by_code.get(code, 0)
             n_days = sum(1 for d in days if code in d.stock_losses)
@@ -293,6 +296,8 @@ class StockState(ManpowerState):
                 share = Decimal(total) / Decimal(st.total_loss_cents)
             rows.append({
                 "code": code, "name": c["name"],
+                # "Missing" / "Extra" as words; the stored code is kept
+                "label": ds.STOCK_CODE_LABELS.get(code, code),
                 "total": ds.fmt_rm(total),
                 "share": ds.fmt_pct(share) if sign == 1 else "—",
                 "days": str(n_days),
@@ -371,12 +376,13 @@ class StockState(ManpowerState):
         self.st_chart_ready = len(crows) >= 3
         # Plotly figures, one per theme (identical data, styling only)
         self.chart_fig_dark = ops_charts.daily_line(
-            trend_labels, trend_vals, dark=True, name="Total loss",
+            trend_labels, trend_vals, dark=True, name="Total Loss",
             y_title="", day_numbers=trend_days)
         self.chart_fig_light = ops_charts.daily_line(
-            trend_labels, trend_vals, dark=False, name="Total loss",
+            trend_labels, trend_vals, dark=False, name="Total Loss",
             y_title="", day_numbers=trend_days)
-        comp_items = [{"code": c["code"], "name": c["name"],
+        comp_items = [{"code": ds.STOCK_CODE_LABELS.get(c["code"], c["code"]),
+                       "name": c["name"],
                        "total_cents": st.totals_by_code.get(c["code"], 0),
                        "sign": c["contribution_sign"]} for c in codes]
         self.comp_fig_dark = ops_charts.composition(comp_items, dark=True)

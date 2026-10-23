@@ -158,7 +158,7 @@ def daily_line(day_labels: Sequence[str],
                       annotation_text=f"Target {fmt_rm0(target_rm * 100)}",
                       annotation_font_color=pal["muted"])
     layout = _base_layout(pal, y_title,
-                          x_title="Day of month" if day_numbers else "")
+                          x_title="Day" if day_numbers else "")
     if day_numbers:
         layout["xaxis"]["range"] = [0.5, max(day_numbers) + 0.5]
     fig.update_layout(**layout)
@@ -233,12 +233,14 @@ def pace_chart(days: Sequence[int],
         strong = n == highlight
         fig.add_trace(go.Scatter(
             x=x, y=y, mode="lines",
-            name="Level 1 budget pace" if n == 1 else f"Level {n} pace",
+            # legend: "Actual" and "Target" (the highlighted level); the
+            # other levels are labelled at the right edge
+            name="Target" if strong else f"Level {n}",
             showlegend=strong,
             opacity=1.0 if strong else 0.55,
             line=dict(color=pal["budget"], dash="dash",
                       width=1.75 if strong else 1),
-            hovertemplate=(f"Day %{{x}}<br>Level {n} pace: RM %{{y:,.0f}}"
+            hovertemplate=(f"Day %{{x}}<br>Level {n}: RM %{{y:,.0f}}"
                            "<extra></extra>"),
         ))
         if labelled and x and y and y[-1] is not None:
@@ -258,7 +260,7 @@ def pace_chart(days: Sequence[int],
     ))
     for n, pace in upper:  # lighter lines after the two main traces
         _target_line(n, pace)
-    layout = _base_layout(pal, y_title, x_title="Day of month")
+    layout = _base_layout(pal, y_title, x_title="Day")
     if labelled:
         layout["margin"] = dict(layout["margin"], r=52)  # right-edge labels
     fig.update_layout(**layout)
@@ -285,26 +287,31 @@ def budget_vs_actual(categories: Sequence[str],
                      budgets_cents: Sequence[Optional[float]],
                      actuals_cents: Sequence[float],
                      dark: bool,
-                     y_title: str = "RM") -> go.Figure:
-    """None budget = no budget bar for that category."""
+                     y_title: str = "") -> go.Figure:
+    """Horizontal grouped bars ("Budget", "Paid") per category, so long
+    category names read without rotation. None budget = no budget bar."""
     pal = _pal(dark)
     fig = go.Figure()
-    x = [wrap_label(c) for c in categories]
     names = list(categories)
     fig.add_trace(go.Bar(
-        x=x, y=[None if b is None else b / 100 for b in budgets_cents],
-        name="Budget", marker_color=pal["budget"], opacity=0.55,
-        customdata=names,
-        hovertemplate="%{customdata}<br>Budget: RM %{y:,.2f}<extra></extra>",
+        y=names, x=[None if b is None else b / 100 for b in budgets_cents],
+        orientation="h", name="Budget", marker_color=pal["budget"],
+        opacity=0.55,
+        hovertemplate="%{y}<br>Budget: RM %{x:,.2f}<extra></extra>",
     ))
     fig.add_trace(go.Bar(
-        x=x, y=[a / 100 for a in actuals_cents],
-        name="Actual (paid)", marker_color=pal["accent"],
-        customdata=names,
-        hovertemplate="%{customdata}<br>Actual: RM %{y:,.2f}<extra></extra>",
+        y=names, x=[a / 100 for a in actuals_cents],
+        orientation="h", name="Paid", marker_color=pal["accent"],
+        hovertemplate="%{y}<br>Paid: RM %{x:,.2f}<extra></extra>",
     ))
     layout = _base_layout(pal, y_title)
     layout["barmode"] = "group"
+    # first category on top; values on the x axis (gridlines vertical)
+    layout["yaxis"] = dict(layout["yaxis"], autorange="reversed",
+                           showgrid=False)
+    layout["xaxis"] = dict(layout["xaxis"], showgrid=True,
+                           gridcolor=pal["grid"])
+    layout["hovermode"] = "y unified"
     fig.update_layout(**layout)
     return fig
 
@@ -344,9 +351,9 @@ def composition(items: Sequence[dict], dark: bool,
                           "<extra></extra>",
         ))
 
-    _bar(losses, "In Total Loss", pal["red"], 0.95)
-    _bar(offsets, "Offsets Total Loss", pal["green"], 0.95)
-    _bar(infos, "Info only", pal["info"], 0.35, suffix=" (not in Total Loss)")
+    _bar(losses, "Total Loss", pal["red"], 0.95)
+    _bar(offsets, "Offset", pal["green"], 0.95)
+    _bar(infos, "Info Only", pal["info"], 0.35, suffix=" (not in Total Loss)")
     layout = _base_layout(pal, y_title, x_title="")
     fig.update_layout(**layout)
     fig.update_xaxes(type="category")

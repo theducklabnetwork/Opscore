@@ -27,20 +27,21 @@ _DAY_STATUSES = ("Loss", "Net negative", "Zero", "No sales",
 # 1. KPI tiles
 # ---------------------------------------------------------------------------
 
+def _tile(label, value, id=None, **kw) -> rx.Component:
+    # plain label + full value; status chip stays, no sub-lines
+    return ui.kpi_tile(label, value, id=id, size_narrow="4", **kw)
+
+
 def _kpi_section() -> rx.Component:
     return rx.vstack(
         ui.kpi_grid(
-            ui.kpi_tile("Total loss", S.kpi_total_loss,
-                        sub=S.kpi_total_loss_sub),
-            ui.kpi_tile("Loss ratio", S.kpi_ratio,
-                        chip=(S.st_status, S.st_status_color),
-                        chip_id="stock-status", sub=S.kpi_ratio_sub),
-            ui.kpi_tile("Missing", S.kpi_missing,
-                        sub="Missing at stock balance checks"),
-            ui.kpi_tile("Extra", S.kpi_extra, sub="Offsets total loss"),
+            _tile("Total Loss", S.kpi_total_loss),
+            _tile("Loss Ratio", S.kpi_ratio, id="stock-ratio",
+                  chip=(S.st_status, S.st_status_color),
+                  chip_id="stock-status"),
+            _tile("Missing", S.kpi_missing),
+            _tile("Extra", S.kpi_extra),
         ),
-        ui.note("Total loss = DMO + DMC + DMP + Missing − Extra; loss ratio "
-                "= total loss ÷ month-to-date sales."),
         rx.cond(
             S.st_finalized,
             rx.callout(
@@ -57,10 +58,6 @@ def _kpi_section() -> rx.Component:
 # 2. Charts (reported days only — gaps, no interpolation)
 # ---------------------------------------------------------------------------
 
-_NOT_ENOUGH = ("Charts appear once 3 days have stock entries. Unreported "
-               "days stay as gaps, never zero.")
-
-
 def _charts() -> rx.Component:
     """Trend + composition when there is enough data; otherwise ONE compact
     "Not enough data yet" card instead of two stacked empty ones."""
@@ -70,18 +67,14 @@ def _charts() -> rx.Component:
             ui.section_card(
                 rx.cond(S.is_dark, ops_charts.chart(S.chart_fig_dark),
                         ops_charts.chart(S.chart_fig_light)),
-                title="Daily total loss",
-                subtitle="RM per day with stock entries", id="trend-section"),
+                title="Daily Loss", id="trend-section"),
             ui.section_card(
                 rx.cond(S.is_dark, ops_charts.chart(S.comp_fig_dark),
                         ops_charts.chart(S.comp_fig_light)),
-                title="Loss composition by category",
-                subtitle="In total loss, offsets and info-only codes (RM)",
-                id="stock-composition"),
+                title="Loss by Category", id="stock-composition"),
             spacing=ui.GAP, width="100%",
         ),
-        ui.section_card(ui.not_enough_data(_NOT_ENOUGH),
-                        title="Loss trend and composition",
+        ui.section_card(ui.not_enough_data(), title="Daily Loss",
                         id="trend-section"),
     )
 
@@ -93,7 +86,7 @@ def _charts() -> rx.Component:
 def _category_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.hstack(
-            rx.text(row["code"], weight="medium", color=ds.ACCENT_TEXT,
+            rx.text(row["label"], weight="medium", color=ds.ACCENT_TEXT,
                     cursor="pointer",
                     on_click=S.select_category(row["code"])),
             rx.cond(row["selected"] == "1",
@@ -116,7 +109,7 @@ def _investigation() -> rx.Component:
                 rx.hstack(
                     rx.text(S.selected_code_name, size="3", weight="medium"),
                     rx.spacer(),
-                    rx.text("Monthly total ", size="2", color=ds.TEXT_MUTED),
+                    rx.text("Total ", size="2", color=ds.TEXT_MUTED),
                     rx.text(S.selected_code_total, size="2",
                             weight="medium"),
                     width="100%", align="center", wrap="wrap",
@@ -134,8 +127,7 @@ def _investigation() -> rx.Component:
                                 width="100%",
                             )),
                         spacing="1", width="100%"),
-                    rx.text("No entries for this category this month.",
-                            size="2", color=ds.TEXT_FAINT),
+                    rx.text("No Entries", size="2", color=ds.TEXT_FAINT),
                 ),
                 spacing="2", align="start", width="100%",
             ),
@@ -149,17 +141,13 @@ def _investigation() -> rx.Component:
 def _category_section() -> rx.Component:
     return ui.section_card(
         ui.data_table(
-            ["Code", "Description", ("Monthly total", True),
-             ("Share of loss", True), ("Days", True),
-             "Treatment"],
+            ["Code", "Description", ("Total", True), ("Share", True),
+             ("Days", True), "Treatment"],
             rx.foreach(S.cat_rows, _category_row),
-            phone=("Code", "Monthly total", "Treatment"),
+            phone=("Code", "Total", "Treatment"),
         ),
         _investigation(),
-        title="Category breakdown",
-        subtitle="Only DMO, DMC, DMP and Missing count; Extra reduces total "
-                 "loss; all other codes are informational. Select a code to "
-                 "see its days.",
+        title="Categories",
         id="category-section",
     )
 
@@ -168,9 +156,9 @@ def _category_section() -> rx.Component:
 # 4. Daily table (unreported days collapsed)
 # ---------------------------------------------------------------------------
 
-# phones show Date, Total loss, Status and Edit
+# phones show Date, Total Loss, Status and Edit
 _DAY_COLS = ["Date", ("Sales", True),
-             ("Total loss", True), ("Ratio", True), ("Missing", True),
+             ("Total Loss", True), ("Ratio", True), ("Missing", True),
              ("Extra", True), "Status", ""]
 
 
@@ -199,10 +187,10 @@ def _daily_section() -> rx.Component:
                          S.st_hidden_label, S.st_show_hidden,
                          S.toggle_stock_hidden_days, _day_row,
                          len(_DAY_COLS), toggle_id="stock-hidden-toggle"),
-            phone=("Date", "Total loss", "Status", ""),
+            phone=("Date", "Total Loss", "Status", ""),
         ),
         ui.status_legend(_DAY_STATUSES),
-        title="Daily stock loss", id="daily-section",
+        title="Daily Stock Loss", id="daily-section",
     )
 
 
@@ -215,7 +203,7 @@ def _comparison_section() -> rx.Component:
         rx.cond(
             S.cmp_rows.length() > 0,
             ui.data_table(
-                ["Metric", (S.cmp_label_prev, True), ("This month", True)],
+                ["Metric", (S.cmp_label_prev, True), ("This Month", True)],
                 rx.foreach(S.cmp_rows, lambda r: rx.el.tr(
                     ui.td(r["metric"]),
                     ui.td(r["prev"], numeric=True),
@@ -223,13 +211,9 @@ def _comparison_section() -> rx.Component:
                           numeric=True),
                 )),
             ),
-            ui.empty_state("No previous-month data to compare",
-                           icon="git-compare"),
+            ui.empty_state("No Previous Month", icon="git-compare"),
         ),
-        rx.cond(S.cmp_incomplete != "",
-                rx.text("Incomplete month: " + S.cmp_incomplete, size="1",
-                        color=ds.TEXT_FAINT, id="incomplete-month")),
-        title="Month comparison", id="comparison-section",
+        title="Comparison", id="comparison-section",
     )
 
 
@@ -262,7 +246,4 @@ def stock_page() -> rx.Component:
         ),
         on_store=S.select_store,
         on_month=S.select_month,
-        description="Stock losses by category against monthly sales. "
-                    "Entries are recorded in Daily Operations; this page is "
-                    "read-only and links to the day.",
     )

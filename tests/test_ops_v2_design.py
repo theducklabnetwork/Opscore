@@ -176,7 +176,7 @@ class StockPageTests(Fixture):
         fig = ops_charts.daily_line(["01 Oct", "02 Oct"], [1.0, None],
                                     dark=True, day_numbers=[1, 2])
         self.assertEqual(list(fig.data[0].x), [1, 2])
-        self.assertEqual(fig.layout.xaxis.title.text, "Day of month")
+        self.assertEqual(fig.layout.xaxis.title.text, "Day")
         self.assertEqual(list(fig.layout.xaxis.range), [0.5, 2.5])
 
 

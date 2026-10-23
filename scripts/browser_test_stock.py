@@ -90,7 +90,7 @@ def main() -> int:
               in page.locator("#stock-status").inner_text())
 
         cat = page.locator("#category-section").inner_text()
-        check("2DMP shows Info only", "2DMP" in cat and "Info only" in cat)
+        check("2DMP shows Info Only", "2DMP" in cat and "Info Only" in cat)
         check("Missing shown as Included", "Included" in cat)
 
         # category click -> investigation panel

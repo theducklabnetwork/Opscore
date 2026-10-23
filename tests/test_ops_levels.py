@@ -148,9 +148,9 @@ class LevelLinesTests(unittest.TestCase):
                                     lines[0][1], dark=True, levels=lines)
         names = [t.name for t in fig.data]
         # Level 1 + Actual first (unchanged order), then Levels 2-4
-        self.assertEqual(names, ["Level 1 budget pace", "Actual",
-                                 "Level 2 pace", "Level 3 pace",
-                                 "Level 4 pace"])
+        # P1 legend: the highlighted level reads "Target"
+        self.assertEqual(names, ["Target", "Actual", "Level 2", "Level 3",
+                                 "Level 4"])
         l1, l2 = fig.data[0], fig.data[2]
         self.assertEqual(l1.line.dash, "dash")
         self.assertEqual(l2.line.dash, "dash")
@@ -248,7 +248,7 @@ class SalesLevelTileTests(Fixture):
     def test_complete_month_september(self):
         self.september()
         st = self.sales("2026-09")
-        self.assertEqual(st.sp_level, "Level 3 of 4")
+        self.assertEqual(st.sp_level, "Level 3")
         self.assertEqual(st.sp_level_sub, "RM 0.30 short of Level 4")
         # S3: a shortfall rounds down (99.99991% -> 99.9%)
         self.assertEqual(st.sp_level_sub2, "99.9% of Level 4")
@@ -257,15 +257,14 @@ class SalesLevelTileTests(Fixture):
         self.assertTrue(st.sp_complete)
         # pace chart: Level 1 + Actual + Levels 2-4, labelled
         names = [t.name for t in st.sp_fig_dark.data]
-        self.assertEqual(names[2:], ["Level 2 pace", "Level 3 pace",
-                                     "Level 4 pace"])
+        self.assertEqual(names[2:], ["Level 2", "Level 3", "Level 4"])
         self.assertEqual(len(st.sp_fig_light.layout.annotations), 4)
 
     def test_incomplete_month_projected_level2(self):
         self.october()
         st = self.sales("2026-10")
         # projected 69,000 / 10 x 31 = 213,900 >= L2 210,000 < L3 220,000
-        self.assertEqual(st.sp_level, "Level 2 of 4")
+        self.assertEqual(st.sp_level, "Level 2")
         self.assertEqual(st.sp_level_chip, "Projected: Level 2")
         self.assertEqual(st.sp_level_chip_color, "amber")
         self.assertEqual(st.sp_level_sub, "RM 6,100.00 short of Level 3")
@@ -324,12 +323,12 @@ class SalesLevelTileTests(Fixture):
                                   sales_cents=rm(7000))
         st = self.sales("2026-10")
         self.assertTrue(st.sp_levels_missing)
-        self.assertEqual(st.sp_level, "Level 3 of 4")
+        self.assertEqual(st.sp_level, "Level 3")
         self.assertEqual(st.sp_level_sub, "RM 83,000.00 short of Level 4")
         self.assertEqual(len(st.sp_ladder), 4)
         # L2/L3 equal L1: drawn once
         self.assertEqual([t.name for t in st.sp_fig_dark.data],
-                         ["Level 1 budget pace", "Actual", "Level 4 pace"])
+                         ["Target", "Actual", "Level 4"])
 
     def test_nothing_entered(self):
         self.october(days=0)

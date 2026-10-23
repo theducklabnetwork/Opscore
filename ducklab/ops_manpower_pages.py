@@ -24,36 +24,27 @@ HC, EFF, PAY, LEAVE = M.hc_kpis, M.eff_kpis, M.pay_kpis, M.leave_kpis
 def _headcount_section() -> rx.Component:
     return ui.section_card(
         ui.stat_grid(
-            ui.stat("Opening headcount", HC["opening"], size="6"),
-            ui.stat("New hires", HC["hires"], size="6"),
+            ui.stat("Opening Headcount", HC["opening"], size="6"),
+            ui.stat("New Hires", HC["hires"], size="6"),
             ui.stat("Resignations", HC["resigned"], size="6"),
-            ui.stat("Closing headcount", HC["closing"], size="6"),
-            ui.stat("Budgeted headcount", HC["budget"], size="6"),
-            ui.stat("Headcount variance", HC["variance"], size="6",
-                    sub="Closing − budget"),
+            ui.stat("Closing Headcount", HC["closing"], size="6"),
+            ui.stat("Budget Headcount", HC["budget"], size="6"),
+            ui.stat("Variance", HC["variance"], size="6"),
             ui.stat("Turnover", HC["turnover"], size="6",
-                    chip=(HC["turnover_status"], HC["turnover_color"]),
-                    sub=HC["turnover_sub"]),
+                    chip=(HC["turnover_status"], HC["turnover_color"])),
         ),
         rx.cond(
             HC["status"] == "Vacancy",
-            rx.callout(
-                "Vacancy: closing headcount is below the budgeted headcount "
-                "for this store/month. Review hiring progress in Daily "
-                "Operations.",
-                icon="triangle-alert", color_scheme="amber", variant="soft",
-                width="100%", id="vacancy-warning"),
+            rx.callout("Vacancy", icon="triangle-alert",
+                       color_scheme="amber", variant="soft", width="100%",
+                       id="vacancy-warning"),
         ),
         rx.cond(
             HC["status"] == "Over budget",
-            rx.callout(
-                "Over budget: closing headcount exceeds the configured "
-                "budget headcount.",
-                icon="triangle-alert", color_scheme="red", variant="soft",
-                width="100%"),
+            rx.callout("Over Budget", icon="triangle-alert",
+                       color_scheme="red", variant="soft", width="100%"),
         ),
         title="Headcount",
-        extra=ui.status_chip(HC["status"], HC["status_color"], id="hc-status"),
         id="headcount-section",
     )
 
@@ -61,70 +52,52 @@ def _headcount_section() -> rx.Component:
 def _efficiency_section() -> rx.Component:
     return ui.section_card(
         ui.stat_grid(
-            ui.stat("Sales MTD", EFF["sales_mtd"], size="6",
-                    sub=EFF["completeness"]),
-            ui.stat("Avg effective staff", EFF["avg_effective"], size="6",
-                    sub="Part-timer factor " + M.pt_factor_label),
-            ui.stat("Sales per effective staff", EFF["sales_per_staff"],
+            ui.stat("Sales", EFF["sales_mtd"], size="6"),
+            ui.stat("Effective Staff (Avg.)", EFF["avg_effective"],
                     size="6"),
+            ui.stat("Sales per Staff", EFF["sales_per_staff"], size="6"),
             columns=rx.breakpoints(initial="1", sm="3"),
         ),
-        ui.note("Sales per effective staff = sales on staffed days ÷ "
-                "effective staff-days; unstaffed or unreported days never "
-                "distort the average."),
-        title="Staffing efficiency", id="efficiency-section",
+        title="Productivity", id="efficiency-section",
     )
+
+
+def _ratio_label(label: str):
+    """"(To Date)" while the month is incomplete (sales so far)."""
+    return rx.cond(PAY["mtd"] == "1", label + " (To Date)", label)
 
 
 def _payroll_section() -> rx.Component:
-    ratio_bar = rx.vstack(
-        rx.hstack(
-            rx.text("Ratio incl. support vs target", size="1",
-                    color=ds.TEXT_MUTED),
-            rx.spacer(),
-            rx.text(PAY["ratio_support"] + " of " + PAY["target"], size="1",
-                    color=ds.TEXT_MUTED),
-            width="100%",
-        ),
-        rx.box(
-            rx.box(width=PAY["ratio_bar"] + "%", height="100%",
-                   background=rx.color(PAY["bar_color"], 9),
-                   border_radius="3px", id="ratio-bar"),
-            width="100%", height="6px", background=ui.ROW_BORDER,
-            border_radius="3px", overflow="hidden",
-        ),
-        spacing="1", width="100%",
+    ratio_bar = rx.box(
+        rx.box(width=PAY["ratio_bar"] + "%", height="100%",
+               background=rx.color(PAY["bar_color"], 9),
+               border_radius="3px", id="ratio-bar"),
+        width="100%", height="6px", background=ui.ROW_BORDER,
+        border_radius="3px", overflow="hidden",
     )
     visible = rx.vstack(
         ui.stat_grid(
-            ui.stat("Salary ratio incl. support", PAY["ratio_support"],
-                    size="6"),
-            ui.stat("Salary ratio (store)", PAY["ratio"], size="6"),
-            ui.stat("Ratio target", PAY["target"], size="6"),
-            ui.stat("Total salary cost", PAY["total"], size="6"),
+            ui.stat(_ratio_label("Total Salary Ratio"),
+                    PAY["ratio_support"], size="6"),
+            ui.stat(_ratio_label("Salary Ratio"), PAY["ratio"], size="6"),
+            ui.stat("Target", PAY["target"], size="6"),
+            ui.stat("Salary Cost", PAY["total"], size="6"),
         ),
         ratio_bar,
-        rx.cond(PAY["mtd"] == "1",
-                ui.note("Month to date: the ratio uses sales entered so far "
-                        "and is only final once the month's sales are "
-                        "complete.")),
         rx.divider(),
         ui.stat_grid(
-            ui.stat("Basic salary + allowances", PAY["basic"], size="5"),
+            ui.stat("Basic + Allowance", PAY["basic"], size="5"),
             ui.stat("Overtime", PAY["overtime"], size="5"),
-            ui.stat("Support team cost", PAY["support"], size="5"),
-            ui.stat("Salary budget", PAY["budget"], size="5",
-                    sub="Variance " + PAY["variance"]
-                        + " (budget − actual)"),
+            ui.stat("Support Cost", PAY["support"], size="5"),
+            ui.stat("Salary Budget", PAY["budget"], size="5"),
+            ui.stat("Variance", PAY["variance"], size="5"),
+            columns=rx.breakpoints(initial="2", md="5"),
         ),
         rx.cond(
             PAY["status"] == "Awaiting payroll",
-            rx.callout(
-                "Awaiting payroll: no basic salary has been recorded for "
-                "this store/month. Missing payroll is not RM 0 — enter "
-                "month-end payroll below.",
-                icon="clock", color_scheme="gray", variant="soft",
-                width="100%", id="awaiting-payroll"),
+            rx.callout("Awaiting Payroll", icon="clock",
+                       color_scheme="gray", variant="soft", width="100%",
+                       id="awaiting-payroll"),
         ),
         spacing="4", width="100%",
     )
@@ -132,12 +105,9 @@ def _payroll_section() -> rx.Component:
         rx.cond(
             M.can_view_payroll,
             visible,
-            rx.callout(
-                "Payroll figures are restricted to administrators. Your role "
-                "can monitor headcount, staffing and turnover, but salary "
-                "values are never sent to your session.",
-                icon="lock", color_scheme="gray", variant="soft",
-                width="100%", id="payroll-restricted"),
+            rx.callout("Payroll Restricted", icon="lock",
+                       color_scheme="gray", variant="soft", width="100%",
+                       id="payroll-restricted"),
         ),
         rx.cond(
             M.mp_finalized,
@@ -148,18 +118,12 @@ def _payroll_section() -> rx.Component:
                 icon="archive", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
-        title="Salary ratio",
-        extra=rx.hstack(
-            ui.status_chip(PAY["status"], PAY["status_color"],
-                           id="ratio-status"),
-            rx.cond(
-                M.can_manage_manpower,
-                rx.button(rx.icon("settings-2", size=14),
-                          "Edit configuration & payroll", size="1",
-                          variant="soft", on_click=M.open_config,
-                          id="open-config"),
-            ),
-            spacing="3", align="center", wrap="wrap",
+        title="Salary",
+        extra=rx.cond(
+            M.can_manage_manpower,
+            rx.button(rx.icon("settings-2", size=14), "Edit Payroll",
+                      size="1", variant="soft", on_click=M.open_config,
+                      id="open-config"),
         ),
         id="payroll-section",
     )
@@ -168,15 +132,13 @@ def _payroll_section() -> rx.Component:
 def _leave_section() -> rx.Component:
     return ui.section_card(
         ui.stat_grid(
-            ui.stat("Annual leave", LEAVE["annual"], size="6"),
-            ui.stat("Medical leave (MC)", LEAVE["mc"], size="6"),
-            ui.stat("Other paid leave", LEAVE["other_paid"], size="6"),
-            ui.stat("Unpaid leave", LEAVE["unpaid"], size="6"),
-            ui.stat("Total leave days", LEAVE["total"], size="6"),
+            ui.stat("Annual Leave", LEAVE["annual"], size="6"),
+            ui.stat("Medical Leave", LEAVE["mc"], size="6"),
+            ui.stat("Other Paid Leave", LEAVE["other_paid"], size="6"),
+            ui.stat("Unpaid Leave", LEAVE["unpaid"], size="6"),
+            ui.stat("Total Leave", LEAVE["total"], size="6"),
             columns=rx.breakpoints(initial="2", md="5"),
         ),
-        ui.note("Store-level daily leave counts from Daily Operations (not "
-                "individual leave applications)."),
         title="Leave", id="leave-section",
     )
 
@@ -186,8 +148,8 @@ def _leave_section() -> rx.Component:
 # ---------------------------------------------------------------------------
 
 _STAFF_COLS = ["Date", ("FT", True), ("PT", True), ("Effective", True),
-               ("Hires", True), ("Resigned", True), ("Leave", True),
-               ("Sales", True), ("Sales / staff", True), "Status", ""]
+               ("Hires", True), ("Resignations", True), ("Leave", True),
+               ("Sales", True), ("Sales per Staff", True), "Status", ""]
 
 
 def _staff_row(row) -> rx.Component:
@@ -207,7 +169,6 @@ def _staff_row(row) -> rx.Component:
         ui.td(ui.status_chip(row["status"], row["status_color"])),
         ui.td(rx.button(rx.icon("pencil", size=13, class_name="ph-hide"),
                         "Edit",
-                        rx.el.span("staffing", class_name="ph-hide"),
                         size="1", variant="soft",
                         on_click=M.edit_day(row["iso"]))),
     )
@@ -225,10 +186,8 @@ def _staffing_table() -> rx.Component:
             phone=("Date", "Effective", "Status", ""),
         ),
         ui.status_legend((ds.DAY_COMPLETE, ds.DAY_PARTIAL,
-                          ds.DAY_NOT_REPORTED), note=M.staffing_note),
-        ui.note("Edit staffing opens Daily Operations for the same store and "
-                "date — staffing is saved once, in one place."),
-        title="Daily staffing", id="staffing-table",
+                          ds.DAY_NOT_REPORTED)),
+        title="Daily Staffing", id="staffing-table",
     )
 
 
@@ -236,9 +195,9 @@ def _staffing_table() -> rx.Component:
 # Configuration & payroll editor dialog (kit entry dialog; Daily pattern)
 # ---------------------------------------------------------------------------
 
-def _input(attr, fid, mode="decimal", placeholder="") -> rx.Component:
+def _input(attr, fid, mode="decimal") -> rx.Component:
     return rx.input(value=getattr(M, attr), on_change=getattr(M, "set_" + attr),
-                    input_mode=mode, placeholder=placeholder, id=fid)
+                    input_mode=mode, id=fid)
 
 
 def _config_dialog() -> rx.Component:
@@ -246,48 +205,31 @@ def _config_dialog() -> rx.Component:
         ui.form_section(
             "Workforce",
             ui.form_grid(
-                ui.form_field("Opening FT headcount",
-                              _input("c_opening", "c-opening", "numeric"),
-                              "Leave blank to keep the saved value."),
-                ui.form_field("Budgeted headcount",
+                ui.form_field("Opening Headcount",
+                              _input("c_opening", "c-opening", "numeric")),
+                ui.form_field("Budget Headcount",
                               _input("c_budget", "c-budget", "numeric")),
-                ui.form_field("Part-time conversion factor",
-                              _input("c_pt_factor", "c-pt-factor",
-                                     placeholder="e.g. 0.5"),
-                              "Effective staff = FT + PT × factor."),
-                ui.form_field("Turnover threshold (%)",
-                              _input("c_turnover", "c-turnover",
-                                     placeholder="e.g. 45")),
-                ui.form_field("Salary ratio target (%)",
-                              _input("c_ratio_target", "c-ratio-target",
-                                     placeholder="e.g. 6.818")),
+                ui.form_field("Part-Time Factor",
+                              _input("c_pt_factor", "c-pt-factor")),
+                ui.form_field("Turnover Threshold (%)",
+                              _input("c_turnover", "c-turnover")),
+                ui.form_field("Salary Ratio Target (%)",
+                              _input("c_ratio_target", "c-ratio-target")),
             ),
         ),
         ui.form_section(
-            "Month-end payroll (RM)",
+            "Payroll (RM)",
             ui.form_grid(
-                ui.form_field("Basic salary + allowances",
-                              _input("p_salary", "p-salary",
-                                     placeholder="e.g. 13275.75"),
-                              "Leave blank until payroll closes."),
-                ui.form_field("Overtime",
-                              _input("p_overtime", "p-overtime",
-                                     placeholder="e.g. 4198.50")),
-                ui.form_field("Support team cost",
-                              _input("p_support", "p-support",
-                                     placeholder="Optional")),
+                ui.form_field("Basic + Allowance",
+                              _input("p_salary", "p-salary")),
+                ui.form_field("Overtime", _input("p_overtime", "p-overtime")),
+                ui.form_field("Support Cost",
+                              _input("p_support", "p-support")),
             ),
-            hint="Payroll inputs are workbook month-end aggregates. Which "
-                 "management positions are included in Basic Salary + "
-                 "Allowances follows the workbook definition and remains "
-                 "subject to HQ confirmation.",
         ),
         open=M.cfg_open,
         on_open_change=lambda v: M.close_config(),
-        title="Monthly Configuration & Payroll",
-        subtitle="Only changed staffing fields are saved. Leave payroll "
-                 "blank until it closes: it then shows as awaiting payroll, "
-                 "never RM 0.",
+        title="Edit Payroll",
         close_id="cfg-close",
         notices=[
             rx.cond(M.mp_finalized, rx.callout(
@@ -298,7 +240,7 @@ def _config_dialog() -> rx.Component:
             rx.cond(M.cfg_error != "", ds.error_callout(M.cfg_error)),
         ],
         actions=ui.dialog_actions(
-            save_label="Save Configuration", on_save=M.save_config,
+            save_label="Save", on_save=M.save_config,
             saving=M.cfg_saving, save_id="cfg-save", cancel_id="cfg-cancel"),
     )
 
@@ -343,8 +285,4 @@ def manpower_page() -> rx.Component:
         ),
         on_store=M.select_store,
         on_month=M.select_month,
-        description="Headcount, staffing efficiency, salary ratio and leave "
-                    "against the month's targets. Daily staffing comes from "
-                    "Daily Operations; payroll is managed here by "
-                    "administrators.",
     )

@@ -35,11 +35,13 @@ from ducklab.ops_state import (
 )
 
 PERIOD_OPTIONS = [
-    ("incurred", "Incurred this month"),
-    ("paid", "Paid this month"),
-    ("outstanding", "Outstanding (pending)"),
-    ("all", "All transactions"),
+    ("incurred", "Incurred This Month"),
+    ("paid", "Paid This Month"),
+    ("outstanding", "Pending"),
+    ("all", "All"),
 ]
+# register sort select: Title Case label -> sort key
+SORT_LABELS = {"incurred": "Incurred", "paid": "Paid", "amount": "Amount"}
 
 MAX_ROWS = 100
 
@@ -76,6 +78,10 @@ class ExpensesState(DailyState):
     filter_paid_date: str = ""      # ISO; set from Daily (?paid=), "" = off
     sort_key: str = "incurred"      # incurred | paid | amount
     sort_desc: bool = True
+    # "Needs Review: N": the register filtered to this month's lines whose
+    # data check is not OK (same scope as kpi.expense_review_counts)
+    filter_review: bool = False
+    needs_review_count: int = 0
 
     # --- expense form -----------------------------------------------------
     exp_form_open: bool = False
@@ -109,7 +115,17 @@ class ExpensesState(DailyState):
 
     @rx.var
     def filter_category_options(self) -> list[str]:
-        return ["All categories", *self.category_names]
+        return ["All Categories", *self.category_names]
+
+    @rx.var
+    def sort_label(self) -> str:
+        return SORT_LABELS.get(self.sort_key, "Incurred")
+
+    @rx.var
+    def b_has_saved(self) -> bool:
+        """The selected category has a saved budget (the "×" shows)."""
+        return any(r["name"] == self.b_category and r["budget"] != "—"
+                   for r in self.budget_rows)
 
     @rx.var
     def period_options(self) -> list[str]:
@@ -163,7 +179,13 @@ class ExpensesState(DailyState):
         """Filtered/sorted register rows (deterministic ordering)."""
         rows = list(self.all_expense_rows)
         month = self._selected_month()
-        if self.filter_paid_date:
+        if self.filter_review and month:
+            end = f"{month}-31"   # ISO compare: on or before month end
+            rows = [r for r in rows if r["validation"] != "OK" and (
+                r["incurred_iso"][:7] == month or r["paid_iso"][:7] == month
+                or (r["status"] == "Pending" and r["incurred_iso"]
+                    and r["incurred_iso"] <= end))]
+        elif self.filter_paid_date:
             # one paid date (from Daily): replaces the period filter
             rows = [r for r in rows if r["paid_iso"] == self.filter_paid_date]
         elif self.filter_period == "paid" and month:
@@ -248,6 +270,8 @@ class ExpensesState(DailyState):
         self.budget_fig_dark = go.Figure()
         self.budget_fig_light = go.Figure()
         self.validation_summary = ""
+        self.needs_review_count = 0
+        self.filter_review = False   # a fresh load shows the period view
         self.exp_month_finalized = False
         self.has_categories = True
         store_id = self._selected_store_id()
@@ -329,6 +353,7 @@ class ExpensesState(DailyState):
             self.validation_summary = (
                 "  •  ".join(f"{k}: {v}" for k, v in sorted(non_ok.items()))
                 if non_ok else "All transactions pass validation.")
+            self.needs_review_count = sum(non_ok.values())
             self.budget_rows = []
             for c in e.categories:
                 paid = c.paid_mtd_cents
@@ -474,10 +499,10 @@ class ExpensesState(DailyState):
     def set_filter_period(self, v: str): self.filter_period = v
     @rx.event
     def set_filter_category(self, v: str):
-        self.filter_category = "" if v == "All categories" else v
+        self.filter_category = "" if v.lower() == "all categories" else v
     @rx.event
     def set_filter_category_name(self, name: str):
-        if name == "All categories":
+        if name.lower() == "all categories":
             self.filter_category = ""
             return
         try:
@@ -489,14 +514,27 @@ class ExpensesState(DailyState):
             self.report_status = "error"
     @rx.event
     def set_filter_status(self, v: str):
-        self.filter_status = "" if v == "All statuses" else v
+        self.filter_status = "" if v.lower() == "all statuses" else v
     @rx.event
     def set_filter_verification(self, v: str):
-        self.filter_verification = "" if v == "All verifications" else v
+        self.filter_verification = ("" if v.lower() == "all verifications"
+                                    else v)
     @rx.event
     def set_search_text(self, v: str): self.search_text = v
     @rx.event
-    def set_sort_key(self, v: str): self.sort_key = v
+    def set_sort_key(self, v: str):
+        # accepts the key ("amount") or the select label ("Amount")
+        self.sort_key = v.lower() if v.lower() in SORT_LABELS else v
+
+    @rx.event
+    def show_needs_review(self):
+        """"Needs Review: N" -> the register filtered to those lines."""
+        self.filter_review = True
+        return rx.scroll_to("expense-register")
+
+    @rx.event
+    def clear_needs_review(self):
+        self.filter_review = False
     @rx.event
     def toggle_sort_dir(self):
         self.sort_desc = not self.sort_desc
@@ -536,7 +574,14 @@ class ExpensesState(DailyState):
 
     @rx.event
     def clear_budget(self):
-        """× in the budget amount: save writes NULL ("No budget")."""
+        """× in Budget (RM): the same as the old "Clear saved value"
+        checkbox with the amount blank (save -> NULL, "No budget")."""
+        self.b_amount = ""
+        self.b_clear = True
+
+    @rx.event
+    def clear_budget_x(self):
+        """Older name for clear_budget."""
         self.b_amount = ""
         self.b_clear = True
 
