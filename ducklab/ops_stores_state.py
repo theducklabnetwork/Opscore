@@ -82,6 +82,11 @@ def _factor_str(factor) -> str:
     return "" if factor is None else f"{float(factor):g}"
 
 
+# "Use HQ defaults": Level 2-4 uplift in percent, filled visibly into
+# the form (never applied silently on save)
+HQ_DEFAULT_UPLIFTS = {"s_level2": "10", "s_level3": "20", "s_level4": "30"}
+
+
 def _pct_str(ratio) -> str:
     return "" if ratio is None else f"{float(ratio) * 100:g}"
 
@@ -125,6 +130,7 @@ class StoresState(StockState):
     setup_error: str = ""
     setup_saving: bool = False
     setup_levels: list[dict[str, str]] = []  # read-only L1-L4
+    setup_levels_missing: bool = False  # saved L1 without a L2-4 uplift
     setup_original: dict = {}  # loaded values, for changed-only saves
     s_min_rtm: str = ""
     s_level1: str = ""
@@ -168,6 +174,7 @@ class StoresState(StockState):
         self.setup_error = ""
         self.setup_saving = False
         self.setup_levels = []
+        self.setup_levels_missing = False
         self.budget_rows = []
         for attr, _, _, _ in SETUP_ALL:
             setattr(self, attr, "")
@@ -297,6 +304,7 @@ class StoresState(StockState):
                 setattr(self, attr, v)
             self.setup_original = dict(vals)
             levels = kpi.sales_target_levels_cents(cfg)
+            self.setup_levels_missing = kpi.levels_missing(cfg)
             self.setup_levels = [
                 {"level": f"Level {n}",
                  "value": ds.fmt_rm(levels.get(f"level{n}"))}
@@ -679,6 +687,13 @@ class StoresState(StockState):
             self.setup_saving = False
         yield
         yield StoresState.load_page_data()
+
+    @rx.event
+    def use_hq_defaults(self) -> None:
+        """Fill Level 2-4 uplift with the HQ defaults (+10% / +20% / +30%)
+        in the form; nothing is saved until Save."""
+        for attr, value in HQ_DEFAULT_UPLIFTS.items():
+            setattr(self, attr, value)
 
     @rx.event
     def set_budget_value(self, category_id: str, value: str) -> None:

@@ -222,10 +222,21 @@ def _setup_section() -> rx.Component:
                 "Sales targets",
                 _setup_grid(SETUP_SALES[:2]),
                 _setup_grid(SETUP_SALES[2:5]),
+                rx.hstack(
+                    rx.button("Use HQ defaults (+10% / +20% / +30%)",
+                              on_click=S.use_hq_defaults, variant="soft",
+                              size="2", type="button", id="setup-hq-levels",
+                              disabled=~S.can_edit_setup),
+                    rx.cond(S.setup_levels_missing,
+                            ui.status_chip(ds.LEVELS_MISSING, "amber",
+                                           id="setup-levels-missing",
+                                           wrap=True)),
+                    spacing="3", align="center", wrap="wrap"),
                 _levels_panel(),
                 _setup_grid(SETUP_SALES[5:]),
-                hint="Last year / last month are the bases for the growth "
-                     "comparisons.",
+                hint="Levels 2–4 uplift is required when a Level 1 target "
+                     "is set. Last year / last month are the bases for the "
+                     "growth comparisons.",
             ),
             ui.form_section("Manpower", _setup_grid(SETUP_MANPOWER)),
             ui.form_section("Stock", _setup_grid(SETUP_STOCK)),

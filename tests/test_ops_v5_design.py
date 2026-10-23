@@ -36,7 +36,7 @@ class Fixture(unittest.TestCase):
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         for month in ("2026-09", "2026-10"):
             self.app.configure_month(
-                self.admin, self.sid, month, level1_base_cents=rm(210000),
+                self.admin, self.sid, month, level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=10, salary_ratio_target=0.06818,
                 part_timer_factor=0.5, stock_loss_target=0.015,
                 salary_basic_allowance_cents=rm(10500))

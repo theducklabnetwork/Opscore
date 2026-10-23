@@ -123,7 +123,7 @@ def _value(value, compact=None, exact=None, size_wide="7",
 
 def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
          tag=None, tag_tip="", id=None, size="7",
-         chip_id=None, size_narrow="6") -> rx.Component:
+         chip_id=None, size_narrow="6", sub2=None) -> rx.Component:
     """Label + big value (+ chips, + sub-line). No border: use inside a
     section_card, or kpi_tile for a standalone tile. ``size_narrow`` is the
     value size below 1280px (smaller where exact money sits two-up on a
@@ -144,6 +144,9 @@ def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
         items.append(rx.hstack(*chips, spacing="1", wrap="wrap"))
     if sub is not None:
         items.append(_when(sub, rx.text(sub, size="1", color=ds.TEXT_FAINT)))
+    if sub2 is not None:  # a second sub-line, same style
+        items.append(_when(sub2, rx.text(sub2, size="1",
+                                         color=ds.TEXT_FAINT)))
     return rx.vstack(*items, spacing="2", align="start", min_width="0",
                      width="100%", id=id)
 

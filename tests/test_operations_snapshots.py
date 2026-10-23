@@ -221,7 +221,7 @@ class TestMultiStoreIsolation(SnapFixture):
 
     def test_cross_month_not_confused(self):
         sid, _ = self.seed_store()
-        self.svc.configure_month(sid, "2026-10", level1_base_cents=rm(200000),
+        self.svc.configure_month(sid, "2026-10", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                                  opening_headcount_ft=9)
         self.snaps.finalize_month(sid, "2026-09", as_of=date(2026, 9, 30))
         self.snaps.finalize_month(sid, "2026-10", as_of=date(2026, 10, 31))

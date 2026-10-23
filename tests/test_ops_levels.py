@@ -85,16 +85,15 @@ class HighestLevelTests(unittest.TestCase):
         self.assertEqual(kpi.highest_level_achieved(rm(199999), shown),
                          (None, 1, Decimal(rm(1))))
 
-    def test_shown_levels_follow_uplift_rule(self):
+    def test_levels_missing_flags_months_without_uplift(self):
+        # S2: four levels are shown everywhere; a month saved without a
+        # Level 2-4 uplift is flagged instead of collapsed
         cfg = MonthConfig(month="2026-09", min_rtm_target_cents=rm(300000),
-                          level1_base_cents=rm(200000))
-        t = kpi.sales_target_levels_cents(cfg)
-        self.assertFalse(kpi.levels_configured(cfg))
-        self.assertEqual(kpi.shown_level_targets(cfg, t),
-                         {"level1": rm(200000)})
-        self.assertTrue(kpi.levels_configured(WB_CFG))
-        self.assertEqual(kpi.shown_level_targets(WB_CFG, WB_TARGETS),
-                         WB_TARGETS)
+                          level1_base_cents=rm(200000),
+                          level2_pct=Decimal("0.1"))
+        self.assertTrue(kpi.levels_missing(cfg))
+        self.assertFalse(kpi.levels_missing(WB_CFG))
+        self.assertFalse(kpi.levels_missing(MonthConfig(month="2026-09")))
 
 
 class NeededForLevelTests(unittest.TestCase):
@@ -251,11 +250,12 @@ class SalesLevelTileTests(Fixture):
         st = self.sales("2026-09")
         self.assertEqual(st.sp_level, "Level 3 of 4")
         self.assertEqual(st.sp_level_sub, "RM 0.30 short of Level 4")
+        self.assertEqual(st.sp_level_sub2, "100.0% of Level 4")
         self.assertEqual(st.sp_level_chip, "")          # actual: no chip
-        # complete: nothing needed per remaining day; L1 run-rate kept
+        # complete: "Month complete" (never a bare dash); L1 run-rate kept
         # (269,861 / 30 = 8,995.37)
         self.assertEqual(st.sp_needed_label, "Needed per remaining day")
-        self.assertEqual(st.sp_needed, "—")
+        self.assertEqual(st.sp_needed, "Month complete")
         self.assertEqual(st.sp_needed_sub,
                          "Level 1 required run-rate: RM 8,995")
         # pace chart: Level 1 + Actual + Levels 2-4, labelled
@@ -273,11 +273,13 @@ class SalesLevelTileTests(Fixture):
         self.assertEqual(st.sp_level_chip_color, "amber")
         self.assertEqual(st.sp_level_sub, "RM 6,100.00 short of Level 3")
         self.assertEqual(st.sp_early_tag, "")           # 10 days: projected
-        # next unreached level: (220,000 - 69,000) / 21 = 7,190.48
+        # 213,900 / 220,000 = 97.23% of the next level
+        self.assertEqual(st.sp_level_sub2, "97.2% of Level 3")
+        # S2: needed follows the selected level (default Level 1):
+        # (200,000 - 69,000) / 21 = 6,238.10
         self.assertEqual(st.sp_needed_label,
-                         "Needed per remaining day for Level 3")
-        self.assertEqual(st.sp_needed, "RM 7,190")
-        self.assertEqual(st.sp_needed_exact, "RM 7,190.47")
+                         "Needed per remaining day for Level 1")
+        self.assertEqual(st.sp_needed, "RM 6,238")
         # L1 run-rate 200,000 / 31 = 6,451.61
         self.assertEqual(st.sp_needed_sub,
                          "Level 1 required run-rate: RM 6,452")
@@ -297,6 +299,7 @@ class SalesLevelTileTests(Fixture):
         self.assertEqual(st.sp_level, "Below Level 1")
         self.assertEqual(st.sp_level_chip, "Projected: below Level 1")
         self.assertEqual(st.sp_level_sub, "RM 14,000.00 short of Level 1")
+        self.assertEqual(st.sp_level_sub2, "93.0% of Level 1")
         self.assertEqual(st.sp_needed_label,
                          "Needed per remaining day for Level 1")
         self.assertEqual(st.sp_needed, "RM 6,667")
@@ -310,18 +313,24 @@ class SalesLevelTileTests(Fixture):
         self.assertEqual(st.sp_needed_sub,
                          "Level 1 required run-rate: No target")
 
-    def test_no_uplift_level1_only(self):
-        # floor 300,000 makes raw Level 4 differ, but without any uplift
-        # pages show Level 1 only — the chart draws one target line
-        self.october(per_day=7000, level1_base_cents=rm(200000),
-                     min_rtm_target_cents=rm(300000))
+    def test_month_saved_without_uplift_shows_four_levels(self):
+        # a month saved before four levels were required (written past
+        # the service rule): L2/L3 = L1 by the workbook rule, L4 = floor
+        # 300,000. Projected 70,000 / 10 x 31 = 217,000 -> Level 3 of 4.
+        self.app.write.repo.save_month_config(
+            self.sid, "2026-10", level1_base_cents=rm(200000),
+            min_rtm_target_cents=rm(300000))
+        for d in range(1, 11):
+            self.app.record_daily(self.admin, self.sid, date(2026, 10, d),
+                                  sales_cents=rm(7000))
         st = self.sales("2026-10")
-        self.assertEqual(st.sp_level, "Level 1 of 1")
-        self.assertEqual(st.sp_level_sub, "All levels reached")
-        self.assertEqual(st.sp_needed_label, "Needed per remaining day")
-        self.assertEqual(st.sp_needed, "—")
+        self.assertTrue(st.sp_levels_missing)
+        self.assertEqual(st.sp_level, "Level 3 of 4")
+        self.assertEqual(st.sp_level_sub, "RM 83,000.00 short of Level 4")
+        self.assertEqual(len(st.sp_ladder), 4)
+        # L2/L3 equal L1: drawn once
         self.assertEqual([t.name for t in st.sp_fig_dark.data],
-                         ["Level 1 budget pace", "Actual"])
+                         ["Level 1 budget pace", "Actual", "Level 4 pace"])
 
     def test_nothing_entered(self):
         self.october(days=0)

@@ -41,14 +41,20 @@ class SalesState(StoresState):
     sp_sales_mtd_compact: str = "—"
     sp_sales_mtd_exact: str = "—"
     sp_sales_mtd_sub: str = ""
-    sp_mtd_achievement: str = "—"          # MTD / Level 1 (to date)
+    # "Compare against: Level 1-4" (Sales Performance only), remembered
+    # per viewer in the browser; default Level 1
+    sp_compare: str = rx.LocalStorage("1", name="ducklab_sales_compare")
+    sp_complete: bool = False               # every day of the month entered
+    sp_mtd_achievement: str = "—"          # MTD / selected level (to date)
+    sp_mtd_achievement_label: str = "Achievement to date vs Level 1"
     sp_mtd_achievement_sub: str = ""
     sp_month_end: str = "—"
     sp_month_end_compact: str = "—"
     sp_month_end_exact: str = "—"
     sp_month_end_label: str = "Month-End Sales"
     sp_month_end_sub: str = ""               # "Projected" / "Actual"
-    sp_l1_achievement: str = "—"           # projected month-end / Level 1
+    sp_l1_achievement: str = "—"           # month-end / selected level
+    sp_l1_achievement_label: str = "Projected achievement vs Level 1"
     sp_l1_achievement_sub: str = ""
     sp_needed: str = "—"
     sp_needed_compact: str = "—"
@@ -58,6 +64,7 @@ class SalesState(StoresState):
     # level reached (kpi.highest_level_achieved on the month-end figure)
     sp_level: str = "—"
     sp_level_sub: str = ""
+    sp_level_sub2: str = ""                 # achievement vs the next level
     sp_level_chip: str = ""                 # "Projected: Level 2" (incomplete)
     sp_level_chip_color: str = "gray"
     sp_days: str = "—"
@@ -70,8 +77,9 @@ class SalesState(StoresState):
     sp_early_tag: str = ""
     sp_early_tip: str = ""
 
-    # target ladder + comparisons (Levels 2-4 only when an uplift is set)
-    sp_levels_configured: bool = True
+    # target ladder + comparisons; months saved without a Level 2-4
+    # uplift keep the workbook values and get a warning chip
+    sp_levels_missing: bool = False
     sp_ladder: list[dict[str, str]] = []
     sp_comparisons: list[dict[str, str]] = []
 
@@ -99,16 +107,20 @@ class SalesState(StoresState):
                 setattr(self, f"sp_{name}{suffix}", "—")
         self.sp_sales_mtd_sub = ""
         self.sp_mtd_achievement = "—"
+        self.sp_mtd_achievement_label = "Achievement to date vs Level 1"
         self.sp_mtd_achievement_sub = ""
+        self.sp_complete = False
         self.sp_month_end_label = "Month-End Sales"
         self.sp_month_end_sub = ""
-        self.sp_levels_configured = True
+        self.sp_levels_missing = False
         self.sp_l1_achievement = "—"
+        self.sp_l1_achievement_label = "Projected achievement vs Level 1"
         self.sp_l1_achievement_sub = ""
         self.sp_needed_sub = ""
         self.sp_needed_label = "Needed per remaining day"
         self.sp_level = "—"
         self.sp_level_sub = ""
+        self.sp_level_sub2 = ""
         self.sp_level_chip = ""
         self.sp_level_chip_color = "gray"
         self.sp_days = "—"
@@ -127,6 +139,13 @@ class SalesState(StoresState):
         self.sp_chart_ready = False
         self.sp_fig_dark = go.Figure()
         self.sp_fig_light = go.Figure()
+
+    @rx.event
+    def select_compare(self, value: str | list[str]):
+        """Compare against Level 1-4: re-derive the level-driven tiles and
+        the highlighted pace line from the engine's per-level values."""
+        self.sp_compare = str(ds.compare_level(value))
+        yield SalesState.load_sales_data()
 
     @rx.event
     def toggle_hidden_days(self):
@@ -193,46 +212,63 @@ class SalesState(StoresState):
         pstate = s.projection_state
         self._set_money("sales_mtd", s.sales_mtd_cents if entered else None)
         self.sp_sales_mtd_sub = f"{entered} of {dim} days reported"
-        level1 = s.targets.get("level1")
-        self.sp_mtd_achievement = (ds.fmt_pct(s.mtd_achievement_l1)
-                                   if entered else "—")
-        self.sp_mtd_achievement_sub = (
-            "Level 1 target " + ds.fmt_rm0(level1)
-            if level1 is not None else "No Level 1 target")
+        n = ds.compare_level(self.sp_compare)
+        key = f"level{n}"
+        target = s.targets.get(key)
         complete = pstate == "actual"
+        self.sp_complete = complete
+        # achievement to date: MTD / selected level (Level 1 = the budget
+        # achievement, the engine's mtd_achievement_l1)
+        self.sp_mtd_achievement_label = f"Achievement to date vs Level {n}"
+        self.sp_mtd_achievement = (
+            ds.fmt_pct(kpi.mtd_achievement(s.sales_mtd_cents, target))
+            if entered else "—")
+        self.sp_mtd_achievement_sub = (
+            f"Level {n} target " + ds.fmt_rm0(target)
+            if target is not None else f"No Level {n} target")
         self.sp_month_end_label = ("Month-End Sales (Actual)" if complete
                                    else "Month-End Sales (Projected)")
         self.sp_month_end_sub = "Actual" if complete else "Projected"
         self._set_money("month_end", s.month_end_sales_cents)
-        self.sp_l1_achievement = ds.fmt_pct(s.achievement_by_level.get("level1"))
-        self.sp_l1_achievement_sub = ("Month-end vs Level 1" if complete
-                                      else "Projected month-end vs Level 1")
+        # one achievement tile for a complete month; projected otherwise
+        self.sp_l1_achievement_label = (
+            f"Achievement vs Level {n}" if complete
+            else f"Projected achievement vs Level {n}")
+        self.sp_l1_achievement = ds.fmt_pct(s.achievement_by_level.get(key))
+        gap = self._gap(s, key)
+        self.sp_l1_achievement_sub = (
+            "" if gap == "—" else
+            ("Gap " if complete else "Projected gap ") + gap)
         # projected tiles carry the engine's projection label, exactly as
         # the Overview: "Projected: <status>" + "Early estimate" (< 7 days)
         (self.sp_proj_status, self.sp_proj_color,
          self.sp_early_tag) = ds.projection_style(
-            pstate, s.status_by_level.get("level1", "Awaiting data"))
+            pstate, s.status_by_level.get(key, "Awaiting data"))
+        if complete:
+            self.sp_proj_status = ""  # the actual tile needs no chip
         self.sp_early_tip = (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
                              if self.sp_early_tag else "")
-        # same rule as the Overview: without a Level 2-4 uplift the levels
-        # equal Level 1 (base x (1 + 0)) -> show Level 1 only + a note
         cfg = rep.config
-        self.sp_levels_configured = kpi.levels_configured(cfg)
-        shown = kpi.shown_level_targets(cfg, s.targets)
-        level, nxt, gap = kpi.highest_level_achieved(
-            s.month_end_sales_cents, shown)
-        self._set_level(level, nxt, gap, len(shown), pstate,
-                        entered, shown.get("level1") is None)
+        self.sp_levels_missing = kpi.levels_missing(cfg)
+        level, nxt, short = kpi.highest_level_achieved(
+            s.month_end_sales_cents, s.targets)
+        self._set_level(level, nxt, short, len(s.targets), pstate,
+                        entered, s.targets.get("level1") is None)
+        if nxt is not None and entered:
+            self.sp_level_sub2 = (
+                ds.fmt_pct(s.achievement_by_level.get(f"level{nxt}"))
+                + f" of Level {nxt}")
 
-        # needed per remaining day: for the next level not yet reached
-        # (the Level 1 run-rate stays as the sub-line)
-        needed = kpi.needed_per_remaining_day_for_level(
-            shown, nxt, s.sales_mtd_cents, entered, dim)
-        self._set_money("needed", needed)
-        if nxt is not None and not complete:
-            self.sp_needed_label = f"Needed per remaining day for Level {nxt}"
-        run_rate = s.required_daily_run_rate
-        self.sp_needed_sub = ("Level 1 required run-rate: "
+        # needed per remaining day / run-rate for the selected level
+        if complete:
+            self.sp_needed = self.sp_needed_compact = "Month complete"
+            self.sp_needed_exact = "Every day of the month is entered"
+        else:
+            self.sp_needed_label = f"Needed per remaining day for Level {n}"
+            self._set_money("needed", kpi.needed_per_remaining_day_for_level(
+                s.targets, n, s.sales_mtd_cents, entered, dim))
+        run_rate = kpi.required_daily_run_rate(target, dim)
+        self.sp_needed_sub = (f"Level {n} required run-rate: "
                               + (_fmt_rm0(run_rate) if run_rate is not None
                                  else "No target"))
         self.sp_days = f"{entered} / {dim}"
@@ -249,8 +285,7 @@ class SalesState(StoresState):
                 *ds.projection_style(
                     pstate, s.status_by_level.get(name, "Awaiting data")))
             for n, name in enumerate(
-                ("level1", "level2", "level3", "level4")
-                if self.sp_levels_configured else ("level1",), start=1)
+                ("level1", "level2", "level3", "level4"), start=1)
         ]
         # growth comparison statuses are projected figures too while the
         # month is incomplete
@@ -287,14 +322,15 @@ class SalesState(StoresState):
         p_days = [p["day"] for p in pts]
         p_actual = [p["actual"] for p in pts]
         p_budget = [p["budget"] for p in pts]
-        levels = kpi.level_pace_lines(shown, dim)
+        levels = kpi.level_pace_lines(s.targets, dim)
+        hl = kpi.drawn_level(s.targets, n)
         # y units live in the card subtitle (less chart clutter)
         self.sp_fig_dark = ops_charts.pace_chart(p_days, p_actual, p_budget,
                                                  dark=True, y_title="",
-                                                 levels=levels)
+                                                 levels=levels, highlight=hl)
         self.sp_fig_light = ops_charts.pace_chart(p_days, p_actual, p_budget,
                                                   dark=False, y_title="",
-                                                  levels=levels)
+                                                  levels=levels, highlight=hl)
 
     def _set_level(self, level, nxt, gap, total: int, pstate: str,
                    entered: int, no_target: bool) -> None:

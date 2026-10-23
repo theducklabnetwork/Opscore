@@ -56,7 +56,7 @@ class Fixture(unittest.TestCase):
         RM 350,819.30 (September parity case)."""
         self.app.configure_month(
             self.admin, self.sid, "2026-09", level1_base_cents=rm(100000),
-            level4_pct=0.3, min_rtm_target_cents=rm(350819.30))
+            level2_pct=0.1, level3_pct=0.2, level4_pct=0.3, min_rtm_target_cents=rm(350819.30))
         for d in range(1, 30):
             self.app.record_daily(self.admin, self.sid, date(2026, 9, d),
                                   sales_cents=rm(10000))
@@ -72,7 +72,7 @@ class ProjectionPrecisionTests(Fixture):
         # Level 2 = 2,480,007 x 1.25 = 3,100,008.75 cents.
         self.app.configure_month(
             self.admin, self.sid, "2026-10", level1_base_cents=2480007,
-            level2_pct=0.25, sales_last_month_cents=3100008)
+            level2_pct=0.25, level3_pct=0.5, level4_pct=0.75, sales_last_month_cents=3100008)
         for d in range(1, 7):
             self.app.record_daily(self.admin, self.sid, date(2026, 10, d),
                                   sales_cents=100000)
@@ -197,7 +197,7 @@ class FinalizedLabelTests(Fixture):
         # June: 10 of 30 days x RM 10,000 -> projected RM 300,000 vs
         # Level 1 RM 400,000.
         self.app.configure_month(self.admin, self.sid, "2026-06",
-                                 level1_base_cents=rm(400000))
+                                 level1_base_cents=rm(400000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         for d in range(1, 11):
             self.app.record_daily(self.admin, self.sid, date(2026, 6, d),
                                   sales_cents=rm(10000))
@@ -228,7 +228,7 @@ class DailyMtdTests(Fixture):
     def test_summary_from_report(self):
         from ducklab.ops_daily_state import _sales_summary
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(1000))
+                                 level1_base_cents=rm(1000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         for d in self._days():
             self.app.record_daily(self.admin, self.sid, d.date,
                                   sales_cents=d.sales_cents,
@@ -308,7 +308,7 @@ class ClearBudgetTests(Fixture):
     def setUp(self):
         super().setUp()
         self.app.configure_month(self.admin, self.sid, "2026-10",
-                                 level1_base_cents=rm(1000))
+                                 level1_base_cents=rm(1000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.cat = self.app.add_expense_category(self.admin, self.sid,
                                                  "Elec", sort_order=1)
 
@@ -408,7 +408,7 @@ class DevCleanupTests(Fixture):
         self.dbg = app.register_store(admin, "D1CD34", "Debug Store")
         for sid in (self.sid, self.qa):
             app.configure_month(admin, sid, "2026-09",
-                                level1_base_cents=rm(1000))
+                                level1_base_cents=rm(1000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
             app.record_daily(admin, sid, date(2026, 9, 1),
                              sales_cents=rm(100),
                              stock_losses={"DMO": rm(5)})

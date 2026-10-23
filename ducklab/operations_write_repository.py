@@ -77,6 +77,9 @@ def _check_budget_cents(category_id: int, cents) -> None:
             f"Budget for category {category_id} cannot be negative")
 
 
+# Level 1 base target + the three uplifts that derive Levels 2-4.
+LEVEL_FIELDS = ("level1_base_cents", "level2_pct", "level3_pct", "level4_pct")
+
 # Config fields that hold money (cents) or headcounts: never negative.
 _NON_NEGATIVE_CONFIG = (
     "min_rtm_target_cents", "level1_base_cents", "sales_last_year_cents",
@@ -238,6 +241,21 @@ class OperationsWriteRepository:
             raise DuplicateRecordError(str(exc)) from exc
         finally:
             conn.close()
+
+    def get_level_fields(self, store_id: int, month: str) -> dict:
+        """Saved Level 1 base + Level 2-4 uplifts for one store/month
+        ({} when the month has no config yet)."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT level1_base_cents, level2_pct, level3_pct, level4_pct "
+                "FROM monthly_configs WHERE store_id = ? AND month = ?",
+                (store_id, month)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return {}
+        return dict(zip(LEVEL_FIELDS, row))
 
     def finalized_snapshot_exists(self, store_id: int, month: str) -> bool:
         """Risk check: editing configs for a finalized month invalidates

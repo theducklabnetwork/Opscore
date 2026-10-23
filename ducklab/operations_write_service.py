@@ -14,8 +14,11 @@ from typing import Optional
 
 from ducklab import store_ops_db
 from ducklab.operations_write_repository import (
-    OperationsWriteRepository, ValidationError, WriteError,
+    LEVEL_FIELDS, OperationsWriteRepository, ValidationError, WriteError,
 )
+
+LEVELS_REQUIRED = ("Levels 2–4 uplift is required when a Level 1 target "
+                   "is set")
 
 
 class OperationsWriteService:
@@ -37,9 +40,25 @@ class OperationsWriteService:
         self.repo.set_store_active(store_id, True)
 
     # -- monthly configuration -------------------------------------------
+    def _require_four_levels(self, store_id: int, month: str,
+                             fields: dict) -> None:
+        """Four levels required: a save that writes the Level 1 base or an
+        uplift must leave the month with either no Level 1 target, or a
+        Level 1 target AND all three uplifts (saved values + this save).
+        Saves that touch no level field (payroll, stock target, budgets)
+        leave older months without uplift unchanged and are allowed."""
+        if not any(k in fields for k in LEVEL_FIELDS):
+            return
+        merged = {**self.repo.get_level_fields(store_id, month),
+                  **{k: fields[k] for k in LEVEL_FIELDS if k in fields}}
+        if merged.get("level1_base_cents") is not None and any(
+                merged.get(k) is None for k in LEVEL_FIELDS[1:]):
+            raise ValidationError(LEVELS_REQUIRED)
+
     def configure_month(self, store_id: int, month: str, **fields) -> dict:
         """Save config; report a risk flag if a finalized snapshot exists
         for this store/month (the snapshot itself is never touched)."""
+        self._require_four_levels(store_id, month, fields)
         config_id = self.repo.save_month_config(store_id, month, **fields)
         return {
             "config_id": config_id,
@@ -64,6 +83,7 @@ class OperationsWriteService:
                                      budgets: dict[int, Optional[int]]
                                      ) -> dict:
         """Atomic monthly setup save: config + budgets in one transaction."""
+        self._require_four_levels(store_id, month, fields)
         return self.repo.save_month_config_with_budgets(
             store_id, month, fields, budgets)
 

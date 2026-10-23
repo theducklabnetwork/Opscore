@@ -237,8 +237,9 @@ def _main_row() -> rx.Component:
     )
     targets = ui.section_card(
         rx.foreach(O.targets, _target_row),
-        rx.cond(O.levels_configured == "",
-                ui.note("Levels 2-4: no uplift set in Monthly Setup")),
+        rx.cond(O.levels_missing != "",
+                ui.status_chip(ds.LEVELS_MISSING, "amber",
+                               id="overview-levels-missing", wrap=True)),
         rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%"),
         rx.foreach(O.targets_extra,
                    lambda x: _row(x["label"], x["value"], x["title"])),

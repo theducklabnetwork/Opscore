@@ -35,7 +35,7 @@ class OverviewFixture(unittest.TestCase):
         self.month = "2026-10"
         for sid in (self.sa, self.sb):
             self.app.configure_month(
-                self.admin, sid, self.month, level1_base_cents=rm(200000),
+                self.admin, sid, self.month, level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=9, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 turnover_threshold=0.05,
@@ -149,7 +149,7 @@ class OverviewFixture(unittest.TestCase):
     # 5 ------------------------------------------------------------------
     def test_clean_month_reports_nothing(self):
         self.app.configure_month(
-            self.admin, self.sb, "2026-09", level1_base_cents=rm(200000),
+            self.admin, self.sb, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
@@ -162,7 +162,7 @@ class OverviewFixture(unittest.TestCase):
     # 6 ------------------------------------------------------------------
     def test_unreported_days_only_for_in_progress_month(self):
         self.app.configure_month(
-            self.admin, self.sb, "2026-09", level1_base_cents=rm(200000),
+            self.admin, self.sb, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))

@@ -50,7 +50,7 @@ def main() -> int:
         app.assign_store(admin, admin.id, sid)
 
     app.configure_month(
-        admin, sid, "2026-10", level1_base_cents=rm(200000),
+        admin, sid, "2026-10", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
         part_timer_factor=0.5, stock_loss_target=0.015)
     # one sale so "expenses % of sales" is defined
     app.record_daily(admin, sid, date(2026, 10, 1),

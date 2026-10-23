@@ -105,7 +105,7 @@ class TestSalesRules(SalesFixture):
         self.assertGreater(s.growth_last_year, 0)
         # store without references
         self.app.configure_month(self.admin, self.sb, "2026-10",
-                                 level1_base_cents=rm(100000))
+                                 level1_base_cents=rm(100000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.app.record_daily(self.admin, self.sb, date(2026, 10, 1),
                               sales_cents=rm(1000))
         sb = self.app.preview_month(self.admin, self.sb, "2026-10",
@@ -169,7 +169,7 @@ class TestSalesRbac(SalesFixture):
     def test_multi_store_isolation(self):
         self.rec(1, sales_cents=rm(5000))
         self.app.configure_month(self.admin, self.sb, "2026-10",
-                                 level1_base_cents=rm(50000))
+                                 level1_base_cents=rm(50000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         sb = self.app.preview_month(self.admin, self.sb, "2026-10",
                                     as_of=date(2026, 10, 31)).sales
         self.assertEqual(sb.days_entered, 0)

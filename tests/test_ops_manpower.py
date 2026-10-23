@@ -34,7 +34,7 @@ class ManpowerFixture(unittest.TestCase):
         self.sb = self.app.register_store(self.admin, "B02", "Beta")
         for sid in (self.sa, self.sb):
             self.app.configure_month(
-                self.admin, sid, "2026-09", level1_base_cents=rm(200000),
+                self.admin, sid, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=10, budget_headcount=12,
                 turnover_threshold=0.45, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
@@ -42,7 +42,7 @@ class ManpowerFixture(unittest.TestCase):
                 overtime_cents=rm(1000),
                 support_team_cost_cents=rm(500))
             self.app.configure_month(
-                self.admin, sid, "2026-10", level1_base_cents=rm(210000),
+                self.admin, sid, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=11, budget_headcount=11,
                 turnover_threshold=0.45, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.25,

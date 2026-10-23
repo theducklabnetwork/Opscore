@@ -91,7 +91,7 @@ class MtdAchievementTests(unittest.TestCase):
                                                "Sup3rSecure!x")
         sid = app.register_store(admin, "A01", "Alpha")
         app.configure_month(
-            admin, sid, "2026-10", level1_base_cents=rm(210000),
+            admin, sid, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
@@ -123,7 +123,7 @@ class MtdAchievementTests(unittest.TestCase):
                                                "Sup3rSecure!x")
         sid = app.register_store(admin, "A01", "Alpha")
         app.configure_month(
-            admin, sid, "2026-10", level1_base_cents=rm(210000),
+            admin, sid, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))

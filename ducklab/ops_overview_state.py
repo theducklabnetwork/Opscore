@@ -62,7 +62,7 @@ class OverviewState(ActionsState):
     targets: list[dict] = []
     targets_title: str = "Sales targets"
     targets_extra: list[dict[str, str]] = []
-    levels_configured: str = ""
+    levels_missing: str = ""
 
     # "At a glance" secondary figures: [{label, value, title, href}]
     glance: list[dict[str, str]] = []
@@ -100,7 +100,7 @@ class OverviewState(ActionsState):
         self.targets = []
         self.targets_title = "Sales targets"
         self.targets_extra = []
-        self.levels_configured = ""
+        self.levels_missing = ""
         self.glance = []
         self.header_context = ""
         self.in_progress = ""
@@ -238,8 +238,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                  if early_tag else "")
     # level reached (same rule and levels as /ops/sales): "Level 3
     # reached" / "Projected: Level 2"; nothing before data or without target
-    shown = kpi.shown_level_targets(cfg, s.targets)
-    level, _, _ = kpi.highest_level_achieved(s.month_end_sales_cents, shown)
+    level, _, _ = kpi.highest_level_achieved(s.month_end_sales_cents,
+                                             s.targets)
     level_text = (" · " + ds.level_reached_text(level, pstate)
                   if sales_reported and l1 is not None else "")
     out["pill_sales"] = {
@@ -351,13 +351,11 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                     + ops_charts.fmt_money_compact(st.total_loss_cents)),
     }
 
-    # Sales targets panel: progress vs engine achievement/status. If no
-    # Level 2-4 uplift is configured, the levels equal Level 1 by workbook
-    # rule (base x (1 + 0)) — collapse to Level 1 plus a muted note.
-    levels_configured = kpi.levels_configured(cfg)
-    level_names = (("level1", "level2", "level3", "level4")
-                   if levels_configured else ("level1",))
-    out["levels_configured"] = "1" if levels_configured else ""
+    # Sales targets panel: progress vs engine achievement/status, all four
+    # levels. A month saved without a Level 2-4 uplift keeps the workbook
+    # values (base x (1 + 0)) and gets the "Levels 2-4 missing" chip.
+    level_names = ("level1", "level2", "level3", "level4")
+    out["levels_missing"] = "1" if kpi.levels_missing(cfg) else ""
     out["targets_title"] = ("Projected month-end vs targets" if not complete
                             else "Sales targets")
     out["targets"] = [
@@ -474,7 +472,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     p_actual = [p["actual"] for p in pace]
     p_budget = [p["budget"] for p in pace]
     out["pace_has_data"] = any(v is not None for v in p_actual)
-    levels = kpi.level_pace_lines(shown, dim)
+    levels = kpi.level_pace_lines(s.targets, dim)
     out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
                                                  dark=True, levels=levels)
     out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
