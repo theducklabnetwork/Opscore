@@ -246,10 +246,14 @@ class DailyState(OpsState):
             self.can_write = (authz.can_write_operations(user)
                               and self.selected_store_active)
             if not self.stock_codes:
+                order = {c: i for i, c in enumerate(ds.STOCK_CODE_ORDER)}
                 self.stock_codes = [
                     {"code": c["code"], "name": c["name"],
+                     "label": ds.STOCK_CODE_LABELS.get(c["code"], c["code"]),
                      "sign": str(c["contribution_sign"])}
-                    for c in app_service.list_stock_loss_codes(user)
+                    for c in sorted(app_service.list_stock_loss_codes(user),
+                                    key=lambda c: (order.get(c["code"], 99),
+                                                   c["code"]))
                 ]
             try:
                 factor = app_service.get_month_config(
@@ -386,7 +390,7 @@ class DailyState(OpsState):
                 "proj_achievement": ds.fmt_achievement(
                     s.achievement_by_level.get("level1"),
                     s.status_by_level.get("level1", "")),
-                "projected": ds.fmt_rm0(proj),
+                "projected": ds.fmt_rm(proj),        # one money format
                 "projected_compact": ds.fmt_rm_compact(proj,
                                                        whole_below=True),
                 "projected_exact": ds.fmt_rm(proj),
@@ -396,6 +400,8 @@ class DailyState(OpsState):
                 "early_tip": (ds.EARLY_ESTIMATE_TIP.format(
                     n=s.days_entered, m=s.days_in_month)
                     if early_tag else ""),
+                # complete month: no projected tiles (they would repeat)
+                "complete": "1" if s.projection_state == "actual" else "",
                 "projected_sub": ("Actual"
                                   if s.projection_state == "actual"
                                   else "Projected"),
@@ -413,7 +419,8 @@ class DailyState(OpsState):
                         "projected_compact": "—", "projected_exact": "—",
                         "proj_status": "", "proj_color": "gray",
                         "proj_achievement_sub": "", "projected_sub": "",
-                        "early_tag": "", "early_tip": "", "loss": "—"})
+                        "early_tag": "", "early_tip": "", "loss": "—",
+                        "complete": ""})
         summary = _sales_summary(days, s)
         out.update(summary)
         # compact variants for narrow tiles (exact value in the tooltip)
@@ -464,6 +471,30 @@ class DailyState(OpsState):
     @rx.event
     def set_clear_stock(self, code: str, v: bool):
         self.clear_stock = {**self.clear_stock, code: v}
+
+    # "×" beside a field with a saved value: the same as ticking "Clear
+    # saved value" with the field blank (save writes NULL / removes the
+    # stock code; never 0)
+    @rx.event
+    def clear_saved_field(self, attr: str):
+        setattr(self, attr, "")
+        self.clear_fields = {**self.clear_fields, attr: True}
+
+    @rx.event
+    def clear_saved_stock(self, code: str):
+        self.stock_form[code] = ""
+        self.clear_stock = {**self.clear_stock, code: True}
+
+    @rx.var
+    def can_clear(self) -> dict[str, bool]:
+        """Field attr -> the "×" shows: a saved value not yet cleared."""
+        return {attr: bool(v) and not self.clear_fields.get(attr)
+                for attr, v in self.form_original.items()}
+
+    @rx.var
+    def can_clear_stock(self) -> dict[str, bool]:
+        return {code: bool(v) and not self.clear_stock.get(code)
+                for code, v in self.stock_original.items()}
 
     # Back-compat shims for the three original sales checkboxes.
     @rx.event
@@ -666,6 +697,7 @@ def _sales_summary(days, sales=None) -> dict[str, str]:
         avg = kpi.average_per_reported_day(mtd, entered)
     return {
         "mtd": ds.fmt_rm(mtd if entered else None),
-        "avg_daily": ds.fmt_rm0(avg if entered else None),
+        "avg_daily": ds.fmt_rm(int(avg) if entered and avg is not None
+                               else None),           # one money format
         "reported_days": f"{entered} sales days reported",
     }

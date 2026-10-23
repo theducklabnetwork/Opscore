@@ -234,6 +234,12 @@ STATUS_COLOR: dict[str, str] = {
 # STOCK_LOSS_CODES): one label everywhere (Stock page, Monthly Report).
 TREATMENT = {1: "Included", -1: "Offset", 0: "Info only"}
 
+# Daily Entry: stock codes in workbook column order, with display labels
+# (MISSING / EXTRA read as words; the stored code is unchanged)
+STOCK_CODE_ORDER = ("DMO", "DMC", "DMP", "MISSING", "EXTRA", "2DMP", "DPI",
+                    "DDR", "DME", "DMN", "DMQ", "DMW", "DST")
+STOCK_CODE_LABELS = {"MISSING": "Missing", "EXTRA": "Extra"}
+
 
 def status_color(status: str, default: str = "gray") -> str:
     """The single status -> color lookup keyed by kpi.py's exact strings."""

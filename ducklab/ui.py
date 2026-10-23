@@ -461,6 +461,19 @@ def clear_box(checked, on_change, disabled=False, id=None) -> rx.Component:
                        id=id, color=ds.TEXT_MUTED)
 
 
+def clear_x(visible, on_click, id=None) -> rx.Component:
+    """A small "×" inside a field (right slot), shown only while the field
+    has a saved value; replaces the "Clear saved value" checkbox."""
+    return rx.input.slot(
+        rx.cond(visible, rx.tooltip(
+            rx.icon_button(rx.icon("x", size=12), on_click=on_click,
+                           size="1", variant="ghost", color_scheme="gray",
+                           radius="full", type="button", id=id,
+                           aria_label="Clear saved value"),
+            content="Clear")),
+        side="right")
+
+
 def form_grid(*fields, columns: str = "2") -> rx.Component:
     """Fields in equal columns (one column on phones)."""
     return rx.grid(*fields,

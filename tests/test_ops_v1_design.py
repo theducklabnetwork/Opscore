@@ -84,7 +84,7 @@ class DailyAchievementLabelTests(Fixture):
         # projected achievement is a separate figure: 23,500 / 2 * 31 =
         # 364,250 / 210,000 = 173.5%
         self.assertEqual(k["proj_achievement"], "173.5%")
-        self.assertEqual(k["projected"], "RM 364,250")
+        self.assertEqual(k["projected"], "RM 364,250.00")   # O1 format
 
     def test_projection_label_and_early_tag_like_overview(self):
         self.record(1, sales_cents=rm(12000))

@@ -243,8 +243,13 @@ class OperationsRepository:
     # Stock-loss reference codes
     # ------------------------------------------------------------------
     def get_stock_loss_codes(self) -> list[StockLossCode]:
+        """Reference codes. The display name comes from the workbook
+        reference (store_ops_db.STOCK_LOSS_CODES) so a wording change
+        reaches databases seeded earlier without a data migration."""
+        names = {c: n for c, n, _ in store_ops_db.STOCK_LOSS_CODES}
         rows = self._query("SELECT * FROM stock_loss_codes ORDER BY code")
-        return [StockLossCode(r["code"], r["name"], r["contribution_sign"]) for r in rows]
+        return [StockLossCode(r["code"], names.get(r["code"], r["name"]),
+                              r["contribution_sign"]) for r in rows]
 
     def get_contribution_signs(self) -> dict[str, int]:
         return {c.code: c.contribution_sign for c in self.get_stock_loss_codes()}
