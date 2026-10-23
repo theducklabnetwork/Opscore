@@ -250,5 +250,89 @@ class ExpensesDeepLinkTests(Fixture):
         self.assertIn("filter-paid-clear", page)
 
 
+# Follow-ups: report labels, validation labels, × wording -----------------
+class ReportLabelTests(unittest.TestCase):
+    def test_incomplete_month_labels(self):
+        from ducklab import ops_pages as p
+        sales, mp = str(p._sales_section()), str(p._manpower_section())
+        self.assertIn('"Projected Achievement"', sales)
+        self.assertIn('"Achievement"', sales)            # complete month
+        for text in ("Salary Ratio (To Date)", "Total Salary Ratio (To Date)",
+                     "Salary Ratio", "Total Salary Ratio"):
+            self.assertIn(f'"{text}"', mp, text)
+
+
+class ValidationLabelTests(Fixture):
+    def test_daily_entry_messages(self):
+        st = self.state()
+        self.bound(lambda: st.open_entry("2026-10-04"))
+        st.f_units = "1.5"
+        self.bound(lambda: list(st.save_entry()))
+        self.assertEqual(st.form_error, "Units Sold must be a whole number")
+        st.f_units = ""
+        st.f_leave_mc = "-1"
+        self.bound(lambda: list(st.save_entry()))
+        self.assertEqual(st.form_error, "Medical Leave cannot be negative")
+        st.f_leave_mc = ""
+        st.stock_form["MISSING"] = "abc"
+        self.bound(lambda: list(st.save_entry()))
+        self.assertEqual(st.form_error, "Missing: Invalid amount: 'abc'")
+
+    def test_action_messages(self):
+        from ducklab.operations_write_repository import ValidationError
+        cases = [(dict(issue="", pic="A", due_date=date(2026, 10, 9)),
+                  "Issue is required"),
+                 (dict(issue="X", pic=" ", due_date=date(2026, 10, 9)),
+                  "Owner is required"),
+                 (dict(issue="X", pic="A", due_date=None),
+                  "Due is required"),
+                 (dict(issue="X", pic="A", due_date=date(2026, 10, 9),
+                       status="Done", raised_date=date(2026, 10, 5),
+                       completion_date=date(2026, 10, 4)),
+                  "Completed cannot be earlier than Raised")]
+        for over, msg in cases:
+            fields = dict(raised_date=date(2026, 10, 1),
+                          pillar="General Operations", priority="Medium",
+                          status="Open", corrective_action=None,
+                          completion_date=None, remarks=None)
+            fields.update(over)
+            with self.assertRaises(ValidationError) as ctx:
+                self.app.save_action(self.admin, self.sid, None,
+                                     date(2026, 10, 10), **fields)
+            self.assertEqual(str(ctx.exception), msg)
+
+
+class ClearXBudgetTests(unittest.TestCase):
+    def test_monthly_setup_x(self):
+        from ducklab.ops_stores_state import StoresState
+        st = StoresState()
+        st.budget_rows = [{"id": "3", "name": "Elec", "value": "500.00",
+                           "original": "500.00", "clear": ""}]
+        st.clear_budget("3")
+        self.assertEqual((st.budget_rows[0]["value"],
+                          st.budget_rows[0]["clear"]), ("", "1"))
+        st.set_budget_value("3", "450")          # typing undoes the ×
+        self.assertEqual((st.budget_rows[0]["value"],
+                          st.budget_rows[0]["clear"]), ("450", ""))
+
+    def test_expenses_budget_x(self):
+        from ducklab.ops_expenses_state import ExpensesState
+        st = ExpensesState()
+        st.b_amount = "300"
+        st.clear_budget()
+        self.assertEqual((st.b_amount, st.b_clear), ("", True))
+        st.set_b_amount("120")
+        self.assertEqual((st.b_amount, st.b_clear), ("120", False))
+
+    def test_no_clear_checkbox_left(self):
+        from ducklab import ops_expenses_pages as e, ops_stores_pages as s
+        page = str(e._budget_editor()) + str(s._budget_row(
+            {"id": "3", "name": "Elec", "value": "", "original": "1.00",
+             "clear": ""}))
+        self.assertNotIn("RadixThemesCheckbox", page)
+        self.assertIn("b-clear", page)
+        self.assertIn("setup-budget-3-clear", page)
+
+
 if __name__ == "__main__":
     unittest.main()

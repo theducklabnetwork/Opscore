@@ -289,13 +289,13 @@ class ActionsState(StoresState):
                 user, store_id,
                 _editing_id(self.editing_id),
                 _today(),
-                raised_date=_pdate(self.a_raised, "Raised date"),
+                raised_date=_pdate(self.a_raised, "Raised"),
                 pillar=self.a_pillar, issue=self.a_issue,
                 priority=self.a_priority, status=self.a_status,
-                pic=self.a_pic, due_date=_pdate(self.a_due, "Due date"),
+                pic=self.a_pic, due_date=_pdate(self.a_due, "Due"),
                 corrective_action=self.a_corrective or None,
                 completion_date=_pdate(self.a_completion,
-                                       "Completion date"),
+                                       "Completed"),
                 remarks=self.a_remarks or None)
         except ValidationError as exc:
             self.form_error = str(exc)

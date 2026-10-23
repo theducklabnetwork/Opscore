@@ -190,15 +190,16 @@ def _levels_panel() -> rx.Component:
 def _budget_row(row) -> rx.Component:
     return ui.form_field(
         row["name"],
-        rx.input(value=row["value"],
-                 on_change=lambda v: S.set_budget_value(row["id"], v),
-                 placeholder="—", id=f"setup-budget-{row['id']}",
-                 disabled=~S.can_edit_setup | (row["clear"] == "1")),
-        clear=rx.cond(
-            row["original"] != "",
-            ui.clear_box(row["clear"] == "1",
-                         lambda v: S.set_budget_clear(row["id"], v),
-                         disabled=~S.can_edit_setup)),
+        rx.input(
+            # "×" beside a saved budget: clears it (save writes NULL)
+            ui.clear_x((row["original"] != "") & (row["clear"] != "1")
+                       & S.can_edit_setup,
+                       S.clear_budget(row["id"]),
+                       id=f"setup-budget-{row['id']}-clear"),
+            value=row["value"],
+            on_change=lambda v: S.set_budget_value(row["id"], v),
+            placeholder="—", id=f"setup-budget-{row['id']}",
+            disabled=~S.can_edit_setup),
     )
 
 

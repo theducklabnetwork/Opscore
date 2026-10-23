@@ -35,20 +35,20 @@ from ducklab.ops_state import (
 # ---------------------------------------------------------------------------
 
 SALES_FIELDS = [
-    ("f_sales", "sales_cents", "money", "Daily sales (RM)"),
+    ("f_sales", "sales_cents", "money", "Sales"),
     ("f_transactions", "transactions", "count", "Transactions"),
-    ("f_units", "units", "count", "Units sold"),
+    ("f_units", "units", "count", "Units Sold"),
 ]
 
 MANPOWER_FIELDS = [
-    ("f_ft_working", "ft_working", "count", "Full-time staff working"),
-    ("f_pt_working", "pt_working", "count", "Part-time staff working"),
-    ("f_new_hires", "new_hires_ft", "count", "New hires (FT)"),
-    ("f_resigned", "resigned_ft", "count", "Resignations (FT)"),
-    ("f_leave_annual", "leave_annual", "count", "Annual leave"),
-    ("f_leave_mc", "leave_mc", "count", "Medical leave"),
-    ("f_leave_other", "leave_other_paid", "count", "Other paid leave"),
-    ("f_leave_unpaid", "leave_unpaid", "count", "Unpaid leave"),
+    ("f_ft_working", "ft_working", "count", "Full-Time Staff"),
+    ("f_pt_working", "pt_working", "count", "Part-Time Staff"),
+    ("f_new_hires", "new_hires_ft", "count", "New Hires"),
+    ("f_resigned", "resigned_ft", "count", "Resignations"),
+    ("f_leave_annual", "leave_annual", "count", "Annual Leave"),
+    ("f_leave_mc", "leave_mc", "count", "Medical Leave"),
+    ("f_leave_other", "leave_other_paid", "count", "Other Paid Leave"),
+    ("f_leave_unpaid", "leave_unpaid", "count", "Unpaid Leave"),
 ]
 
 CLEARABLE = {"sales_cents", "transactions", "units"}
@@ -625,7 +625,7 @@ class DailyState(OpsState):
                 try:
                     stock[code] = _parse_money(raw)
                 except ValueError as exc:
-                    self.form_error = f"{c['name']} ({code}): {exc}"
+                    self.form_error = f"{c['label']}: {exc}"
                     self.form_open = True
                     return
             elif self.clear_stock.get(code) and orig:

@@ -167,11 +167,11 @@ class OperationsWriteService:
         (defaults to today); non-Done clears completion; completion cannot
         precede raised. `today` is injected (Asia/Kuala_Lumpur at caller)."""
         if not issue or not issue.strip():
-            raise ValidationError("Issue / observation is required")
+            raise ValidationError("Issue is required")
         if not pic or not pic.strip():
-            raise ValidationError("Person in charge is required")
+            raise ValidationError("Owner is required")
         if due_date is None:
-            raise ValidationError("Due date is required")
+            raise ValidationError("Due is required")
         status = status or "Open"
         if status == "Done":
             if completion_date is None:
@@ -181,7 +181,7 @@ class OperationsWriteService:
         if completion_date is not None and raised_date is not None \
                 and completion_date < raised_date:
             raise ValidationError(
-                "Completion date cannot be earlier than the raised date")
+                "Completed cannot be earlier than Raised")
         fields = dict(raised_date=raised_date or today, pillar=pillar,
                       issue=issue.strip(), priority=priority, status=status,
                       pic=pic.strip(), due_date=due_date,

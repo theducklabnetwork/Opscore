@@ -291,8 +291,11 @@ class OverviewTests(Fixture):
     def test_panel_money_is_compact_like_the_tiles(self):
         self.day(1, sales_cents=rm(10000))
         ov = self.overview()
-        for row in ov["targets_extra"] + ov["glance"]:
+        for row in ov["targets_extra"]:
             self.assertNotRegex(row["value"], r"\.\d\d$", row)
+        # Summary: full values, not the short form
+        glance = {r["label"]: r["value"] for r in ov["glance"]}
+        self.assertEqual(glance["Daily Sales (Avg.)"], "RM 10,000.00")
         self.assertEqual(ops_charts.fmt_money_compact(rm(6774.19)),
                          "RM 6,774")
         self.assertEqual(ops_charts.fmt_money_compact(rm(23500)),
