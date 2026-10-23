@@ -140,7 +140,7 @@ def main() -> int:
               .count() == 1
               and page.locator("#kpi-projected >> text=Projected:")
               .count() == 0)
-        check("Record a day enabled for the branch manager",
+        check("New Entry enabled for the branch manager",
               page.locator("#record-day").is_enabled())
         page.screenshot(path=str(OUT / "daily_overview_dark.png"),
                         full_page=True)
@@ -152,7 +152,7 @@ def main() -> int:
         check("stock DMO populated",
               page.input_value("#stock-DMO") == "45.00")
         check("effective staff preview shown",
-              page.locator("text=Effective staff:").count() > 0)
+              page.locator("text=Effective Staff:").count() > 0)
         page.fill("#f-sales", "15000")
         page.fill("#f-transactions", "400")
         page.fill("#f-units", "1500")
@@ -188,10 +188,10 @@ def main() -> int:
               page.input_value("#f-sales") == "15000.00")
         page.click("#entry-close")
 
-        # --- Record a day opens the entry dialog on an unreported date ------
+        # --- New Entry opens the entry dialog on an unreported date ------
         page.click("#record-day")
         page.wait_for_selector("#f-sales", state="visible", timeout=15000)
-        check("Record a day opens an empty entry for an unreported day",
+        check("New Entry opens an empty entry for an unreported day",
               page.input_value("#f-sales") == "")
         page.click("#entry-close")
         page.wait_for_timeout(400)
@@ -304,7 +304,7 @@ def main() -> int:
               vp.locator("#daily-table >> text=RM 15,000.00").count() > 0)
         check("viewer gets View button, not Edit",
               vp.locator("#daily-table >> text=View").count() > 0)
-        check("viewer: Record a day disabled",
+        check("viewer: New Entry disabled",
               vp.locator("#record-day").is_disabled())
         vp.click("#daily-table >> text=View >> nth=0")
         vp.wait_for_selector("#f-sales", state="visible", timeout=15000)

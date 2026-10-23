@@ -16,12 +16,24 @@ from ducklab.ops_shell import shell
 
 
 K = DailyState.day_kpis
-_PROJ_CHIP = (K["proj_status"], K["proj_color"])
+
+
+def _tile(label, value, id=None) -> rx.Component:
+    # plain label + full value; exact money ("RM 324,999.70") fits a
+    # two-up phone tile two sizes down
+    return ui.kpi_tile(label, value, id=id, size_narrow="4")
 
 
 def _kpi_summary() -> rx.Component:
-    """Headline tiles. Achievement is MTD / Level 1; the projected figures
-    carry the engine's projection label (as on the Overview)."""
+    """Headline tiles. Achievement is MTD / Level 1. Projected Sales and
+    Projected Achievement only while the month is incomplete."""
+    sales = _tile("Sales", K["mtd"], id="kpi-mtd")
+    achievement = _tile("Achievement", K["achievement"],
+                        id="kpi-achievement")
+    tail = [_tile("Daily Sales (Avg.)", K["avg_daily"]),
+            _tile("Transactions", K["transactions"]),
+            _tile("Units Sold", K["units"]),
+            _tile("Total Loss", K["loss"])]
     return rx.vstack(
         rx.cond(
             DailyState.month_finalized,
@@ -31,36 +43,30 @@ def _kpi_summary() -> rx.Component:
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
-        # same tiles and names as Sales; the projection chip + early-estimate
-        # tag appear once, on the projected-achievement tile
-        ui.kpi_grid(
-            ui.kpi_tile("Sales MTD", K["mtd"],
-                        compact=K["mtd_compact"], exact=K["mtd"],
-                        sub=K["reported_days"], id="kpi-mtd"),
-            ui.kpi_tile("Achievement to date", K["achievement"],
-                        sub=K["target_sub"], id="kpi-achievement"),
-            ui.kpi_tile("Month-end sales", K["projected"],
-                        compact=K["projected_compact"],
-                        exact=K["projected_exact"],
-                        sub=K["projected_sub"], id="kpi-projected"),
-            ui.kpi_tile("Projected achievement", K["proj_achievement"],
-                        chip=_PROJ_CHIP, tag=K["early_tag"],
-                        tag_tip=K["early_tip"],
-                        sub=K["proj_achievement_sub"],
-                        id="kpi-proj-achievement"),
-            ui.kpi_tile("Avg daily sales", K["avg_daily"],
-                        exact=K["avg_daily_exact"]),
-            ui.kpi_tile("Transactions", K["transactions"]),
-            ui.kpi_tile("Units sold", K["units"]),
-            ui.kpi_tile("Total loss", K["loss"]),
+        # rows fill at every width: complete 3 + 3, incomplete 4 + 4
+        rx.cond(
+            K["complete"] == "1",
+            ui.kpi_grid(sales, achievement, *tail,
+                        columns=rx.breakpoints(initial="2", md="3")),
+            ui.kpi_grid(
+                _tile("Sales", K["mtd"], id="kpi-mtd"),
+                _tile("Achievement", K["achievement"], id="kpi-achievement"),
+                _tile("Projected Sales", K["projected"], id="kpi-projected"),
+                _tile("Projected Achievement", K["proj_achievement"],
+                      id="kpi-proj-achievement"),
+                _tile("Daily Sales (Avg.)", K["avg_daily"]),
+                _tile("Transactions", K["transactions"]),
+                _tile("Units Sold", K["units"]),
+                _tile("Total Loss", K["loss"]),
+            ),
         ),
         spacing="4", width="100%", id="daily-kpis",
     )
 
 
-_COLS = ["Date", ("Sales", True), ("Txns", True), ("Units", True),
+_COLS = ["Date", ("Sales", True), ("Trans.", True), ("Units", True),
          ("SPR", True), ("UPT", True), ("ASP", True), ("Staff", True),
-         ("Sales/Staff", True), ("Stock Loss", True), "Status", ""]
+         ("Sales per Staff", True), ("Stock Loss", True), "Status", ""]
 
 
 def _day_row(row) -> rx.Component:
@@ -108,7 +114,7 @@ def _record_day_button() -> rx.Component:
     working on a disabled button."""
     return rx.tooltip(
         rx.box(rx.button(
-            rx.icon("plus", size=15), "Record a day", size="2",
+            rx.icon("plus", size=15), "New Entry", size="2",
             on_click=DailyState.open_entry(DailyState.record_day_iso),
             disabled=~DailyState.record_day_enabled, id="record-day")),
         content=DailyState.record_day_tip,
@@ -126,10 +132,7 @@ def _records_table() -> rx.Component:
                          toggle_id="daily-hidden-toggle"),
             phone=("Date", "Sales", "Status", ""),
         ),
-        ui.status_legend(
-            note="Status reflects all entered fields, not sales alone. "
-                 "Unreported days have no saved record; show them to "
-                 "enter data."),
+        ui.status_legend(),
         title="Daily Records", id="daily-table",
     )
 
@@ -141,17 +144,17 @@ def _records_table() -> rx.Component:
 _W = ~DailyState.can_write  # read-only: every control disabled
 
 
-def _num_field(label, attr, setter, fid, placeholder="—",
-               mode="numeric") -> rx.Component:
+def _num_field(label, attr, setter, fid, mode="numeric") -> rx.Component:
+    # no placeholder; "×" clears a saved value (same as the old checkbox)
     return ui.form_field(
         label,
-        rx.input(value=getattr(DailyState, attr),
-                 on_change=getattr(DailyState, setter),
-                 placeholder=placeholder, input_mode=mode, id=fid,
-                 disabled=_W),
-        clear=ui.clear_box(DailyState.clear_fields[attr],
-                           lambda v: DailyState.set_clear_field(attr, v),
-                           disabled=_W),
+        rx.input(
+            ui.clear_x(DailyState.can_clear[attr] & DailyState.can_write,
+                       DailyState.clear_saved_field(attr),
+                       id=f"{fid}-clear"),
+            value=getattr(DailyState, attr),
+            on_change=getattr(DailyState, setter),
+            placeholder="", input_mode=mode, id=fid, disabled=_W),
     )
 
 
@@ -159,81 +162,84 @@ def _sales_section() -> rx.Component:
     return ui.form_section(
         "Sales",
         ui.form_grid(
-            _num_field("Daily sales (RM)", "f_sales", "set_f_sales",
-                       "f-sales", placeholder="0.00", mode="decimal"),
+            _num_field("Sales (RM)", "f_sales", "set_f_sales", "f-sales",
+                       mode="decimal"),
             _num_field("Transactions", "f_transactions",
                        "set_f_transactions", "f-transactions"),
-            _num_field("Units sold", "f_units", "set_f_units", "f-units"),
+            _num_field("Units Sold", "f_units", "set_f_units", "f-units"),
             columns="3",
         ),
-        hint="Blank fields leave saved values untouched. Tick “Clear saved "
-             "value” to deliberately reset a field to unreported. Enter 0 "
-             "to record a genuine zero.",
     )
 
 
-def _summary(label, value, color="gray") -> rx.Component:
-    return rx.hstack(
-        rx.text(label, size="1", color=ds.TEXT_MUTED),
-        ui.status_chip(value, color),
-        spacing="2", align="center")
+def _summary(label, value, id=None) -> rx.Component:
+    """Header chip: "Effective Staff: 8.50" / "Total Loss: RM 70.00"."""
+    return ui.status_chip(label + ": " + value, "gray", id=id)
 
 
 def _manpower_section() -> rx.Component:
     fields = [
-        ("f_ft_working", "set_f_ft_working", "Full-time staff working", "f-ft"),
-        ("f_pt_working", "set_f_pt_working", "Part-time staff working", "f-pt"),
-        ("f_new_hires", "set_f_new_hires", "New hires (FT)", "f-hires"),
-        ("f_resigned", "set_f_resigned", "Resignations (FT)", "f-resigned"),
-        ("f_leave_annual", "set_f_leave_annual", "Annual leave", "f-leave-annual"),
-        ("f_leave_mc", "set_f_leave_mc", "Medical leave", "f-leave-mc"),
-        ("f_leave_other", "set_f_leave_other", "Other paid leave", "f-leave-other"),
-        ("f_leave_unpaid", "set_f_leave_unpaid", "Unpaid leave", "f-leave-unpaid"),
+        ("f_ft_working", "set_f_ft_working", "Full-Time Staff", "f-ft"),
+        ("f_pt_working", "set_f_pt_working", "Part-Time Staff", "f-pt"),
+        ("f_new_hires", "set_f_new_hires", "New Hires", "f-hires"),
+        ("f_resigned", "set_f_resigned", "Resignations", "f-resigned"),
+        ("f_leave_annual", "set_f_leave_annual", "Annual Leave",
+         "f-leave-annual"),
+        ("f_leave_mc", "set_f_leave_mc", "Medical Leave", "f-leave-mc"),
+        ("f_leave_other", "set_f_leave_other", "Other Paid Leave",
+         "f-leave-other"),
+        ("f_leave_unpaid", "set_f_leave_unpaid", "Unpaid Leave",
+         "f-leave-unpaid"),
     ]
     return ui.form_section(
         "Manpower",
         ui.form_grid(*[_num_field(label, attr, setter, fid)
                        for attr, setter, label, fid in fields],
                      columns="3"),
-        extra=_summary("Effective staff:", DailyState.form_effective_staff),
-        hint="Effective staff = FT + PT × the configured part-timer factor "
-             "for this store/month. Blank attendance stays unreported.",
+        extra=_summary("Effective Staff", DailyState.form_effective_staff,
+                       id="effective-staff"),
     )
 
 
 def _stock_input(code: dict) -> rx.Component:
+    # the code is the label; its description is a tooltip on the code
     return ui.form_field(
-        rx.hstack(rx.text(code["code"], size="2", weight="medium",
-                          color=ds.TEXT),
-                  rx.text(code["name"], size="1", color=ds.TEXT_FAINT),
-                  spacing="2", align="baseline", wrap="wrap"),
+        rx.tooltip(rx.text(code["label"], size="2", weight="medium",
+                           color=ds.TEXT, cursor="help",
+                           id=f"stock-label-{code['code']}"),
+                   content=code["name"]),
         rx.input(
+            ui.clear_x(DailyState.can_clear_stock[code["code"]]
+                       & DailyState.can_write,
+                       DailyState.clear_saved_stock(code["code"]),
+                       id=f"stock-{code['code']}-clear"),
             value=DailyState.stock_form[code["code"]],
             on_change=lambda v: DailyState.set_stock_amount(code["code"], v),
-            placeholder="0.00", input_mode="decimal",
+            placeholder="", input_mode="decimal",
             id=f"stock-{code['code']}", disabled=_W,
         ),
-        clear=ui.clear_box(
-            DailyState.clear_stock[code["code"]],
-            lambda v: DailyState.set_clear_stock(code["code"], v),
-            disabled=_W),
     )
+
+
+def _code_grid(codes) -> rx.Component:
+    return rx.grid(rx.foreach(codes, _stock_input),
+                   columns=rx.breakpoints(initial="2", sm="4"),
+                   spacing="4", width="100%")
+
+
+def _group_title(text: str) -> rx.Component:
+    return rx.text(text, size="2", weight="medium", color=ds.TEXT_MUTED)
 
 
 def _stock_section() -> rx.Component:
     return ui.form_section(
-        "Stock loss (RM)",
-        rx.text("Counts toward total loss (DMO + DMC + DMP + Missing − "
-                "Extra)", size="2", color=ds.TEXT_MUTED),
-        rx.grid(rx.foreach(DailyState.contributing_codes, _stock_input),
-                columns=rx.breakpoints(initial="1", sm="3"),
-                spacing="4", width="100%"),
-        rx.text("Informational only — excluded from total loss", size="2",
-                color=ds.TEXT_MUTED, padding_top="0.5em"),
-        rx.grid(rx.foreach(DailyState.informational_codes, _stock_input),
-                columns=rx.breakpoints(initial="1", sm="3"),
-                spacing="4", width="100%"),
-        extra=_summary("Total loss:", DailyState.form_total_loss),
+        "Stock Loss",
+        _group_title("Total Loss"),
+        _code_grid(DailyState.contributing_codes),
+        rx.box(_group_title("Information Only"), padding_top="0.5em"),
+        _code_grid(DailyState.informational_codes),
+        extra=_summary("Total Loss", DailyState.form_total_loss,
+                       id="total-loss"),
     )
 
 
@@ -304,7 +310,5 @@ def daily_page() -> rx.Component:
         ),
         on_store=DailyState.select_store,
         on_month=DailyState.select_month,
-        description="Record daily sales, staffing and stock losses. "
-                    "Saving recalculates the live KPIs immediately.",
         actions=_record_day_button(),
     )

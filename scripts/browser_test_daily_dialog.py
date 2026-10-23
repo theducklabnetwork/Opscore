@@ -111,7 +111,7 @@ def main() -> int:
         check("footer visible after scrolling body",
               page.locator("#entry-save").is_visible())
         check("info-only section present",
-              "Informational only" in page.locator("body").inner_text())
+              "Information Only" in page.locator("body").inner_text())
 
         page.screenshot(path=str(OUT / "dialog-desktop-dark.png"))
         print("  -> dialog-desktop-dark.png")

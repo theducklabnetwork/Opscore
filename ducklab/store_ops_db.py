@@ -34,7 +34,7 @@ STOCK_LOSS_CODES = [
     ("DDR", "Damaged during receiving", 0),
     ("DMN", "Natural disaster", 0),
     ("DME", "E-commerce return", 0),
-    ("DMQ", "F&B quality issue", 0),
+    ("DMQ", "Damage in Quality", 0),
     ("DST", "Damaged in stock transfer", 0),
     ("MISSING", "Missing at stock balance checks", 1),
     ("EXTRA", "Extra stock found at stock balance checks", -1),

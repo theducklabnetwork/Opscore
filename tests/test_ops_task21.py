@@ -222,7 +222,7 @@ class DailyMtdTests(Fixture):
     def test_summary_without_report(self):
         from ducklab.ops_daily_state import _sales_summary
         self.assertEqual(_sales_summary(self._days()), {
-            "mtd": "RM 300.05", "avg_daily": "RM 100",
+            "mtd": "RM 300.05", "avg_daily": "RM 100.01",  # O1 format
             "reported_days": "3 sales days reported"})
 
     def test_summary_from_report(self):
@@ -237,7 +237,7 @@ class DailyMtdTests(Fixture):
                                      as_of=TODAY)
         days = self.app.get_daily_records(self.admin, self.sid, "2026-10")
         self.assertEqual(_sales_summary(days, rep.sales), {
-            "mtd": "RM 300.05", "avg_daily": "RM 100",
+            "mtd": "RM 300.05", "avg_daily": "RM 100.01",  # O1 format
             "reported_days": "3 sales days reported"})
 
     def test_no_sales_days_shows_dash(self):
