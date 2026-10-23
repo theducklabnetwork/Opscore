@@ -45,7 +45,6 @@ def dashboard_page() -> rx.Component:
                     rx.cond(
                         O.loaded,
                         rx.vstack(
-                            ui.note(O.header_context),
                             _hero_row(),
                             _main_row(),
                             _bottom_row(),
@@ -59,8 +58,6 @@ def dashboard_page() -> rx.Component:
         ),
         on_store=O.select_store,
         on_month=O.select_month,
-        description="The month at a glance for the selected store: the four "
-                    "pillars, sales pace and what needs attention.",
     )
 
 
@@ -86,45 +83,26 @@ def _plain_bar(pill) -> rx.Component:
 
 def _sales_bar(pill) -> rx.Component:
     """Two segments: MTD solid, projected extension lighter; capped at
-    100% width with a "+X%" label when the projection exceeds target."""
-    return rx.hstack(
-        _track(
-            rx.box(width=(pill["mtd_pct"].to(float) * 100).to(str) + "%",
-                   height="100%",
-                   background=rx.color(pill["progress_color"], 9)),
-            rx.box(width=((pill["fill_pct"].to(float)
-                           - pill["mtd_pct"].to(float)) * 100).to(str) + "%",
-                   height="100%",
-                   background=rx.color(pill["progress_color"], 9),
-                   opacity="0.35"),
-            flex="1",
-        ),
-        rx.cond(pill["over_label"] != "",
-                rx.text(pill["over_label"], size="1", color=ds.TEXT_FAINT,
-                        white_space="nowrap")),
-        spacing="2", align="center", width="100%",
-    )
-
-
-def _pillar_chip(pill) -> rx.Component:
-    chip = ui.status_chip(pill["status"], pill["status_color"])
-    return rx.hstack(
-        rx.cond(pill["tooltip"] != "", rx.tooltip(chip,
-                                                  content=pill["tooltip"]),
-                chip),
-        ui.early_tag(pill["early_tag"], pill["early_tip"]),
-        spacing="1", wrap="wrap",
+    100% width."""
+    return _track(
+        rx.box(width=(pill["mtd_pct"].to(float) * 100).to(str) + "%",
+               height="100%",
+               background=rx.color(pill["progress_color"], 9)),
+        rx.box(width=((pill["fill_pct"].to(float)
+                       - pill["mtd_pct"].to(float)) * 100).to(str) + "%",
+               height="100%",
+               background=rx.color(pill["progress_color"], 9),
+               opacity="0.35"),
     )
 
 
 def _hero_card(title, pill, href, spark=None, bar=None) -> rx.Component:
-    """One pillar tile: label, status chip, big value, one visual, one
-    context line; a compact "Not reported yet" state when empty. The
-    whole tile links to its module."""
+    """One pillar tile: small muted label, large full value, the coloured
+    bar and (Sales, Stock) the sparkline; "No data" when nothing is
+    reported. The whole tile links to its module."""
     if bar is None:
         bar = _plain_bar(pill)
     reported = rx.vstack(
-        _pillar_chip(pill),
         rx.tooltip(
             rx.text(pill["value"], size=rx.breakpoints(initial="6", lg="7"),
                     weight="medium", color=ds.TEXT, white_space="nowrap",
@@ -133,15 +111,11 @@ def _hero_card(title, pill, href, spark=None, bar=None) -> rx.Component:
             content=pill["title"]),
         bar,
         *([spark] if spark is not None else []),
-        rx.text(pill["context"], size="1", color=ds.TEXT_FAINT),
-        spacing="2", align="start", width="100%",
+        spacing="3", align="start", width="100%",
     )
-    empty = rx.vstack(
-        rx.text("Not reported yet", size="2", color=ds.TEXT_MUTED,
-                weight="medium"),
-        ui.note("Open this module to enter data"),
-        spacing="1", align="start", width="100%",
-    )
+    empty = rx.text("No data", size=rx.breakpoints(initial="6", lg="7"),
+                    weight="medium", color=ds.TEXT_FAINT,
+                    style={"lineHeight": "1.15"})
     return rx.link(
         rx.vstack(
             rx.text(title, size="2", color=ds.TEXT_MUTED, weight="medium"),
@@ -159,29 +133,25 @@ def _hero_card(title, pill, href, spark=None, bar=None) -> rx.Component:
 
 
 def _spark(ready, dark_fig, light_fig) -> rx.Component:
-    """Sparkline once 3 days are reported; before that a small note
-    (a 1-2 day sparkline is only a sliver)."""
+    """Sparkline once 3 days are reported (a 1-2 day sparkline is only a
+    sliver); nothing before that."""
     return rx.cond(
         ready,
         rx.box(rx.cond(O.is_dark, ops_charts.sparkline_chart(dark_fig),
                        ops_charts.sparkline_chart(light_fig)),
                width="100%"),
-        rx.hstack(rx.icon("chart-line", size=14, color=ds.TEXT_FAINT),
-                  ui.note("Not enough data yet"),
-                  spacing="2", align="center", padding_y="0.25em"),
     )
 
 
 def _hero_row() -> rx.Component:
     return rx.grid(
-        _hero_card("Sales MTD", O.pill_sales, "/ops/sales",
+        _hero_card("Sales", O.pill_sales, "/ops/sales",
                    spark=_spark(O.spark_sales_ready, O.spark_sales_dark,
                                 O.spark_sales_light),
                    bar=_sales_bar(O.pill_sales)),
-        _hero_card("Expenses paid MTD", O.pill_expenses, "/ops/expenses"),
-        _hero_card("Manpower — salary ratio", O.pill_manpower,
-                   "/ops/manpower"),
-        _hero_card("Stock loss % of sales", O.pill_stock, "/ops/stock",
+        _hero_card("Expenses", O.pill_expenses, "/ops/expenses"),
+        _hero_card("Salary Ratio", O.pill_manpower, "/ops/manpower"),
+        _hero_card("Stock Loss", O.pill_stock, "/ops/stock",
                    spark=_spark(O.spark_stock_ready, O.spark_stock_dark,
                                 O.spark_stock_light)),
         columns=rx.breakpoints(initial="1", sm="2", lg="4"),
@@ -224,15 +194,11 @@ def _target_row(t) -> rx.Component:
 
 def _main_row() -> rx.Component:
     pace = ui.chart_card(
-        "Pace vs Level Targets",
+        "Sales Trend",
         rx.cond(O.is_dark,
                 ops_charts.chart(O.pace_fig_dark, height="340px"),
                 ops_charts.chart(O.pace_fig_light, height="340px")),
         ready=O.pace_has_data,
-        subtitle="Cumulative sales (RM) against each level's daily "
-                 "run-rate (Level 1 bold)",
-        detail="Cumulative actuals stop at the last reported day; "
-               "unreported days are never interpolated.",
         id="overview-pace",
     )
     targets = ui.section_card(
@@ -240,7 +206,10 @@ def _main_row() -> rx.Component:
         rx.cond(O.levels_missing != "",
                 ui.status_chip(ds.LEVELS_MISSING, "amber",
                                id="overview-levels-missing", wrap=True)),
-        rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%"),
+        # Daily Target / Required Daily Sales (empty once complete)
+        rx.cond(O.targets_extra.length() > 0,
+                rx.box(border_top=f"1px solid {ui.ROW_BORDER}",
+                       width="100%")),
         rx.foreach(O.targets_extra,
                    lambda x: _row(x["label"], x["value"], x["title"])),
         title=O.targets_title,
@@ -276,10 +245,9 @@ def _attention_panel() -> rx.Component:
             n > 0,
             rx.vstack(rx.foreach(O.attention, _attention_item),
                       spacing="0", width="100%"),
-            rx.text("Nothing needs attention", size="2",
-                    color=ds.TEXT_MUTED),
+            rx.text("None", size="2", color=ds.TEXT_MUTED),
         ),
-        title="Needs attention",
+        title="Alerts",
         extra=ui.status_chip(n.to(str), rx.cond(n > 0, "red", "gray")),
         id="attention-panel", height="100%",
     )
@@ -299,7 +267,7 @@ def _glance_panel() -> rx.Component:
         rx.grid(rx.foreach(O.glance, _glance_item),
                 columns=rx.breakpoints(initial="1", sm="2"),
                 spacing_x="6", spacing_y="0", width="100%"),
-        title="At a glance", id="at-a-glance", height="100%",
+        title="Summary", id="at-a-glance", height="100%",
     )
 
 
