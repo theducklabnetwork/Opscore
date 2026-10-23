@@ -375,10 +375,17 @@ class DailyState(OpsState):
                 "target": ds.fmt_rm(s.targets.get("level1")),
                 # Achievement = month-to-date sales / Level 1 (Daily
                 # Dashboard!H5); the projection is a separate tile
-                "achievement": (ds.fmt_pct(s.mtd_achievement_l1)
+                # a shortfall is never rounded up (ds.fmt_achievement):
+                # MTD by kpi.sales_status vs Level 1, projection by the
+                # engine's Level 1 status
+                "achievement": (ds.fmt_achievement(
+                    s.mtd_achievement_l1,
+                    kpi.sales_status(s.sales_mtd_cents,
+                                     s.targets.get("level1")))
                                 if s.days_entered else "—"),
-                "proj_achievement": ds.fmt_pct(
-                    s.achievement_by_level.get("level1")),
+                "proj_achievement": ds.fmt_achievement(
+                    s.achievement_by_level.get("level1"),
+                    s.status_by_level.get("level1", "")),
                 "projected": ds.fmt_rm0(proj),
                 "projected_compact": ds.fmt_rm_compact(proj,
                                                        whole_below=True),

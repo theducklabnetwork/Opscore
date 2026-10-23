@@ -177,5 +177,51 @@ class PageLayoutTests(unittest.TestCase):
         self.assertEqual(tiles.count("sales-avg-day"), 2)
 
 
+
+class DailyAchievementTilesTests(Fixture):
+    def daily_kpis(self, month):
+        import ducklab.ops_daily_state as mod
+        from ducklab.ops_daily_state import DailyState
+        st = DailyState()
+        sid, admin = self.sid, self.admin
+        days = self.app.get_daily_records(admin, sid, month)
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(DailyState, "_actor", lambda s_: admin), \
+                mock.patch.object(DailyState, "_selected_store_id",
+                                  lambda s_: sid), \
+                mock.patch.object(DailyState, "_selected_month",
+                                  lambda s_: month):
+            return st._monthly_kpis(days)
+
+    def test_complete_month_shortfall_rounds_down(self):
+        # Level 1 = 350,819.30; MTD = month-end = 350,819 -> 99.99991%
+        self.september(base=35081930)
+        k = self.daily_kpis("2026-09")
+        self.assertEqual(k["achievement"], "99.9%")
+        self.assertEqual(k["proj_achievement"], "99.9%")
+        self.assertEqual(k["proj_status"], "Below target")
+
+    def test_achieved_rounds_as_before(self):
+        self.september()  # 350,819 / 269,861 = 129.9997% -> 130.0%
+        k = self.daily_kpis("2026-09")
+        self.assertEqual((k["achievement"], k["proj_achievement"]),
+                         ("130.0%", "130.0%"))
+
+    def test_incomplete_projected_shortfall(self):
+        # Level 1 = 213,900.01; 10 x 6,900 -> projected 213,900.00
+        # (99.999995%, "Projected: Below target"); MTD 69,000 / 213,900.01
+        # = 32.258% -> "32.2%" (half-up would show 32.3%)
+        self.app.configure_month(
+            self.admin, self.sid, "2026-10", level1_base_cents=21390001,
+            level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
+        for d in range(1, 11):
+            self.app.record_daily(self.admin, self.sid, date(2026, 10, d),
+                                  sales_cents=rm(6900))
+        k = self.daily_kpis("2026-10")
+        self.assertEqual(k["proj_achievement"], "99.9%")
+        self.assertEqual(k["proj_status"], "Projected: Below target")
+        self.assertEqual(k["achievement"], "32.2%")
+
+
 if __name__ == "__main__":
     unittest.main()

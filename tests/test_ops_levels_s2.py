@@ -255,7 +255,8 @@ class CompareSelectorTests(Fixture):
         self.assertEqual(st.sp_proj_status, "Projected: Below target")
         self.assertEqual(st.sp_mtd_achievement_label,
                          "Achievement to date vs Level 3")
-        self.assertEqual(st.sp_mtd_achievement, "31.4%")
+        # 69,000 / 220,000 = 31.36% -> 31.3% (below target, rounded down)
+        self.assertEqual(st.sp_mtd_achievement, "31.3%")
         self.assertEqual(st.sp_mtd_achievement_sub,
                          "Level 3 target RM 220,000")
         # (220,000 - 69,000) / 21 = 7,190.48; run-rate 220,000 / 31

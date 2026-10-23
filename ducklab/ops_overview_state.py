@@ -416,7 +416,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     ]
     out["cc"] = {  # kept for backward-compat with existing tests
         "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
-        "achievement": ds.fmt_pct(s.mtd_achievement_l1),
+        "achievement": ds.fmt_achievement(
+            s.mtd_achievement_l1, kpi.sales_status(s.sales_mtd_cents, l1)),
         "proj_achievement": ds.fmt_achievement(proj_ach, l1_status),
         "paid": ds.fmt_rm(e.paid_cents),
         "days": f"{entered} / {dim}",

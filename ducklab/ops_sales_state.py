@@ -220,8 +220,11 @@ class SalesState(StoresState):
         # achievement to date: MTD / selected level (Level 1 = the budget
         # achievement, the engine's mtd_achievement_l1)
         self.sp_mtd_achievement_label = f"Achievement to date vs Level {n}"
+        # same rounding as Daily: a shortfall is never rounded up
         self.sp_mtd_achievement = (
-            ds.fmt_pct(kpi.mtd_achievement(s.sales_mtd_cents, target))
+            ds.fmt_achievement(
+                kpi.mtd_achievement(s.sales_mtd_cents, target),
+                kpi.sales_status(s.sales_mtd_cents, target))
             if entered else "—")
         self.sp_mtd_achievement_sub = (
             f"Level {n} target " + ds.fmt_rm0(target)

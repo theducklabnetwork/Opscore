@@ -140,8 +140,11 @@ class MtdAchievementTests(unittest.TestCase):
         finally:
             auth_pages.app_service = orig_app
             mod.app_service = orig_mod
+        # MTD 191,300 / 210,000 = 91.095%: below target -> rounded down
+        self.assertEqual(ov["cc"]["achievement"], "91.0%")
         self.assertEqual(ov["cc"]["achievement"],
-                         ds.fmt_pct(rep.sales.mtd_achievement_l1))
+                         ds.fmt_achievement(rep.sales.mtd_achievement_l1,
+                                            "Below target"))
         self.assertEqual(ov["cc"]["proj_achievement"],
                          ds.fmt_pct(rep.sales.achievement_by_level["level1"]))
         self.assertNotEqual(ov["cc"]["achievement"],
