@@ -225,21 +225,23 @@ class ReportTests(Fixture):
         self.assertEqual(mp["ratio_status"], "Restricted")
         self.assertEqual(mp["salary"], "Restricted")
 
-    def test_early_estimate_once_in_sales_section(self):
+    def test_sales_section_plain_labels(self):
+        # R1: no section-header chips and no "(projected)" / "(early
+        # estimate)" labels; "Projected Sales" only in the incomplete
+        # layout
         from ducklab import ops_pages
         out = str(ops_pages._sales_section())
         self.assertNotIn("(early estimate)", out)
-        # the chip (with its tooltip) is the only early-estimate text left:
-        # no "(early estimate)" labels, no repeated sub-lines
-        self.assertEqual(out.count('["early_estimate_tag"]'), 1)
-        self.assertEqual(out.count('"Early estimate"'), 1)
-        self.assertIn("(projected)", out)
+        self.assertNotIn("(projected)", out)
+        self.assertNotIn('"Early estimate"', out)
+        self.assertNotIn('["status_l1"]', out)
+        self.assertEqual(out.count('"Projected Sales"'), 1)
 
     def test_awaiting_payroll_subline_only_when_missing(self):
         from ducklab import ops_pages
         out = str(ops_pages._manpower_section())
         self.assertNotIn("— = awaiting payroll", out)
-        self.assertIn("Awaiting payroll", out)
+        self.assertIn("Awaiting Payroll", out)
 
 
 # ---------------------------------------------------------------------------

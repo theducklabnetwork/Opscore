@@ -106,9 +106,11 @@ class OpsState(AuthState):
 
     @rx.var
     def report_heading(self) -> str:
-        s = self.report.get("store", {}).get("label", "")
+        """Title line: "SLP (ZI68) · September 2026"."""
+        s = self.report.get("store", {})
+        title = s.get("title") or s.get("label", "")
         m = self.report.get("month", {}).get("label", "")
-        return f"{s} · {m}" if s else ""
+        return f"{title} · {m}" if title else ""
     @rx.var
     def report_colors(self) -> dict[str, str]:
         """Chip colours for the report's section statuses (display only;
@@ -301,7 +303,8 @@ class OpsState(AuthState):
             self.report = {k: v for k, v in data.items()
                            if isinstance(v, dict)}
             self.report["mode"] = {"label": data["mode"]}
-            self.report["store"] = {"label": data["store"]}
+            self.report["store"] = {"label": data["store"],
+                                    "title": data.get("store_title", "")}
             self.report["month"] = {"label": data["month"]}
             self.report_categories = data["expenses"]["categories"]
             self.report_stock_codes = data["stock"]["codes"]
@@ -453,14 +456,17 @@ def _serialize_live(rep, user=None) -> dict:
     return {
         "mode": "live",
         "store": f"{rep.store.code} — {rep.store.name}",
+        "store_title": f"{rep.store.name} ({rep.store.code})",
         "month": month_label(rep.month),
         "sales": {
             "mtd": ds.fmt_rm(s.sales_mtd_cents),
-            "projected": ds.fmt_rm0(int(s.month_end_sales_cents)
-                                    if s.month_end_sales_cents is not None
-                                    else None),
+            "projected": ds.fmt_rm(int(s.month_end_sales_cents)
+                                   if s.month_end_sales_cents is not None
+                                   else None),
             "target_l1": ds.fmt_rm(s.targets.get("level1")),
-            "achievement_l1": ds.fmt_pct(s.achievement_by_level.get("level1")),
+            "achievement_l1": ds.fmt_achievement(
+                s.achievement_by_level.get("level1"),
+                s.status_by_level.get("level1", "")),
             "status_l1": ds.projection_style(
                 s.projection_state,
                 s.status_by_level.get("level1", "no target"))[0],
@@ -545,6 +551,8 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
     store = rep.get("store", {})
     store_label = (f"{store['code']} — {store['name']}"
                    if isinstance(store, dict) and "code" in store else "")
+    store_title = (f"{store['name']} ({store['code']})"
+                   if isinstance(store, dict) and "code" in store else "")
     codes = _report_codes(st.get("totals_by_code", {}))
     # Same display rules as live: a finalized complete month is "actual"
     # (Month-End), partial months are labelled projected/early estimate.
@@ -558,15 +566,17 @@ def _serialize_snapshot(snap: dict, user=None) -> dict:
     return {
         "mode": "finalized",
         "store": store_label,
+        "store_title": store_title,
         "month": month_label(rep.get("month", snap["month"])),
         "sales": {
             "mtd": ds.fmt_rm(s.get("sales_mtd_cents")),
-            "projected": ds.fmt_rm0(
+            "projected": ds.fmt_rm(
                 int(s["month_end_sales_cents"])
                 if s.get("month_end_sales_cents") is not None else None),
             "target_l1": ds.fmt_rm(s.get("targets", {}).get("level1")),
-            "achievement_l1": ds.fmt_pct(
-                s.get("achievement_by_level", {}).get("level1")),
+            "achievement_l1": ds.fmt_achievement(
+                s.get("achievement_by_level", {}).get("level1"),
+                s.get("status_by_level", {}).get("level1", "")),
             "status_l1": ds.projection_style(
                 pstate,
                 s.get("status_by_level", {}).get("level1", "no target"))[0],

@@ -207,7 +207,7 @@ class FinalizedLabelTests(Fixture):
         sales = _serialize_snapshot(snap, user=self.admin)["sales"]
         self.assertEqual(sales["projection_state"], "projected")
         self.assertEqual(sales["status_l1"], "Projected: Below target")
-        self.assertEqual(sales["projected"], "RM 300,000")
+        self.assertEqual(sales["projected"], "RM 300,000.00")  # R1 format
         self.assertEqual(sales["completeness"], "10 of 30 days reported")
 
 

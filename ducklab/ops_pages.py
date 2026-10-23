@@ -343,12 +343,6 @@ def _mode_controls() -> rx.Component:
                 size="2", id="version-selector",
             ),
         ),
-        rx.cond(
-            R.report_mode == "live",
-            ui.status_chip("LIVE — recalculated from current records",
-                           "gray"),
-            ui.status_chip("FINALIZED — preserved snapshot", "violet"),
-        ),
         spacing="3", align="center", wrap="wrap",
     )
 
@@ -358,51 +352,41 @@ def _grid(*stats, columns) -> rx.Component:
 
 
 _COLS5 = rx.breakpoints(initial="2", md="5")
-
-
-def _proj_label(label: str):
-    """Projection-derived figure label: "(projected)" until the month is
-    complete; the early-estimate state shows once, as the section chip."""
-    return rx.cond(R.sales["projection_state"] == "actual", label,
-                   label + " (projected)")
+_RULE = rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%")
 
 
 def _sales_section() -> rx.Component:
+    # "Projected Sales" only while the month is incomplete (once complete
+    # it would repeat Sales)
     sales = R.sales
+    complete = sales["projection_state"] == "actual"
     return ui.section_card(
-        _grid(
-            _stat("Monthly sales (MTD)", sales["mtd"], size="6"),
-            _stat(rx.cond(sales["projection_state"] == "actual",
-                            "Month-end sales (actual)",
-                            "Projected month-end"),
-                    sales["projected"], size="6"),
-            _stat("Level 1 target", sales["target_l1"], size="6"),
-            _stat(_proj_label("Achievement vs target"),
-                    sales["achievement_l1"], size="6"),
-            columns=rx.breakpoints(initial="2", md="4"),
+        rx.cond(
+            complete,
+            _grid(
+                _stat("Sales", sales["mtd"], size="6"),
+                _stat("Level 1 Target", sales["target_l1"], size="6"),
+                _stat("Achievement", sales["achievement_l1"], size="6"),
+                columns=rx.breakpoints(initial="2", md="3"),
+            ),
+            _grid(
+                _stat("Sales", sales["mtd"], size="6"),
+                _stat("Projected Sales", sales["projected"], size="6"),
+                _stat("Level 1 Target", sales["target_l1"], size="6"),
+                _stat("Achievement", sales["achievement_l1"], size="6"),
+                columns=rx.breakpoints(initial="2", md="4"),
+            ),
         ),
-        rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%"),
+        _RULE,
         _grid(
-            _stat(_proj_label("Growth vs last year"),
-                    sales["growth_year"], size="5"),
-            _stat(_proj_label("Growth vs last month"),
-                    sales["growth_month"], size="5"),
-            _stat("SPR", sales["spr"], size="5", sub="Sales per receipt"),
-            _stat("UPT", sales["upt"], size="5",
-                    sub="Units per transaction"),
-            _stat("ASP", sales["asp"], size="5",
-                    sub="Average selling price"),
+            _stat("SSSG/Year", sales["growth_year"], size="5"),
+            _stat("SSSG/Month", sales["growth_month"], size="5"),
+            _stat("SPR", sales["spr"], size="5"),
+            _stat("UPT", sales["upt"], size="5"),
+            _stat("ASP", sales["asp"], size="5"),
             columns=_COLS5,
         ),
-        title="Sales performance",
-        subtitle=sales["completeness"],
-        extra=rx.hstack(
-            ui.status_chip(sales["status_l1"], R.report_colors["sales"]),
-            rx.cond(sales["projection_state"] == "early_estimate",
-                    ui.early_tag("Early estimate",
-                                 sales["early_estimate_tag"])),
-            spacing="1", align="center",
-        ),
+        title="Sales",
         id="sales-section",
     )
 
@@ -411,33 +395,28 @@ def _expenses_section() -> rx.Component:
     exp = R.expenses
     return ui.section_card(
         _grid(
-            _stat("Paid expenses", exp["paid"], size="6",
-                    sub=exp["paid_note"]),
-            _stat("Incurred expenses", exp["incurred"], size="6",
-                    sub=exp["incurred_note"]),
-            _stat("Pending / open", exp["pending"], size="6"),
-            _stat("Total budget", exp["budget"], size="6"),
-            _stat("Share of sales", exp["share"], size="6"),
+            _stat("Paid", exp["paid"], size="6", sub=exp["paid_note"]),
+            _stat("Incurred", exp["incurred"], size="6",
+                  sub=exp["incurred_note"]),
+            _stat("Pending", exp["pending"], size="6"),
+            _stat("Budget", exp["budget"], size="6"),
+            _stat("Expense Ratio", exp["share"], size="6"),
             columns=_COLS5,
         ),
         rx.cond(
             R.report_category_rows.length() > 0,
             ui.data_table(
-                ["Category", ("Paid (MTD)", True), ("Budget", True),
-                 "Status"],
+                ["Category", ("Paid", True), ("Budget", True), "Status"],
                 rx.foreach(R.report_category_rows, lambda c: rx.el.tr(
                     ui.td(rx.text(c["name"], weight="medium")),
                     ui.td(c["paid"], numeric=True),
                     ui.td(c["budget"], numeric=True),
                     ui.td(ui.status_chip(c["status"], c["color"])),
                 )),
-                phone=("Category", "Paid (MTD)", "Status"),
+                phone=("Category", "Paid", "Status"),
             ),
         ),
-        title="Expenses management",
-        extra=rx.cond(exp["hq_status"] != "",
-                      ui.status_chip(exp["hq_status"],
-                                     R.report_colors["expenses"])),
+        title="Expenses",
         id="expenses-section",
     )
 
@@ -446,33 +425,25 @@ def _manpower_section() -> rx.Component:
     mp = R.manpower
     return ui.section_card(
         _grid(
-            _stat("Opening headcount", mp["opening"], size="6"),
+            _stat("Opening Headcount", mp["opening"], size="6"),
             _stat("Hires", mp["hires"], size="6"),
-            _stat("Resigned", mp["resigned"], size="6"),
-            _stat("Closing headcount", mp["closing"], size="6"),
-            _stat("Effective staff", mp["effective_staff"], size="6",
-                    sub=mp["pt_factor_label"]),
+            _stat("Resignations", mp["resigned"], size="6"),
+            _stat("Closing Headcount", mp["closing"], size="6"),
+            _stat("Effective Staff", mp["effective_staff"], size="6"),
             columns=_COLS5,
         ),
-        rx.box(border_top=f"1px solid {ui.ROW_BORDER}", width="100%"),
+        _RULE,
         _grid(
-            _stat("Salary cost", mp["salary"], size="6",
-                    sub=rx.cond(mp["salary"] == "—",
-                                "Awaiting payroll", "")),
-            _stat("Salary ratio", mp["ratio"], size="6"),
-            _stat("Ratio incl. support", mp["ratio_support"], size="6"),
-            _stat("Turnover", mp["turnover"], size="6",
-                    sub=mp["turnover_status"]),
-            _stat("Leave days", mp["leave_days"], size="6"),
+            _stat("Salary Cost", mp["salary"], size="6",
+                  sub=rx.cond(mp["salary"] == "—",
+                              "Awaiting Payroll", "")),
+            _stat("Salary Ratio", mp["ratio"], size="6"),
+            _stat("Total Salary Ratio", mp["ratio_support"], size="6"),
+            _stat("Turnover", mp["turnover"], size="6"),
+            _stat("Leave Days", mp["leave_days"], size="6"),
             columns=_COLS5,
         ),
-        rx.cond((mp["ratio_mtd"] == "1") & (mp["ratio"] != "Restricted"),
-                ui.note("Month to date: the ratio uses sales entered so far "
-                        "and is only final once the month's sales are "
-                        "complete.")),
-        title="Manpower efficiency",
-        extra=ui.status_chip(mp["ratio_status"],
-                             R.report_colors["manpower"]),
+        title="Manpower",
         id="manpower-section",
     )
 
@@ -481,8 +452,8 @@ def _stock_section() -> rx.Component:
     st = R.stock
     return ui.section_card(
         _grid(
-            _stat("Total loss", st["total_loss"], size="6"),
-            _stat("Loss % of sales", st["loss_pct"], size="6"),
+            _stat("Total Loss", st["total_loss"], size="6"),
+            _stat("Loss Ratio", st["loss_pct"], size="6"),
             columns=rx.breakpoints(initial="2", md="4"),
         ),
         rx.cond(
@@ -497,8 +468,7 @@ def _stock_section() -> rx.Component:
                 )),
             ),
         ),
-        title="Stock management",
-        extra=ui.status_chip(st["status"], R.report_colors["stock"]),
+        title="Stock",
         id="stock-section",
     )
 
@@ -507,15 +477,15 @@ def _actions_section() -> rx.Component:
     act = R.actions
     return ui.section_card(
         _grid(
-            _stat("Total actions", act["total"], size="6"),
+            _stat("Total", act["total"], size="6"),
             _stat("Open", act["open"], size="6"),
-            _stat("In progress", act["in_progress"], size="6"),
+            _stat("In Progress", act["in_progress"], size="6"),
             _stat("Blocked", act["blocked"], size="6"),
             _stat("Completed", act["done"], size="6"),
             _stat("Overdue", act["overdue"], size="6"),
             columns=rx.breakpoints(initial="2", sm="3", lg="6"),
         ),
-        title="Action tracker summary",
+        title="Actions",
         id="actions-section",
     )
 
@@ -553,7 +523,4 @@ def report_page() -> rx.Component:
             ),
             spacing=ui.GAP, width="100%",
         ),
-        description="The month's figures for the selected store: Live "
-                    "recalculates from current records; Finalized shows a "
-                    "preserved snapshot.",
     )
