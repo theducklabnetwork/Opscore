@@ -30,9 +30,9 @@ OPEN_STATUSES = ("Open", "In progress", "Blocked")
 
 # Priority/status colors: ds.status_color (design.py shared map)
 
-FILTER_STATUSES = ["All statuses", *ACTION_STATUSES]
-FILTER_PILLARS = ["All pillars", *PILLARS]
-FILTER_PRIORITIES = ["All priorities", *PRIORITIES]
+FILTER_STATUSES = ["All Statuses", *ACTION_STATUSES]
+FILTER_PILLARS = ["All Pillars", *PILLARS]
+FILTER_PRIORITIES = ["All Priorities", *PRIORITIES]
 
 
 def _today() -> date:
@@ -53,15 +53,15 @@ class ActionsState(StoresState):
     loaded: bool = False
 
     # filters
-    f_status: str = "All statuses"
-    f_pillar: str = "All pillars"
-    f_priority: str = "All priorities"
+    f_status: str = "All Statuses"
+    f_pillar: str = "All Pillars"
+    f_priority: str = "All Priorities"
     f_overdue_only: bool = False
 
     # dialog form
     form_open: bool = False
     editing_id: str = ""          # "" = new action
-    form_title: str = "Add action"
+    form_title: str = "Add Action"
     a_raised: str = ""
     a_pillar: str = "General Operations"
     a_issue: str = ""
@@ -84,9 +84,9 @@ class ActionsState(StoresState):
         self.editing_id = ""
         self.form_error = ""
         self.notice = ""
-        self.f_status = "All statuses"
-        self.f_pillar = "All pillars"
-        self.f_priority = "All priorities"
+        self.f_status = "All Statuses"
+        self.f_pillar = "All Pillars"
+        self.f_priority = "All Priorities"
         self.f_overdue_only = False
 
     # --- selector overrides -------------------------------------------------
@@ -166,11 +166,11 @@ class ActionsState(StoresState):
     def filtered_rows(self) -> list[dict[str, str]]:
         out = []
         for r in self.rows:
-            if self.f_status != "All statuses" and r["status"] != self.f_status:
+            if self.f_status != "All Statuses" and r["status"] != self.f_status:
                 continue
-            if self.f_pillar != "All pillars" and r["pillar"] != self.f_pillar:
+            if self.f_pillar != "All Pillars" and r["pillar"] != self.f_pillar:
                 continue
-            if self.f_priority != "All priorities" \
+            if self.f_priority != "All Priorities" \
                     and r["priority"] != self.f_priority:
                 continue
             if self.f_overdue_only and not r["overdue"]:
@@ -182,7 +182,7 @@ class ActionsState(StoresState):
     @rx.event
     def open_add(self) -> None:
         self.editing_id = ""
-        self.form_title = "Add action"
+        self.form_title = "Add Action"
         today = _today()
         self.a_raised = today.isoformat()
         self.a_pillar = "General Operations"
@@ -212,7 +212,7 @@ class ActionsState(StoresState):
         if row is None:
             return
         self.editing_id = str(row.id)
-        self.form_title = "Edit action"
+        self.form_title = "Edit Action"
         self.a_raised = row.raised_date.isoformat() if row.raised_date else ""
         self.a_pillar = row.input.pillar or "General Operations"
         self.a_issue = row.issue or ""
@@ -309,7 +309,7 @@ class ActionsState(StoresState):
         finally:
             self.saving = False
         self.form_open = False
-        self.notice = "Action saved."
+        self.notice = "Action Saved"
         yield
         yield ActionsState.load_actions_data()
 

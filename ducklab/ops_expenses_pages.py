@@ -158,6 +158,16 @@ def _budget_monitor() -> rx.Component:
 
 def _filters() -> rx.Component:
     return rx.hstack(
+        # one paid date, opened from a Daily Operations amount
+        rx.cond(
+            E.filter_paid_date != "",
+            rx.badge(E.filter_paid_label,
+                     rx.icon("x", size=12, cursor="pointer",
+                             on_click=E.clear_filter_paid_date,
+                             id="filter-paid-clear"),
+                     size="2", variant="soft", radius="full",
+                     id="filter-paid"),
+        ),
         rx.select(E.period_options, value=E.filter_period_label,
                   on_change=E.set_filter_period_label, id="filter-period"),
         rx.select(E.filter_category_options,

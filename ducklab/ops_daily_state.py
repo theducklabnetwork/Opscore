@@ -71,6 +71,8 @@ class DailyState(OpsState):
     record_day_enabled: bool = False
     record_day_tip: str = ""
     day_kpis: dict[str, str] = {}
+    # paid expenses by paid date (ISO -> "RM ..."); entered on Expenses only
+    day_expenses: dict[str, str] = {}
     can_write: bool = False
     month_finalized: bool = False
 
@@ -155,6 +157,11 @@ class DailyState(OpsState):
         return f"{calendar.day_name[d.weekday()]}, {d.day} {calendar.month_name[d.month]} {d.year}"
 
     @rx.var
+    def form_expenses(self) -> str:
+        """That day's paid expenses (read-only line in the entry dialog)."""
+        return self.day_expenses.get(self.form_date, "—")
+
+    @rx.var
     def form_effective_staff(self) -> str:
         """FT + PT × configured factor (preview; stored values unchanged)."""
         try:
@@ -235,6 +242,7 @@ class DailyState(OpsState):
         self.record_day_enabled = False
         self.record_day_tip = ""
         self.day_kpis = {}
+        self.day_expenses = {}
         self.month_finalized = False
         store_id = self._selected_store_id()
         month = self._selected_month()
@@ -261,6 +269,9 @@ class DailyState(OpsState):
             except ConfigNotFoundError:
                 factor = None
             days = app_service.get_daily_records(user, store_id, month)
+            paid_by_day = kpi.paid_cents_by_day(
+                [r.input for r in app_service.get_expense_transactions(
+                    user, store_id)], month, store_id)
             self.month_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
             # signs from the reference codes already loaded via AppService
@@ -281,8 +292,16 @@ class DailyState(OpsState):
         for day_num in range(1, n_days + 1):
             d = date(y, m, day_num)
             rec = by_date.get(d)
-            rows.append(self._day_row(d, rec, signs, factor))
+            row = self._day_row(d, rec, signs, factor)
+            paid = paid_by_day.get(d)
+            row["expenses"] = ds.fmt_rm(paid) if paid is not None else "—"
+            rows.append(row)
         self.day_rows = rows
+        self.day_expenses = {d.isoformat(): ds.fmt_rm(c)
+                             for d, c in paid_by_day.items()}
+        # tile: paid this month, by paid date ("—" when nothing was paid)
+        day_kpis["expenses"] = (ds.fmt_rm(sum(paid_by_day.values()))
+                                if paid_by_day else "—")
         self.day_rows_reported = [r for r in rows
                                   if r["status"] != ds.DAY_NOT_REPORTED]
         self.hidden_count = len(rows) - len(self.day_rows_reported)

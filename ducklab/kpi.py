@@ -699,6 +699,22 @@ def expense_totals_cents(
     return {"paid": paid, "incurred": incurred, "open": open_}
 
 
+def paid_cents_by_day(
+    expenses: list[ExpenseInput], month: str, store_id: int
+) -> dict[date, int]:
+    """Daily!I-R: paid values summed by PAID date, per day of the month.
+    Only days with at least one counted payment appear (a day whose
+    signed amounts net to RM 0 still appears, with 0)."""
+    out: dict[date, int] = {}
+    for e in expenses:
+        if e.store_id != store_id:
+            continue
+        pv = paid_value_cents(e)
+        if pv and _in_month(e.paid_date, month):
+            out[e.paid_date] = out.get(e.paid_date, 0) + pv
+    return out
+
+
 def category_paid_mtd_cents(
     expenses: list[ExpenseInput], month: str, store_id: int, category_id: int
 ) -> int:

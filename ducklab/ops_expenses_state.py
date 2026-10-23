@@ -73,6 +73,7 @@ class ExpensesState(DailyState):
     filter_status: str = ""
     filter_verification: str = ""
     search_text: str = ""
+    filter_paid_date: str = ""      # ISO; set from Daily (?paid=), "" = off
     sort_key: str = "incurred"      # incurred | paid | amount
     sort_desc: bool = True
 
@@ -118,8 +119,20 @@ class ExpensesState(DailyState):
     def filter_period_label(self) -> str:
         return dict(PERIOD_OPTIONS)[self.filter_period]
 
+    @rx.var
+    def filter_paid_label(self) -> str:
+        if not self.filter_paid_date:
+            return ""
+        return "Paid " + date.fromisoformat(
+            self.filter_paid_date).strftime("%d %b %Y")
+
+    @rx.event
+    def clear_filter_paid_date(self):
+        self.filter_paid_date = ""
+
     @rx.event
     def set_filter_period_label(self, label: str):
+        self.filter_paid_date = ""
         for k, v in PERIOD_OPTIONS:
             if v == label:
                 self.filter_period = k
@@ -150,7 +163,10 @@ class ExpensesState(DailyState):
         """Filtered/sorted register rows (deterministic ordering)."""
         rows = list(self.all_expense_rows)
         month = self._selected_month()
-        if self.filter_period == "paid" and month:
+        if self.filter_paid_date:
+            # one paid date (from Daily): replaces the period filter
+            rows = [r for r in rows if r["paid_iso"] == self.filter_paid_date]
+        elif self.filter_period == "paid" and month:
             rows = [r for r in rows if r["paid_iso"][:7] == month]
         elif self.filter_period == "incurred" and month:
             rows = [r for r in rows if r["incurred_iso"][:7] == month]
@@ -190,6 +206,7 @@ class ExpensesState(DailyState):
         if label == self.selected_store_label:
             return
         self.selected_store_label = label
+        self.filter_paid_date = ""
         self.exp_form_open = False
         self.exp_notice = ""
         self._clear_report()
@@ -201,6 +218,7 @@ class ExpensesState(DailyState):
         if label == self.selected_month_label:
             return
         self.selected_month_label = label
+        self.filter_paid_date = ""
         self.exp_form_open = False
         self.exp_notice = ""
         self._clear_report()
@@ -215,6 +233,10 @@ class ExpensesState(DailyState):
         guard = self.require_auth()
         if guard is not None:
             return guard
+        self.filter_paid_date = _paid_param(
+            self.router.page.params.get("paid", ""))
+        if self.filter_paid_date:
+            self.filter_period = "all"     # the select matches the chip
         yield OpsState.load_ops()
         yield ExpensesState.load_expenses_data()
 
@@ -694,6 +716,14 @@ class ExpensesState(DailyState):
                          f"({ds.fmt_rm(cents)} for {month}).")
         yield ExpensesState.load_expenses_data()
         yield ExpensesState.refresh_report()
+
+
+def _paid_param(raw) -> str:
+    """?paid=YYYY-MM-DD from Daily Operations; anything else is ignored."""
+    try:
+        return date.fromisoformat(str(raw)).isoformat()
+    except ValueError:
+        return ""
 
 
 def _budget_save_value(amount: str, clear: bool) -> Optional[int]:
