@@ -224,12 +224,13 @@ def _target_row(t) -> rx.Component:
 
 def _main_row() -> rx.Component:
     pace = ui.chart_card(
-        "Pace vs Level 1 Budget",
+        "Pace vs Level Targets",
         rx.cond(O.is_dark,
                 ops_charts.chart(O.pace_fig_dark, height="340px"),
                 ops_charts.chart(O.pace_fig_light, height="340px")),
         ready=O.pace_has_data,
-        subtitle="Cumulative sales (RM) against the Level 1 daily run-rate",
+        subtitle="Cumulative sales (RM) against each level's daily "
+                 "run-rate (Level 1 bold)",
         detail="Cumulative actuals stop at the last reported day; "
                "unreported days are never interpolated.",
         id="overview-pace",

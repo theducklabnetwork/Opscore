@@ -19,27 +19,32 @@ _PROJ_CHIP = (S.sp_proj_status, S.sp_proj_color)
 
 
 def _kpi_tiles() -> rx.Component:
-    # the projection chip + early-estimate tag appear once per page, on the
-    # projected-achievement tile (same tiles and names as Daily)
+    # top row: the month-end story (sales, month-end, achievement, level
+    # reached); the projection chip + early-estimate tag sit on the
+    # projected tiles (same tiles and names as Daily)
     return ui.kpi_grid(
         ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
                     compact=S.sp_sales_mtd_compact,
                     exact=S.sp_sales_mtd_exact, sub=S.sp_sales_mtd_sub),
-        ui.kpi_tile("Achievement to date", S.sp_mtd_achievement,
-                    sub=S.sp_mtd_achievement_sub),
         ui.kpi_tile("Month-end sales", S.sp_month_end,
                     compact=S.sp_month_end_compact,
                     exact=S.sp_month_end_exact, sub=S.sp_month_end_sub),
         ui.kpi_tile("Projected achievement", S.sp_l1_achievement,
                     chip=_PROJ_CHIP, tag=S.sp_early_tag,
                     tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub),
-        ui.kpi_tile("Needed per remaining day", S.sp_needed,
+        ui.kpi_tile("Level reached", S.sp_level,
+                    chip=(S.sp_level_chip, S.sp_level_chip_color),
+                    tag=S.sp_early_tag, tag_tip=S.sp_early_tip,
+                    sub=S.sp_level_sub, id="sales-level"),
+        ui.kpi_tile("Achievement to date", S.sp_mtd_achievement,
+                    sub=S.sp_mtd_achievement_sub),
+        ui.kpi_tile(S.sp_needed_label, S.sp_needed,
                     compact=S.sp_needed_compact, exact=S.sp_needed_exact,
-                    sub=S.sp_needed_sub),
+                    sub=S.sp_needed_sub, id="sales-needed"),
         ui.kpi_tile("Avg per reported day", S.sp_avg_day,
                     compact=S.sp_avg_day_compact,
                     exact=S.sp_avg_day_exact),
-        columns=rx.breakpoints(initial="2", md="3"),
+        columns=rx.breakpoints(initial="2", md="4"),
         id="sales-kpis",
     )
 
@@ -59,11 +64,12 @@ def _basket() -> rx.Component:
 
 def _pace_chart() -> rx.Component:
     return ui.chart_card(
-        "Pace vs Level 1 Budget",
+        "Pace vs Level Targets",
         rx.cond(S.is_dark, ops_charts.chart(S.sp_fig_dark),
                 ops_charts.chart(S.sp_fig_light)),
         ready=S.sp_chart_ready,
-        subtitle="Cumulative sales (RM) against the Level 1 daily run-rate",
+        subtitle="Cumulative sales (RM) against each level's daily "
+                 "run-rate (Level 1 bold)",
         detail="The pace chart appears once 3 days are reported. "
                "Unreported days are never interpolated.",
         id="pace-section",

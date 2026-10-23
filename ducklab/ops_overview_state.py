@@ -236,6 +236,12 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         pstate, l1_status)
     early_tip = (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
                  if early_tag else "")
+    # level reached (same rule and levels as /ops/sales): "Level 3
+    # reached" / "Projected: Level 2"; nothing before data or without target
+    shown = kpi.shown_level_targets(cfg, s.targets)
+    level, _, _ = kpi.highest_level_achieved(s.month_end_sales_cents, shown)
+    level_text = (" · " + ds.level_reached_text(level, pstate)
+                  if sales_reported and l1 is not None else "")
     out["pill_sales"] = {
         "reported": "1" if sales_reported else "",
         "value": ops_charts.fmt_money_compact(s.sales_mtd_cents),
@@ -255,7 +261,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "context": ("Projected "
                     + ops_charts.fmt_money_compact(proj_cents)
                     + " · " + ops_charts.fmt_pct1(proj_ach)
-                    + " of Level 1"),
+                    + " of Level 1" + level_text),
     }
     exp_status = e.total_expenses_status
     exp_color = ds.status_color(exp_status)
@@ -348,8 +354,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     # Sales targets panel: progress vs engine achievement/status. If no
     # Level 2-4 uplift is configured, the levels equal Level 1 by workbook
     # rule (base x (1 + 0)) — collapse to Level 1 plus a muted note.
-    levels_configured = bool(cfg.level2_pct or cfg.level3_pct
-                             or cfg.level4_pct)
+    levels_configured = kpi.levels_configured(cfg)
     level_names = (("level1", "level2", "level3", "level4")
                    if levels_configured else ("level1",))
     out["levels_configured"] = "1" if levels_configured else ""
@@ -469,8 +474,11 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     p_actual = [p["actual"] for p in pace]
     p_budget = [p["budget"] for p in pace]
     out["pace_has_data"] = any(v is not None for v in p_actual)
-    out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=True)
-    out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget, dark=False)
+    levels = kpi.level_pace_lines(shown, dim)
+    out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
+                                                 dark=True, levels=levels)
+    out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
+                                                  dark=False, levels=levels)
 
     # sparklines: raw daily sales (RM) and per-day Total Loss (RM),
     # same gap rules as daily_line — no new aggregation.

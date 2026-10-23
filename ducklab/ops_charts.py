@@ -212,26 +212,54 @@ def pace_chart(days: Sequence[int],
                actual_cum_cents: Sequence[Optional[float]],
                budget_cum_cents: Sequence[Optional[float]],
                dark: bool,
-               y_title: str = "RM (cumulative)") -> go.Figure:
-    """Actual line stops at the last reported day (None afterwards)."""
+               y_title: str = "RM (cumulative)",
+               levels: Sequence[tuple[int, Sequence[Optional[float]]]] = (),
+               ) -> go.Figure:
+    """Actual line stops at the last reported day (None afterwards).
+
+    ``levels``: (level, cumulative pace) for Levels 2-4 (kpi.level_pace_lines,
+    already de-duplicated) — lighter dashed lines next to the stronger
+    Level 1 budget pace; every target line is labelled at the right edge."""
     pal = _pal(dark)
     fig = go.Figure()
+    x = list(days)
+    upper = [(n, p) for n, p in levels if n != 1]
+    labelled = bool(upper)
+
+    def _target_line(n: int, pace) -> None:
+        y = [None if v is None else v / 100 for v in pace]
+        strong = n == 1
+        fig.add_trace(go.Scatter(
+            x=x, y=y, mode="lines",
+            name="Level 1 budget pace" if strong else f"Level {n} pace",
+            showlegend=strong,
+            opacity=1.0 if strong else 0.55,
+            line=dict(color=pal["budget"], dash="dash",
+                      width=1.75 if strong else 1),
+            hovertemplate=(f"Day %{{x}}<br>Level {n} pace: RM %{{y:,.0f}}"
+                           "<extra></extra>"),
+        ))
+        if labelled and x and y and y[-1] is not None:
+            fig.add_annotation(
+                x=x[-1], y=y[-1], xref="x", yref="y", text=f"Level {n}",
+                showarrow=False, xanchor="left", xshift=4,
+                font=dict(size=10, color=pal["muted"]),
+                opacity=1.0 if strong else 0.7)
+
+    _target_line(1, budget_cum_cents)
     fig.add_trace(go.Scatter(
-        x=list(days), y=[None if v is None else v / 100
-                         for v in budget_cum_cents],
-        mode="lines", name="Level 1 budget pace",
-        line=dict(color=pal["budget"], dash="dot", width=1.5),
-        hovertemplate="Day %{x}<br>Budget pace: RM %{y:,.0f}<extra></extra>",
-    ))
-    fig.add_trace(go.Scatter(
-        x=list(days), y=[None if v is None else v / 100
-                         for v in actual_cum_cents],
+        x=x, y=[None if v is None else v / 100 for v in actual_cum_cents],
         mode="lines", connectgaps=False, name="Actual",
         line=dict(color=pal["accent"], width=2.5),
         fill="tozeroy", fillcolor=pal["pace_fill"],
         hovertemplate="Day %{x}<br>Actual: RM %{y:,.0f}<extra></extra>",
     ))
-    fig.update_layout(**_base_layout(pal, y_title, x_title="Day of month"))
+    for n, pace in upper:  # lighter lines after the two main traces
+        _target_line(n, pace)
+    layout = _base_layout(pal, y_title, x_title="Day of month")
+    if labelled:
+        layout["margin"] = dict(layout["margin"], r=52)  # right-edge labels
+    fig.update_layout(**layout)
     return fig
 
 
