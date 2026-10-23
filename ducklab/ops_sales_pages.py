@@ -25,16 +25,24 @@ def _levels_warning(id: str) -> rx.Component:
                                   wrap=True))
 
 
+def _level_item(n: int) -> rx.Component:
+    # "Level 1".."Level 4"; "L1".."L4" on phones (< 480px)
+    return rx.segmented_control.item(
+        rx.el.span(f"Level {n}",
+                   display=rx.breakpoints(initial="none", xs="inline")),
+        rx.el.span(f"L{n}",
+                   display=rx.breakpoints(initial="inline", xs="none")),
+        value=str(n),
+    )
+
+
 def _compare_control() -> rx.Component:
     # Sales Performance only; Overview and Monthly Report stay on Level 1
     return rx.hstack(
         rx.text("Compare against:", size="2", color=ds.TEXT_MUTED,
                 weight="medium"),
         rx.segmented_control.root(
-            rx.segmented_control.item("Level 1", value="1"),
-            rx.segmented_control.item("2", value="2"),
-            rx.segmented_control.item("3", value="3"),
-            rx.segmented_control.item("4", value="4"),
+            *[_level_item(n) for n in (1, 2, 3, 4)],
             value=S.sp_compare,
             on_change=S.select_compare,
             size="1", id="compare-level",
@@ -44,40 +52,70 @@ def _compare_control() -> rx.Component:
     )
 
 
-def _kpi_tiles() -> rx.Component:
-    # top row: the month-end story (sales, month-end, achievement vs the
-    # selected level, level reached). A complete month has one achievement
-    # tile (actual, no chip) and "Month complete" instead of a dash; the
-    # projection chip + early-estimate tag sit on the projected tiles.
-    return ui.kpi_grid(
-        ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
-                    compact=S.sp_sales_mtd_compact,
-                    exact=S.sp_sales_mtd_exact, sub=S.sp_sales_mtd_sub),
-        ui.kpi_tile("Month-end sales", S.sp_month_end,
-                    compact=S.sp_month_end_compact,
-                    exact=S.sp_month_end_exact, sub=S.sp_month_end_sub),
-        ui.kpi_tile(S.sp_l1_achievement_label, S.sp_l1_achievement,
-                    chip=_PROJ_CHIP, tag=S.sp_early_tag,
-                    tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub,
-                    id="sales-achievement"),
-        ui.kpi_tile("Level reached", S.sp_level,
-                    chip=(S.sp_level_chip, S.sp_level_chip_color),
-                    tag=S.sp_early_tag, tag_tip=S.sp_early_tip,
-                    sub=S.sp_level_sub, sub2=S.sp_level_sub2,
-                    id="sales-level"),
-        rx.cond(~S.sp_complete,
-                ui.kpi_tile(S.sp_mtd_achievement_label, S.sp_mtd_achievement,
-                            sub=S.sp_mtd_achievement_sub,
-                            id="sales-mtd-achievement")),
-        ui.kpi_tile(S.sp_needed_label, S.sp_needed,
-                    compact=S.sp_needed_compact, exact=S.sp_needed_exact,
-                    sub=S.sp_needed_sub, id="sales-needed"),
+# --- headline tiles: built per layout (a component is placed once) ---------
+def _sales_mtd() -> rx.Component:
+    return ui.kpi_tile("Sales MTD", S.sp_sales_mtd,
+                       compact=S.sp_sales_mtd_compact,
+                       exact=S.sp_sales_mtd_exact, sub=S.sp_sales_mtd_sub)
+
+
+def _month_end() -> rx.Component:
+    return ui.kpi_tile("Month-end sales", S.sp_month_end,
+                       compact=S.sp_month_end_compact,
+                       exact=S.sp_month_end_exact, sub=S.sp_month_end_sub)
+
+
+def _achievement() -> rx.Component:
+    # selected level's engine status chip (actual or "Projected: ...")
+    return ui.kpi_tile(S.sp_l1_achievement_label, S.sp_l1_achievement,
+                       chip=_PROJ_CHIP, tag=S.sp_early_tag,
+                       tag_tip=S.sp_early_tip, sub=S.sp_l1_achievement_sub,
+                       id="sales-achievement")
+
+
+def _level_reached() -> rx.Component:
+    return ui.kpi_tile("Level reached", S.sp_level,
+                       chip=(S.sp_level_chip, S.sp_level_chip_color),
+                       tag=S.sp_early_tag, tag_tip=S.sp_early_tip,
+                       sub=S.sp_level_sub, sub2=S.sp_level_sub2,
+                       id="sales-level")
+
+
+def _avg_day(md_span: str) -> rx.Component:
+    # last tile closes the row: full width on phones (2 columns)
+    return rx.box(
         ui.kpi_tile("Avg per reported day", S.sp_avg_day,
                     compact=S.sp_avg_day_compact,
                     exact=S.sp_avg_day_exact),
+        grid_column=rx.breakpoints(initial="span 2", md=md_span),
+        min_width="0", id="sales-avg-day",
+    )
+
+
+def _kpi_tiles() -> rx.Component:
+    # top row: the month-end story (sales, month-end, achievement vs the
+    # selected level, level reached). No empty slots at any width:
+    # complete month -> 5 tiles (5 columns; 2+2+1 wide on phones);
+    # incomplete -> 7 tiles (4 + 2 + avg x2; 2+2+2+1 wide on phones).
+    complete = ui.kpi_grid(
+        _sales_mtd(), _month_end(), _achievement(), _level_reached(),
+        _avg_day("auto"),
+        columns=rx.breakpoints(initial="2", md="5"),
+        id="sales-kpis",
+    )
+    incomplete = ui.kpi_grid(
+        _sales_mtd(), _month_end(), _achievement(), _level_reached(),
+        ui.kpi_tile(S.sp_mtd_achievement_label, S.sp_mtd_achievement,
+                    sub=S.sp_mtd_achievement_sub,
+                    id="sales-mtd-achievement"),
+        ui.kpi_tile(S.sp_needed_label, S.sp_needed,
+                    compact=S.sp_needed_compact, exact=S.sp_needed_exact,
+                    sub=S.sp_needed_sub, id="sales-needed"),
+        _avg_day("span 2"),
         columns=rx.breakpoints(initial="2", md="4"),
         id="sales-kpis",
     )
+    return rx.cond(S.sp_complete, complete, incomplete)
 
 
 def _basket() -> rx.Component:

@@ -260,7 +260,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         "status_label": "", "status_tip": "", "tooltip": "",
         "context": ("Projected "
                     + ops_charts.fmt_money_compact(proj_cents)
-                    + " · " + ops_charts.fmt_pct1(proj_ach)
+                    + " · " + ds.fmt_achievement(proj_ach, l1_status)
                     + " of Level 1" + level_text),
     }
     exp_status = e.total_expenses_status
@@ -361,7 +361,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["targets"] = [
         {"label": f"Level {i}",
          "target": ops_charts.fmt_money_compact(t),
-         "pct": ops_charts.fmt_pct1(s.achievement_by_level.get(name)),
+         "pct": ds.fmt_achievement(s.achievement_by_level.get(name),
+                                   s.status_by_level.get(name, "")),
          "progress": _bar(s.achievement_by_level.get(name)),
          "status": s.status_by_level.get(name, "Awaiting data"),
          "status_color": (ds.status_color(s.status_by_level.get(name, ""))
@@ -416,7 +417,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["cc"] = {  # kept for backward-compat with existing tests
         "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
         "achievement": ds.fmt_pct(s.mtd_achievement_l1),
-        "proj_achievement": ds.fmt_pct(proj_ach),
+        "proj_achievement": ds.fmt_achievement(proj_ach, l1_status),
         "paid": ds.fmt_rm(e.paid_cents),
         "days": f"{entered} / {dim}",
         "completion": completion,

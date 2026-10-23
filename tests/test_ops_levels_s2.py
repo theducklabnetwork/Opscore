@@ -315,11 +315,12 @@ class CompleteMonthTests(Fixture):
                          "Achievement vs Level 1")
         self.assertEqual(st.sp_l1_achievement, "130.0%")
         self.assertEqual(st.sp_l1_achievement_sub, "Gap RM 80,958.00")
-        self.assertEqual(st.sp_proj_status, "")              # no chip
-        self.assertEqual(st.sp_needed, "Month complete")
-        self.assertEqual(st.sp_needed_compact, "Month complete")
+        # S3: the engine status chip (actual: semantic colour)
+        self.assertEqual((st.sp_proj_status, st.sp_proj_color),
+                         ("Achieved", "green"))
+        # S3: no "Needed per remaining day" tile for a complete month
         for value in (st.sp_sales_mtd, st.sp_month_end, st.sp_l1_achievement,
-                      st.sp_level, st.sp_needed, st.sp_avg_day):
+                      st.sp_level, st.sp_avg_day):
             self.assertNotEqual(value, "—")
 
     def test_level3_selected(self):
@@ -330,9 +331,7 @@ class CompleteMonthTests(Fixture):
                          "Achievement vs Level 3")
         self.assertEqual(st.sp_l1_achievement, "108.3%")
         self.assertEqual(st.sp_l1_achievement_sub, "Gap RM 26,985.80")
-        self.assertEqual(st.sp_needed, "Month complete")
-        self.assertEqual(st.sp_needed_sub,
-                         "Level 3 required run-rate: RM 10,794")
+        self.assertEqual(st.sp_proj_status, "Achieved")
 
     def test_incomplete_month_has_both_achievement_tiles(self):
         self.october()
@@ -351,7 +350,7 @@ class LevelReachedSubLineTests(Fixture):
         st = self.sales("2026-09", compare="2")
         self.assertEqual(st.sp_level, "Level 3 of 4")      # unchanged
         self.assertEqual(st.sp_level_sub, "RM 0.30 short of Level 4")
-        self.assertEqual(st.sp_level_sub2, "100.0% of Level 4")
+        self.assertEqual(st.sp_level_sub2, "99.9% of Level 4")   # S3 floor
 
     def test_no_next_level_no_sub_line(self):
         self.september()

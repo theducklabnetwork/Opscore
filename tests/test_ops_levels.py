@@ -250,14 +250,11 @@ class SalesLevelTileTests(Fixture):
         st = self.sales("2026-09")
         self.assertEqual(st.sp_level, "Level 3 of 4")
         self.assertEqual(st.sp_level_sub, "RM 0.30 short of Level 4")
-        self.assertEqual(st.sp_level_sub2, "100.0% of Level 4")
+        # S3: a shortfall rounds down (99.99991% -> 99.9%)
+        self.assertEqual(st.sp_level_sub2, "99.9% of Level 4")
         self.assertEqual(st.sp_level_chip, "")          # actual: no chip
-        # complete: "Month complete" (never a bare dash); L1 run-rate kept
-        # (269,861 / 30 = 8,995.37)
-        self.assertEqual(st.sp_needed_label, "Needed per remaining day")
-        self.assertEqual(st.sp_needed, "Month complete")
-        self.assertEqual(st.sp_needed_sub,
-                         "Level 1 required run-rate: RM 8,995")
+        # complete: no "Needed per remaining day" tile (S3)
+        self.assertTrue(st.sp_complete)
         # pace chart: Level 1 + Actual + Levels 2-4, labelled
         names = [t.name for t in st.sp_fig_dark.data]
         self.assertEqual(names[2:], ["Level 2 pace", "Level 3 pace",
@@ -299,7 +296,9 @@ class SalesLevelTileTests(Fixture):
         self.assertEqual(st.sp_level, "Below Level 1")
         self.assertEqual(st.sp_level_chip, "Projected: below Level 1")
         self.assertEqual(st.sp_level_sub, "RM 14,000.00 short of Level 1")
-        self.assertEqual(st.sp_level_sub2, "93.0% of Level 1")
+        # S3: next level = the selected Level 1 -> shown in the
+        # achievement tile, not repeated here
+        self.assertEqual(st.sp_level_sub2, "")
         self.assertEqual(st.sp_needed_label,
                          "Needed per remaining day for Level 1")
         self.assertEqual(st.sp_needed, "RM 6,667")
