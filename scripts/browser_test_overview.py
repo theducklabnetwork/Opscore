@@ -94,25 +94,23 @@ def main() -> int:
 
         body = page.locator("body").inner_text()
         strip = page.locator("#pillar-strip").inner_text()
-        check("pillar strip: 4 pillars with statuses",
-              all(k in strip for k in ("Sales", "Expenses", "Manpower",
-                                       "Stock")))
-        check("pillar: engine status badge shown (e.g. Within/Achieved/Over)",
-              any(k in strip for k in ("Achieved", "Below target",
-                                       "Within budget", "Within target",
-                                       "Over target", "No target",
-                                       "No budget", "No payments yet")))
-        # the V4 Overview has no "command center" card: the same facts are
-        # in the pillar strip, the targets panel, the header line and At a
-        # glance
-        check("sales MTD, Level 1 target, days reported, open actions",
-              "Sales MTD" in strip
-              and "Level 1" in page.locator("#targets-panel").inner_text()
-              and "days reported" in body
-              and "Open actions" in page.locator("#at-a-glance").inner_text())
-        check("needs attention: seeded overdue actions shown",
+        check("pillar strip: Sales, Expenses, Salary Ratio, Stock Loss",
+              all(k in strip for k in ("Sales", "Expenses", "Salary Ratio",
+                                       "Stock Loss")))
+        check("pillar: no status chips or MTD wording on the tiles",
+              not any(k in strip for k in ("Achieved", "Within budget",
+                                           "Within target", "MTD")))
+        # D1: plain labels; no header line, no "days reported"
+        check("sales, Level 1 target, open actions; no days-reported line",
+              "Level 1" in page.locator("#targets-panel").inner_text()
+              and "days reported" not in body
+              and "Open Actions" in page.locator("#at-a-glance").inner_text())
+        check("titles: Sales Trend, Targets, Alerts, Summary",
+              all(k in body for k in ("Sales Trend", "Targets", "Alerts",
+                                      "Summary")))
+        check("alerts: seeded overdue actions shown",
               "overdue action" in body)
-        check("needs attention: unreported days (month in progress)",
+        check("alerts: unreported days (month in progress)",
               "unreported day" in body)
         check("pace chart rendered",
               page.locator("div.js-plotly-plot").count() >= 1)
