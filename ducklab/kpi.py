@@ -343,6 +343,15 @@ def pace_series(days: list[DailyInput], days_in_month: int,
     return out
 
 
+def level_pace_lines(targets: dict,
+                     days_in_month: int) -> list[tuple[int, list[int]]]:
+    """(level, cumulative budget pace per day in cents) for every distinct
+    configured level (distinct_level_targets) — the same run-rate x day
+    rule as pace_series' Level 1 budget."""
+    return [(level, [p["budget"] for p in pace_series([], days_in_month, t)])
+            for level, t in distinct_level_targets(targets)]
+
+
 def reported_total(values) -> Optional[int]:
     """SUM of reported values; None when nothing was reported (blank is
     not zero)."""
@@ -401,6 +410,80 @@ def sales_needed_per_remaining_day(
         return None
     remaining = Decimal(target_cents) - mtd_cents
     return max(Decimal(0), remaining / (days_in_month - entered))
+
+
+def level_names(targets: dict) -> list[str]:
+    """'level1'..'levelN' keys of a targets dict, in level order."""
+    return sorted((k for k in targets if k.startswith("level")),
+                  key=lambda k: int(k[5:]))
+
+
+def highest_level_achieved(
+    month_end_cents, targets: dict
+) -> tuple[Optional[int], Optional[int], Optional[Decimal]]:
+    """-> (highest level reached, next level, gap to next level in cents).
+
+    A level is reached when its sales_status is Achieved (same rule as the
+    target ladder; Level 4 keeps its min-RTM floor from
+    sales_target_levels_cents). ``targets`` is that dict, or a subset of
+    it (e.g. Level 1 only when no Level 2-4 uplift is set).
+    level: None when no level is reached. next: None when the top level is
+    reached or there is no target. gap: next target minus month-end
+    (exact, positive = short); None when either side is missing.
+    September 2026: 350,819 vs L4 350,819.30 -> (3, 4, Decimal('30')).
+    """
+    names = level_names(targets)
+    if not names or targets[names[0]] is None:
+        return None, None, None
+    reached = None
+    for name in names:
+        if sales_status(month_end_cents, targets[name]) == SALES_ACHIEVED:
+            reached = int(name[5:])
+    later = [n for n in names if reached is None or int(n[5:]) > reached]
+    if not later:
+        return reached, None, None
+    nxt = later[0]
+    gap = target_gap_cents(targets[nxt], month_end_cents)
+    return reached, int(nxt[5:]), gap
+
+
+def needed_per_remaining_day_for_level(
+    targets: dict, level: Optional[int], mtd_cents: int, entered: int,
+    days_in_month: int,
+) -> Optional[Decimal]:
+    """Daily Dashboard!H8 for any level: MAX(0, (level target - MTD) /
+    (days - entered)); None when complete, nothing entered, no such level
+    or no target (same formula as sales_needed_per_remaining_day)."""
+    if level is None:
+        return None
+    return sales_needed_per_remaining_day(
+        targets.get(f"level{level}"), mtd_cents, entered, days_in_month)
+
+
+def levels_configured(cfg: MonthConfig) -> bool:
+    """True when any Level 2-4 uplift is set. Without one the levels equal
+    Level 1 (base x (1 + 0)) and pages show Level 1 only."""
+    return bool(cfg.level2_pct or cfg.level3_pct or cfg.level4_pct)
+
+
+def shown_level_targets(cfg: MonthConfig, targets: dict) -> dict:
+    """The levels a page shows: all four, or Level 1 only when no
+    Level 2-4 uplift is set (levels_configured)."""
+    if levels_configured(cfg):
+        return dict(targets)
+    return {"level1": targets.get("level1")}
+
+
+def distinct_level_targets(targets: dict) -> list[tuple[int, Decimal]]:
+    """(level, target) for each set level whose target differs from every
+    lower level's — a level without an uplift (equal to Level 1) is not
+    listed twice (pace chart lines)."""
+    out: list[tuple[int, Decimal]] = []
+    for name in level_names(targets):
+        t = to_decimal(targets[name])
+        if t is not None and all(t != seen for _, seen in out):
+            out.append((int(name[5:]), t))
+    return out
 
 
 def spr_cents(sales_cents: int, transactions: int) -> Optional[Decimal]:

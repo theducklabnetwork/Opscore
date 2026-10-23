@@ -5,6 +5,8 @@ here. Identity from the server-side session; cleared on store/month switch.
 
 from __future__ import annotations
 
+from decimal import ROUND_CEILING
+
 import plotly.graph_objects as go
 import reflex as rx
 
@@ -52,6 +54,12 @@ class SalesState(StoresState):
     sp_needed_compact: str = "—"
     sp_needed_exact: str = "—"
     sp_needed_sub: str = ""
+    sp_needed_label: str = "Needed per remaining day"
+    # level reached (kpi.highest_level_achieved on the month-end figure)
+    sp_level: str = "—"
+    sp_level_sub: str = ""
+    sp_level_chip: str = ""                 # "Projected: Level 2" (incomplete)
+    sp_level_chip_color: str = "gray"
     sp_days: str = "—"
     sp_avg_day: str = "—"
     sp_avg_day_compact: str = "—"
@@ -98,6 +106,11 @@ class SalesState(StoresState):
         self.sp_l1_achievement = "—"
         self.sp_l1_achievement_sub = ""
         self.sp_needed_sub = ""
+        self.sp_needed_label = "Needed per remaining day"
+        self.sp_level = "—"
+        self.sp_level_sub = ""
+        self.sp_level_chip = ""
+        self.sp_level_chip_color = "gray"
         self.sp_days = "—"
         self.sp_proj_status = ""
         self.sp_proj_color = "gray"
@@ -201,19 +214,30 @@ class SalesState(StoresState):
             pstate, s.status_by_level.get("level1", "Awaiting data"))
         self.sp_early_tip = (ds.EARLY_ESTIMATE_TIP.format(n=entered, m=dim)
                              if self.sp_early_tag else "")
-        self._set_money("needed", s.needed_per_remaining_day)
+        # same rule as the Overview: without a Level 2-4 uplift the levels
+        # equal Level 1 (base x (1 + 0)) -> show Level 1 only + a note
+        cfg = rep.config
+        self.sp_levels_configured = kpi.levels_configured(cfg)
+        shown = kpi.shown_level_targets(cfg, s.targets)
+        level, nxt, gap = kpi.highest_level_achieved(
+            s.month_end_sales_cents, shown)
+        self._set_level(level, nxt, gap, len(shown), pstate,
+                        entered, shown.get("level1") is None)
+
+        # needed per remaining day: for the next level not yet reached
+        # (the Level 1 run-rate stays as the sub-line)
+        needed = kpi.needed_per_remaining_day_for_level(
+            shown, nxt, s.sales_mtd_cents, entered, dim)
+        self._set_money("needed", needed)
+        if nxt is not None and not complete:
+            self.sp_needed_label = f"Needed per remaining day for Level {nxt}"
         run_rate = s.required_daily_run_rate
-        self.sp_needed_sub = ("Required run-rate: "
+        self.sp_needed_sub = ("Level 1 required run-rate: "
                               + (_fmt_rm0(run_rate) if run_rate is not None
                                  else "No target"))
         self.sp_days = f"{entered} / {dim}"
         self._set_money("avg_day", s.average_per_day)
 
-        # same rule as the Overview: without a Level 2-4 uplift the levels
-        # equal Level 1 (base x (1 + 0)) -> show Level 1 only + a note
-        cfg = rep.config
-        self.sp_levels_configured = bool(cfg.level2_pct or cfg.level3_pct
-                                         or cfg.level4_pct)
         self.sp_ladder = [
             (lambda lbl, color, tag: {
              "level": f"Level {n}", "target": ds.fmt_rm(s.targets.get(name)),
@@ -263,11 +287,35 @@ class SalesState(StoresState):
         p_days = [p["day"] for p in pts]
         p_actual = [p["actual"] for p in pts]
         p_budget = [p["budget"] for p in pts]
+        levels = kpi.level_pace_lines(shown, dim)
         # y units live in the card subtitle (less chart clutter)
         self.sp_fig_dark = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                 dark=True, y_title="")
+                                                 dark=True, y_title="",
+                                                 levels=levels)
         self.sp_fig_light = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                  dark=False, y_title="")
+                                                  dark=False, y_title="",
+                                                  levels=levels)
+
+    def _set_level(self, level, nxt, gap, total: int, pstate: str,
+                   entered: int, no_target: bool) -> None:
+        """"Level reached" tile from kpi.highest_level_achieved."""
+        if no_target:
+            self.sp_level = "No target"
+            return
+        if not entered:
+            return
+        self.sp_level = (f"Level {level} of {total}" if level
+                         else "Below Level 1")
+        if pstate != "actual":
+            # "Projected: Level 2" — same amber chip as projection_style
+            self.sp_level_chip = ds.level_reached_text(level, pstate)
+            self.sp_level_chip_color = "amber"
+        if nxt is None:
+            self.sp_level_sub = "All levels reached"
+        elif gap is not None:
+            # a shortfall rounds up to the cent: never "RM 0.00 short"
+            short = int(gap.to_integral_value(ROUND_CEILING))
+            self.sp_level_sub = f"{ds.fmt_rm(short)} short of Level {nxt}"
 
     def _set_money(self, name: str, cents) -> None:
         """Whole-ringgit tile value + compact + exact (tooltip) variants."""

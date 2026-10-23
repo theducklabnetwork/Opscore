@@ -285,6 +285,14 @@ def projection_style(state: str, status: str) -> tuple[str, str, str]:
     return f"Projected: {status}", "amber", tag
 
 
+def level_reached_text(level, state: str) -> str:
+    """'Level 3 reached' for a complete month, else 'Projected: Level 2'
+    (level from kpi.highest_level_achieved; None = below Level 1)."""
+    if state == "actual":
+        return f"Level {level} reached" if level else "No level reached"
+    return f"Projected: Level {level}" if level else "Projected: below Level 1"
+
+
 def projection_label(state: str, label: str) -> str:
     """Card label for a figure derived from the month-end projection:
     unchanged when the month is complete, else marked projected / early
