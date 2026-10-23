@@ -78,7 +78,10 @@ def main() -> int:
         # Backend truth: MTD = 12,000 + 11,500 = RM 23,500.00
         check("live sales MTD correct",
               page.locator("text=RM 23,500.00").count() > 0)
-        check("live badge shown", page.locator("text=LIVE").count() > 0)
+        check("live mode selected (switch; no LIVE chip)",
+              page.locator("#report-mode [data-state='on']").inner_text()
+              == "Live"
+              and page.locator("text=LIVE —").count() == 0)
         check("expenses section renders",
               page.locator("#expenses-section").count() == 1)
         check("manpower section renders",
@@ -109,8 +112,10 @@ def main() -> int:
 
         page.click("#report-mode >> text=Finalized")
         page.wait_for_selector("text=Finalized version 1", timeout=20000)
-        check("finalized badge shown",
-              page.locator("text=FINALIZED").count() > 0)
+        check("finalized mode selected (switch; no FINALIZED chip)",
+              page.locator("#report-mode [data-state='on']").inner_text()
+              == "Finalized"
+              and page.locator("text=FINALIZED —").count() == 0)
         check("finalized MTD correct",
               page.locator("#sales-section >> text=RM 19,881.00").count() > 0)
         check("finalized version note shown", True)

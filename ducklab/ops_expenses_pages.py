@@ -88,22 +88,13 @@ def _budget_row(row) -> rx.Component:
 
 
 def _budget_amount() -> rx.Component:
-    # "×" clears a saved budget (same as the old "Clear saved value"
-    # checkbox); once cleared, "↺" undoes it before saving
+    # "×" clears a saved budget (replaces the "Clear saved value"
+    # checkbox); typing an amount undoes it before saving
     return rx.input(
-        rx.input.slot(
-            rx.cond(
-                E.b_clear,
-                rx.tooltip(rx.icon_button(
-                    rx.icon("undo-2", size=12), size="1", variant="ghost",
-                    color_scheme="gray", radius="full", type="button",
-                    on_click=E.set_b_clear(False), id="b-clear-undo",
-                    aria_label="Undo clear"), content="Undo"),
-                ui.clear_x(E.b_has_saved, E.clear_budget_x, id="b-clear"),
-            ),
-            side="right"),
-        value=E.b_amount, on_change=E.set_b_amount, input_mode="decimal",
-        id="b-amount", disabled=E.b_clear, width="100%",
+        ui.clear_x(E.b_has_saved & ~E.b_clear, E.clear_budget, id="b-clear"),
+        value=E.b_amount, on_change=E.set_b_amount,
+        placeholder=rx.cond(E.b_clear, "No budget", "Monthly budget (RM)"),
+        input_mode="decimal", id="b-amount", width="100%",
     )
 
 
@@ -118,6 +109,7 @@ def _budget_editor() -> rx.Component:
                               rx.select(E.category_names,
                                         value=E.b_category,
                                         on_change=E.set_b_category,
+                                        placeholder="Select category",
                                         id="b-category")),
                 ui.form_field("Budget (RM)", _budget_amount()),
                 rx.button(
@@ -168,6 +160,16 @@ def _budget_monitor() -> rx.Component:
 
 def _filters() -> rx.Component:
     return rx.hstack(
+        # one paid date, opened from a Daily Operations amount
+        rx.cond(
+            E.filter_paid_date != "",
+            rx.badge(E.filter_paid_label,
+                     rx.icon("x", size=12, cursor="pointer",
+                             on_click=E.clear_filter_paid_date,
+                             id="filter-paid-clear"),
+                     size="2", variant="soft", radius="full",
+                     id="filter-paid"),
+        ),
         rx.select(E.period_options, value=E.filter_period_label,
                   on_change=E.set_filter_period_label, id="filter-period"),
         rx.select(E.filter_category_options,

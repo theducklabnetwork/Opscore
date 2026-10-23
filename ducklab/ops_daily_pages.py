@@ -26,14 +26,16 @@ def _tile(label, value, id=None) -> rx.Component:
 
 def _kpi_summary() -> rx.Component:
     """Headline tiles. Achievement is MTD / Level 1. Projected Sales and
-    Projected Achievement only while the month is incomplete."""
+    Projected Achievement only while the month is incomplete. Expenses is
+    paid this month (paid date)."""
     sales = _tile("Sales", K["mtd"], id="kpi-mtd")
     achievement = _tile("Achievement", K["achievement"],
                         id="kpi-achievement")
     tail = [_tile("Daily Sales (Avg.)", K["avg_daily"]),
             _tile("Transactions", K["transactions"]),
             _tile("Units Sold", K["units"]),
-            _tile("Total Loss", K["loss"])]
+            _tile("Total Loss", K["loss"]),
+            _tile("Expenses", K["expenses"], id="kpi-expenses")]
     return rx.vstack(
         rx.cond(
             DailyState.month_finalized,
@@ -43,11 +45,10 @@ def _kpi_summary() -> rx.Component:
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
-        # rows fill at every width: complete 3 + 3, incomplete 4 + 4
+        # complete 4 + 3, incomplete 3 + 3 + 3
         rx.cond(
             K["complete"] == "1",
-            ui.kpi_grid(sales, achievement, *tail,
-                        columns=rx.breakpoints(initial="2", md="3")),
+            ui.kpi_grid(sales, achievement, *tail),
             ui.kpi_grid(
                 _tile("Sales", K["mtd"], id="kpi-mtd"),
                 _tile("Achievement", K["achievement"], id="kpi-achievement"),
@@ -58,6 +59,8 @@ def _kpi_summary() -> rx.Component:
                 _tile("Transactions", K["transactions"]),
                 _tile("Units Sold", K["units"]),
                 _tile("Total Loss", K["loss"]),
+                _tile("Expenses", K["expenses"], id="kpi-expenses"),
+                columns=rx.breakpoints(initial="2", md="3"),
             ),
         ),
         spacing="4", width="100%", id="daily-kpis",
@@ -66,7 +69,10 @@ def _kpi_summary() -> rx.Component:
 
 _COLS = ["Date", ("Sales", True), ("Trans.", True), ("Units", True),
          ("SPR", True), ("UPT", True), ("ASP", True), ("Staff", True),
-         ("Sales per Staff", True), ("Stock Loss", True), "Status", ""]
+         # Sales per Staff (also on Manpower) hides at 768-1535px so the
+         # table fits beside Expenses
+         ("Sales per Staff", True, True), ("Stock Loss", True),
+         ("Expenses", True), "Status", ""]
 
 
 def _day_row(row) -> rx.Component:
@@ -82,9 +88,16 @@ def _day_row(row) -> rx.Component:
         ui.td(row["upt"], numeric=True),
         ui.td(row["asp"], numeric=True),
         ui.td(row["staff"], numeric=True),
-        ui.td(row["sales_per_staff"], numeric=True),
+        ui.td(row["sales_per_staff"], numeric=True, xl_only=True),
         ui.td(rx.cond(row["loss_missing"] == "1",
                       rx.text("—", color=ds.TEXT_FAINT), row["loss"]),
+              numeric=True),
+        # read-only: paid that day; opens Expenses filtered to the date
+        ui.td(rx.cond(row["expenses"] == "—",
+                      rx.text("—", color=ds.TEXT_FAINT),
+                      rx.link(row["expenses"],
+                              href="/ops/expenses?paid=" + row["iso"],
+                              class_name="day-expenses")),
               numeric=True),
         ui.td(ui.status_chip(row["status"], row["status_color"])),
         ui.td(
@@ -243,6 +256,15 @@ def _stock_section() -> rx.Component:
     )
 
 
+def _expenses_line() -> rx.Component:
+    # read-only: expenses are entered on the Expenses page
+    return ui.form_section(
+        "Expenses",
+        extra=rx.text(DailyState.form_expenses, size="2", weight="medium",
+                      color=ds.TEXT, id="entry-expenses"),
+    )
+
+
 def _entry_dialog() -> rx.Component:
     """Centered daily entry dialog (kit pattern: pinned header + footer,
     only the sections scroll)."""
@@ -250,6 +272,7 @@ def _entry_dialog() -> rx.Component:
         _sales_section(),
         _manpower_section(),
         _stock_section(),
+        _expenses_line(),
         open=DailyState.form_open,
         on_open_change=lambda v: DailyState.close_entry(),
         title=DailyState.form_title,

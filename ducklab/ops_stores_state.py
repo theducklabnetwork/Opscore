@@ -697,8 +697,20 @@ class StoresState(StockState):
 
     @rx.event
     def set_budget_value(self, category_id: str, value: str) -> None:
+        # typing an amount undoes the ×
         self.budget_rows = [
-            {**r, "value": value} if r["id"] == category_id else r
+            {**r, "value": value,
+             "clear": "" if value.strip() else r.get("clear", "")}
+            if r["id"] == category_id else r
+            for r in self.budget_rows
+        ]
+
+    @rx.event
+    def clear_budget(self, category_id: str) -> None:
+        """× beside a saved budget: blank it; save writes NULL."""
+        self.budget_rows = [
+            {**r, "value": "", "clear": "1"} if r["id"] == category_id
+            else r
             for r in self.budget_rows
         ]
 
@@ -714,11 +726,10 @@ def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
     """Budget rows -> (updates, errors); pure, so it is testable.
 
     updates = {category_id: cents | None} only for rows the user changed.
-    A ticked "Clear saved value" writes NULL ("No budget"), never 0.
-    Ticking it AND typing a different amount is rejected (nothing saved
-    for that row). Untouched rows send nothing. Blanking a saved budget
-    WITHOUT ticking the checkbox is rejected (a missing budget is distinct
-    from RM 0)."""
+    Cleared with × writes NULL ("No budget"), never 0. Cleared AND a
+    different amount typed is rejected (nothing saved for that row).
+    Untouched rows send nothing. Blanking a saved budget WITHOUT the × is
+    rejected (a missing budget is distinct from RM 0)."""
     updates: dict[int, Optional[int]] = {}
     errors: list[str] = []
     for row in rows:
@@ -735,8 +746,8 @@ def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
             continue
         if raw == "":
             errors.append(
-                f"Budget for {row['name']}: enter a budget amount, or tick "
-                "“Clear saved value” to remove it (No budget).")
+                f"Budget for {row['name']}: enter a budget amount, or use "
+                "× to clear it (No budget).")
             continue
         try:
             cents = kpi.parse_money_cents(raw)

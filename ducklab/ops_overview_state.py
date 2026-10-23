@@ -60,7 +60,7 @@ class OverviewState(ActionsState):
 
     # sales targets panel: [{label, target, pct, progress, status, ...}]
     targets: list[dict] = []
-    targets_title: str = "Sales targets"
+    targets_title: str = "Targets"
     targets_extra: list[dict[str, str]] = []
     levels_missing: str = ""
 
@@ -98,7 +98,7 @@ class OverviewState(ActionsState):
         self.pace_fig_light = go.Figure()
         self.pace_has_data = False
         self.targets = []
-        self.targets_title = "Sales targets"
+        self.targets_title = "Targets"
         self.targets_extra = []
         self.levels_missing = ""
         self.glance = []
@@ -244,7 +244,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                   if sales_reported and l1 is not None else "")
     out["pill_sales"] = {
         "reported": "1" if sales_reported else "",
-        "value": ops_charts.fmt_money_compact(s.sales_mtd_cents),
+        "value": ds.fmt_rm0(s.sales_mtd_cents),   # full value on the tile
         "title": ds.fmt_rm(s.sales_mtd_cents),
         "mtd_pct": mtd_pct,
         "proj_pct": proj_pct,
@@ -272,7 +272,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     exp_reported = paid_count > 0
     out["pill_expenses"] = {
         "reported": "1" if exp_reported else "",
-        "value": ops_charts.fmt_money_compact(e.paid_cents),
+        "value": ds.fmt_rm0(e.paid_cents),        # full value on the tile
         "title": ds.fmt_rm(e.paid_cents),
         "progress": _bar(kpi.budget_utilization(e.paid_cents,
                                                 e.total_budget_cents)),
@@ -356,8 +356,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     # values (base x (1 + 0)) and gets the "Levels 2-4 missing" chip.
     level_names = ("level1", "level2", "level3", "level4")
     out["levels_missing"] = "1" if kpi.levels_missing(cfg) else ""
-    out["targets_title"] = ("Projected month-end vs targets" if not complete
-                            else "Sales targets")
+    out["targets_title"] = "Targets"
     out["targets"] = [
         {"label": f"Level {i}",
          "target": ops_charts.fmt_money_compact(t),
@@ -374,14 +373,16 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
         for i, name in enumerate(level_names, 1)
         for t in [s.targets.get(name)]
     ]
-    # run-rate / needed per remaining day live in the targets panel
+    # Level 1 run-rate ("Daily Target") and needed per remaining day
+    # ("Required Daily Sales") live in the targets panel; both are hidden
+    # once the month is complete
     rr = s.required_daily_run_rate
     nd = s.needed_per_remaining_day
-    out["targets_extra"] = [
-        {"label": "Required daily run-rate",
+    out["targets_extra"] = [] if complete else [
+        {"label": "Daily Target",
          "value": ops_charts.fmt_money_compact(rr),
          "title": ds.fmt_rm0(rr)},
-        {"label": "Needed per remaining day",
+        {"label": "Required Daily Sales",
          "value": ops_charts.fmt_money_compact(nd),
          "title": ds.fmt_rm0(nd)},
     ]
@@ -392,23 +393,18 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     visible = kpi.actions_in_month_scope(actions, month)
     acounts = kpi.action_counts([a.input for a in visible], as_of=as_of)
     avg = s.average_per_day
+    # full values ("RM 10,800.00"), never the short form
     glance_pairs = [
-        ("Average per reported day",
-         ops_charts.fmt_money_compact(avg), ds.fmt_rm0(avg), "/ops/sales"),
+        ("Daily Sales (Avg.)",
+         ds.fmt_rm(int(avg) if avg is not None else None), "", "/ops/sales"),
     ]
     if exp_reported:
         glance_pairs += [
-            ("Incurred expenses",
-             ops_charts.fmt_money_compact(e.incurred_cents),
-             ds.fmt_rm(e.incurred_cents), "/ops/expenses"),
-            ("Open expenses",
-             ops_charts.fmt_money_compact(e.open_cents),
-             ds.fmt_rm(e.open_cents), "/ops/expenses"),
-            ("Expense lines to review", str(needs_review), "",
-             "/ops/expenses"),
+            ("Incurred", ds.fmt_rm(e.incurred_cents), "", "/ops/expenses"),
+            ("Unpaid", ds.fmt_rm(e.open_cents), "", "/ops/expenses"),
         ]
     glance_pairs += [
-        ("Open actions", str(kpi.open_actions(acounts)), "", "/ops/actions"),
+        ("Open Actions", str(kpi.open_actions(acounts)), "", "/ops/actions"),
     ]
     out["glance"] = [
         {"label": label, "value": value, "title": title, "href": href}
@@ -462,8 +458,8 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
                       "href": "/ops/stock"})
     if not complete and in_progress:
         items.append({"icon": "calendar-clock",
-                      "text": f"{dim - entered} unreported day(s) — "
-                              "month still in progress",
+                      "text": (f"{dim - entered} unreported day"
+                               + ("" if dim - entered == 1 else "s")),
                       "href": "/ops/daily"})
     out["attention"] = items
 
@@ -475,10 +471,13 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     p_budget = [p["budget"] for p in pace]
     out["pace_has_data"] = any(v is not None for v in p_actual)
     levels = kpi.level_pace_lines(s.targets, dim)
+    # no axis title: the card title ("Sales Trend") says it
     out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                 dark=True, levels=levels)
+                                                 dark=True, y_title="",
+                                                 levels=levels)
     out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                  dark=False, levels=levels)
+                                                  dark=False, y_title="",
+                                                  levels=levels)
 
     # sparklines: raw daily sales (RM) and per-day Total Loss (RM),
     # same gap rules as daily_line — no new aggregation.
