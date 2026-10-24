@@ -685,7 +685,8 @@ def incurred_count_in_month(
     for e in expenses:
         if e.store_id != store_id:
             continue
-        if incurred_value_cents(e) and _in_month(e.incurred_date, month):
+        if e.status not in (None, "Cancelled") and _is_core_valid(e) \
+                and _in_month(e.incurred_date, month):
             n += 1
     return n
 
@@ -703,7 +704,8 @@ def pending_count(
     on or before month end (same per-line rule as Register column N)."""
     _, month_end, _ = month_bounds(month)
     return sum(1 for e in expenses
-               if e.store_id == store_id and pending_value_cents(e)
+               if e.store_id == store_id and e.status == "Pending"
+               and _is_core_valid(e)
                and _pending_in_scope(e, month_end))
 
 
@@ -777,7 +779,8 @@ def paid_count_in_month(
     for e in expenses:
         if e.store_id != store_id:
             continue
-        if paid_value_cents(e) and _in_month(e.paid_date, month):
+        if e.status == "Paid" and e.paid_date is not None \
+                and _is_core_valid(e) and _in_month(e.paid_date, month):
             count += 1
     return count
 

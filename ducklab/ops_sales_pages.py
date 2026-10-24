@@ -295,9 +295,6 @@ def _daily_table() -> rx.Component:
                 style=_DAILY_TIGHT, width="100%", min_width="0"),
             ui.empty_state("No Records", icon="calendar"),
         ),
-        ui.note("Targets split Level 1 by the Daily Sales Contribution for "
-                "the store's State and Concept; a shortfall carries to the "
-                "next reported day."),
         title="Daily Sales", id="sales-daily-section",
     )
 

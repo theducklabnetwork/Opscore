@@ -189,8 +189,38 @@ CREATE TABLE monthly_snapshots (
 """
 
 
-def connect(db_path: Path | str = DB_PATH) -> sqlite3.Connection:
-    """Open a connection with foreign keys enforced on every connection."""
+class _SharedConnection:
+    """Non-owning connection used inside an AppService transaction.
+
+    Repository commits, rollbacks, closes and nested BEGINs are left to the
+    transaction owner. Statement errors still propagate to that owner.
+    """
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def execute(self, sql: str, *args):
+        if sql.strip().upper().startswith(("BEGIN", "COMMIT", "ROLLBACK")):
+            return None
+        return self._conn.execute(sql, *args)
+
+    def commit(self) -> None:
+        pass
+
+    def rollback(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def connect(db_path: Path | str | sqlite3.Connection = DB_PATH) -> sqlite3.Connection:
+    """Open a foreign-key-enabled connection, or share a transaction's one."""
+    if isinstance(db_path, sqlite3.Connection):
+        return _SharedConnection(db_path)
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

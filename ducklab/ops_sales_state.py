@@ -5,7 +5,7 @@ here. Identity from the server-side session; cleared on store/month switch.
 
 from __future__ import annotations
 
-from decimal import ROUND_CEILING
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 
 import plotly.graph_objects as go
 import reflex as rx
@@ -440,7 +440,8 @@ class SalesState(StoresState):
 
     def _set_money(self, name: str, cents) -> None:
         """Whole-ringgit tile value + compact + exact (tooltip) variants."""
-        cents = None if cents is None else int(cents)
+        cents = (None if cents is None else
+                 int(Decimal(cents).to_integral_value(rounding=ROUND_HALF_UP)))
         setattr(self, f"sp_{name}", ds.fmt_rm0(cents))
         setattr(self, f"sp_{name}_compact",
                 ds.fmt_rm_compact(cents, whole_below=True))
@@ -454,7 +455,8 @@ class SalesState(StoresState):
         if gap is None:
             return "—"
         sign = "" if gap >= 0 else "−"
-        return f"{sign}{ds.fmt_rm(abs(int(gap)))}"
+        rounded_gap = abs(gap.to_integral_value(rounding=ROUND_HALF_UP))
+        return f"{sign}{ds.fmt_rm(rounded_gap)}"
 
     def _daily_rows(self, days, month: str, cfg, shares: dict,
                     holidays: set, targets) -> list[dict[str, str]]:

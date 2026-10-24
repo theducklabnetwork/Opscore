@@ -1,29 +1,20 @@
-# Placement Tracker Dashboard
+# DuckLab
 
-A Reflex work dashboard for a support team that works at one store at a time for about a month, then writes a monthly report.
+DuckLab is a Reflex web application for store operations monitoring. It tracks
+sales targets, daily activity, expenses, manpower, stock losses, and corrective
+actions by store and month, with role-based access and versioned monthly reports.
 
-## Features
-
-- **Dashboard** — KPI cards (active placements, open tasks, open issues), tasks-by-status pie chart, upcoming tasks list.
-- **Placements** — table of all store placements with dates and status.
-- **Tasks** — table of all tasks with store, due date, and status.
-- **Monthly Report** — pick a month, view the summary, copy it with one click.
-
-Dark mode first with a light/dark toggle (top-right). Sidebar navigation on desktop, top links on mobile. Data lives in SQLite (`ducklab/placement_tracker.db`) via plain `sqlite3` in `ducklab/db.py`, seeded with sample data on first run.
-
-## Requirements
-
-- Python 3.14+ with `venv`
-- Node.js 20+
+Data is stored in SQLite. Set `DUCKLAB_DB_PATH` to choose the operations database.
+Money is stored as integer cents, and blank values remain distinct from zero.
 
 ## Setup
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install reflex
-```
+Requires Python 3.14+ and Node.js 20+.
 
-(The project was scaffolded with `reflex init --template blank`.)
+```bash
+uv venv --python 3.14 .venv
+uv pip install --python .venv/bin/python -r requirements.lock -r requirements-dev.txt
+```
 
 ## Run
 
@@ -31,12 +22,20 @@ python3 -m venv .venv
 .venv/bin/reflex run
 ```
 
-Then open http://localhost:3000 (frontend) — the backend API runs on http://localhost:8000.
+The frontend runs on http://localhost:3000 and the backend on
+http://localhost:8000. Bootstrap the first administrator before signing in.
 
-To run only the backend or frontend: `reflex run --backend-only` / `reflex run --frontend-only`.
+## Tests
+
+```bash
+.venv/bin/python -m pytest tests/ -q
+```
 
 ## Structure
 
-- `ducklab/ducklab.py` — app, state, pages, theme
-- `ducklab/db.py` — SQLite schema, seed data, queries
-- `rxconfig.py` — Reflex config
+- `ducklab/ducklab.py` — Reflex application and route registration
+- `ducklab/kpi.py` — business calculations
+- `ducklab/ops_*` — operational pages, state, and charts
+- `ducklab/store_ops_db.py` — SQLite schema and migrations
+- `scripts/` — import, development seed, and browser-check utilities
+- `deploy/` — release and operator tooling

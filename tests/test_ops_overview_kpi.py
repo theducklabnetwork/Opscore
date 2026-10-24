@@ -79,6 +79,24 @@ class TotalExpensesStatusTests(unittest.TestCase):
         exps = [paid_exp(200), paid_exp(-200), pending_exp(10)]
         self.assertEqual(kpi.paid_count_in_month(exps, "2026-10", 1), 2)
 
+    def test_zero_value_lines_count_as_entered(self):
+        exps = [paid_exp(0), pending_exp(0)]
+        self.assertEqual(kpi.paid_count_in_month(exps, "2026-10", 1), 1)
+        self.assertEqual(kpi.incurred_count_in_month(exps, "2026-10", 1), 2)
+        self.assertEqual(kpi.pending_count(exps, "2026-10", 1), 1)
+        self.assertEqual(
+            kpi.expense_totals_cents(exps, "2026-10", 1),
+            {"paid": 0, "incurred": 0, "open": 0})
+        self.assertEqual(
+            kpi.total_expenses_status(exps, "2026-10", 1, 0, None),
+            "No budget")
+
+    def test_none_amount_is_not_entered(self):
+        line = paid_exp(0)
+        line.amount_cents = None
+        self.assertEqual(kpi.paid_count_in_month([line], "2026-10", 1), 0)
+        self.assertEqual(kpi.incurred_count_in_month([line], "2026-10", 1), 0)
+
 
 class MtdAchievementTests(unittest.TestCase):
     def test_mtd_vs_projected_exact_numbers(self):
