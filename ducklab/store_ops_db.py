@@ -189,6 +189,14 @@ CREATE TABLE monthly_snapshots (
 """
 
 
+_TRANSACTION_STATES = {}
+
+
+class _TransactionState:
+    def __init__(self):
+        self.failed = False
+
+
 class _SharedConnection:
     """Non-owning connection used inside an AppService transaction.
 
@@ -196,14 +204,19 @@ class _SharedConnection:
     transaction owner. Statement errors still propagate to that owner.
     """
 
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, state=None):
         self._conn = conn
+        self._state = _TransactionState() if state is None else state
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
 
     def execute(self, sql: str, *args):
-        if sql.strip().upper().startswith(("BEGIN", "COMMIT", "ROLLBACK")):
+        statement = sql.strip().upper()
+        if statement == "ROLLBACK" or statement.startswith("ROLLBACK;"):
+            self.rollback()
+            return None
+        if statement.startswith(("BEGIN", "COMMIT")):
             return None
         return self._conn.execute(sql, *args)
 
@@ -211,7 +224,7 @@ class _SharedConnection:
         pass
 
     def rollback(self) -> None:
-        pass
+        self._state.failed = True
 
     def close(self) -> None:
         pass
@@ -220,7 +233,7 @@ class _SharedConnection:
 def connect(db_path: Path | str | sqlite3.Connection = DB_PATH) -> sqlite3.Connection:
     """Open a foreign-key-enabled connection, or share a transaction's one."""
     if isinstance(db_path, sqlite3.Connection):
-        return _SharedConnection(db_path)
+        return _SharedConnection(db_path, _TRANSACTION_STATES.get(db_path))
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

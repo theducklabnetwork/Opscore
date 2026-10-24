@@ -141,6 +141,50 @@ class TestImportScript(unittest.TestCase):
                     "FROM daily_stock_losses").fetchall(),
                     [(record_id, "DMO", 70)])
 
+    def test_transaction_restores_all_service_db_paths(self):
+        """Services remain usable with their original paths after a failure."""
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            services = (app.read_repo, app.write.repo, app.auth,
+                        app.snapshots, app.snapshots.repo)
+            with self.assertRaisesRegex(RuntimeError, "stop import"):
+                with app.transaction():
+                    self.assertTrue(all(s._db_path is not db for s in services))
+                    raise RuntimeError("stop import")
+            self.assertEqual([s._db_path for s in services], [db] * 5)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            sid = app.register_store(admin, "AFTER", "Usable after rollback")
+            self.assertEqual(app.read_repo.get_store(sid).code, "AFTER")
+
+    def test_inner_rollback_prevents_commit_without_exception(self):
+        """A swallowed repository error cannot commit earlier writes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            original_create = app.write.repo.create_store
+
+            def fail_after_write(*args, **kwargs):
+                store_id = original_create(*args, **kwargs)
+                app.write.repo._connect().rollback()
+                return store_id
+
+            with mock.patch.object(
+                    app.write.repo, "create_store", side_effect=fail_after_write):
+                with app.transaction():
+                    app.register_store(admin, "UNDO", "Must roll back")
+            self.assertEqual([s._db_path for s in
+                              (app.read_repo, app.write.repo, app.auth,
+                               app.snapshots, app.snapshots.repo)], [db] * 5)
+            with self.assertRaises(Exception) as ctx:
+                app.read_repo.get_store_by_code("UNDO")
+            self.assertIn("Unknown store code", str(ctx.exception))
+
     def test_blank_vs_zero_import_rule(self):
         """Typed 0 is stored as 0; a blank cell stays NULL."""
         with tempfile.TemporaryDirectory() as tmp:

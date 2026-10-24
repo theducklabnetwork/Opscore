@@ -196,7 +196,6 @@ def _require_database(db_path: Path) -> None:
 def do_import(db_path: Path, wb_path: Path, replace: bool) -> dict:
     _require_database(db_path)
     from ducklab.app_service import AppService
-    from ducklab.operations_write_repository import DuplicateRecordError
 
     data = read_workbook(wb_path)
     month = data["month"]
@@ -208,13 +207,15 @@ def do_import(db_path: Path, wb_path: Path, replace: bool) -> dict:
         # Concept is a dropdown now: an outside value is not imported
         from ducklab.operations_write_repository import CONCEPTS
         concept = {"concept": st["concept"]} if st["concept"] in CONCEPTS else {}
-        try:
-            sid = app.register_store(admin, st["code"], st["name"] or st["code"],
-                                     **concept, zone=st["zone"],
-                                     zone_pic=st["zone_pic"],
-                                     branch_manager=st["branch_manager"])
-        except DuplicateRecordError:
-            sid = app.read_repo.get_store_by_code(st["code"]).id
+        existing = next((store for store in app.list_my_stores(admin)
+                         if store["code"] == st["code"]), None)
+        if existing is None:
+            sid = app.register_store(
+                admin, st["code"], st["name"] or st["code"],
+                **concept, zone=st["zone"], zone_pic=st["zone_pic"],
+                branch_manager=st["branch_manager"])
+        else:
+            sid = existing["id"]
             app.update_store_details(
                 admin, sid, name=st["name"] or st["code"], **concept,
                 zone=st["zone"], zone_pic=st["zone_pic"],
@@ -230,11 +231,10 @@ def do_import(db_path: Path, wb_path: Path, replace: bool) -> dict:
 
         cat_ids = {}
         for name, budget, order in data["budgets"]:
-            try:
+            cid = next((c.id for c in app.get_expense_categories(admin, sid)
+                        if c.name == name), None)
+            if cid is None:
                 cid = app.add_expense_category(admin, sid, name, sort_order=order)
-            except DuplicateRecordError:
-                cid = next(c.id for c in app.get_expense_categories(admin, sid)
-                           if c.name == name)
             cat_ids[name] = cid
             app.set_expense_budget(admin, sid, month, cid, budget)
 
