@@ -173,10 +173,10 @@ class ActionFixture(unittest.TestCase):
             "'2026-10-31')")
         conn.commit()
         conn.close()
-        store_ops_db.init_db(v1db)          # migrate 1 -> 2
+        store_ops_db.init_db(v1db)          # migrate 1 -> 2 -> latest
         conn = sqlite3.connect(v1db)
         ver = conn.execute("PRAGMA user_version").fetchone()[0]
-        self.assertEqual(ver, 2)
+        self.assertEqual(ver, store_ops_db.SCHEMA_VERSION)
         row = conn.execute("SELECT issue, created_by FROM actions").fetchone()
         self.assertEqual(row[0], "Legacy action")
         self.assertIsNone(row[1])           # old rows: NULL audit data

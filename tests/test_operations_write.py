@@ -41,13 +41,13 @@ class WriteFixture(unittest.TestCase):
 
 class TestStoreWrites(WriteFixture):
     def test_create_and_update(self):
-        sid = self.svc.register_store("ZI68", "SLP", concept="DIY", zone="KV4")
+        sid = self.svc.register_store("ZI68", "SLP", concept="Mall", zone="KV4")
         s = self.r.get_store(sid)
         self.assertEqual((s.code, s.name, s.active), ("ZI68", "SLP", True))
         self.svc.update_store_details(sid, zone="KV5", branch_manager="NEW BM")
         s = self.r.get_store(sid)
         self.assertEqual((s.zone, s.branch_manager, s.concept),
-                         ("KV5", "NEW BM", "DIY"))  # partial update preserved concept
+                         ("KV5", "NEW BM", "Mall"))  # partial update preserved concept
 
     def test_duplicate_code_rejected(self):
         self.svc.register_store("ZI68", "SLP")

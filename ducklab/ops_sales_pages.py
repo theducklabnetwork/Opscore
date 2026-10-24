@@ -168,9 +168,23 @@ def _target_ladder() -> rx.Component:
     )
 
 
-_DAILY_COLS = ["Date", ("Sales", True), ("Transactions", True),
-               ("Units", True), ("SPR", True), ("UPT", True), ("ASP", True),
-               ("Variance", True), "Status", ""]
+_DAILY_COLS = ["Date", "PH", ("Contribution", True), ("Target", True),
+               ("Adjusted Target", True), ("Sales", True),
+               ("Transactions", True), ("SPR", True), ("IPR", True),
+               "Result", ""]
+
+
+def _pct_cell(value, pct, neg) -> rx.Component:
+    # figure with its % vs target beside it, red when below target
+    return ui.td(
+        rx.hstack(
+            rx.text(value),
+            rx.cond(pct != "—",
+                    rx.text(pct, size="1",
+                            color=rx.cond(neg == "1", ds.ERROR,
+                                          ds.TEXT_MUTED))),
+            spacing="2", align="baseline", justify="end"),
+        numeric=True)
 
 
 def _daily_row(row) -> rx.Component:
@@ -179,36 +193,48 @@ def _daily_row(row) -> rx.Component:
                         rx.text(row["weekday"], size="1",
                                 color=ds.TEXT_FAINT),
                         spacing="2", align="baseline")),
+        ui.td(rx.cond(row["ph"] != "", ui.status_chip(row["ph"], "violet"))),
+        ui.td(row["contribution"], numeric=True),
+        ui.td(row["target"], numeric=True),
+        ui.td(row["adjusted"], numeric=True),
         ui.td(row["sales"], numeric=True),
-        ui.td(row["transactions"], numeric=True),
-        ui.td(row["units"], numeric=True),
-        ui.td(row["spr"], numeric=True),
-        ui.td(row["upt"], numeric=True),
-        ui.td(row["asp"], numeric=True),
-        ui.td(row["vs_budget"], numeric=True),
-        ui.td(ui.status_chip(row["status"], row["status_color"])),
+        _pct_cell(row["transactions"], row["txn_pct"], row["txn_pct_neg"]),
+        _pct_cell(row["spr"], row["spr_pct"], row["spr_pct_neg"]),
+        _pct_cell(row["ipr"], row["ipr_pct"], row["ipr_pct_neg"]),
+        ui.td(rx.cond(row["result"] != "",
+                      ui.status_chip(row["result"], row["result_color"]))),
         ui.td(rx.link("Edit", href="/ops/daily?date=" + row["iso"],
                       size="2")),
         id="sales-row-" + row["iso"],
     )
 
 
+# eleven columns: tighter cells from tablet up so Result stays clear of
+# the pinned Edit column at 1440px (phones keep the kit's own padding)
+_DAILY_TIGHT = {"@media (min-width: 640px)": {
+    "& table th, & table td": {"paddingLeft": "8px", "paddingRight": "8px"}}}
+
+
 def _daily_table() -> rx.Component:
     return ui.section_card(
         rx.cond(
             S.sp_rows.length() > 0,
-            ui.data_table(
-                _DAILY_COLS,
-                *ui.day_rows(S.sp_rows, S.sp_rows_reported,
-                             S.sp_hidden_count, S.sp_hidden_label,
-                             S.sp_show_hidden, S.toggle_hidden_days,
-                             _daily_row, len(_DAILY_COLS),
-                             toggle_id="sales-hidden-toggle"),
-                phone=("Date", "Sales", "Status", ""),
-            ),
+            rx.box(
+                ui.data_table(
+                    _DAILY_COLS,
+                    *ui.day_rows(S.sp_rows, S.sp_rows_reported,
+                                 S.sp_hidden_count, S.sp_hidden_label,
+                                 S.sp_show_hidden, S.toggle_hidden_days,
+                                 _daily_row, len(_DAILY_COLS),
+                                 toggle_id="sales-hidden-toggle"),
+                    phone=("Date", "Sales", "Result", ""),
+                ),
+                style=_DAILY_TIGHT, width="100%", min_width="0"),
             ui.empty_state("No Records", icon="calendar"),
         ),
-        ui.status_legend(),
+        ui.note("Targets split Level 1 by the Daily Sales Contribution for "
+                "the store's State and Concept; a shortfall carries to the "
+                "next reported day."),
         title="Daily Sales", id="sales-daily-section",
     )
 

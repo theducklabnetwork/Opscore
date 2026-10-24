@@ -7,8 +7,10 @@ import reflex as rx
 from ducklab import design as ds
 from ducklab import ui
 from ducklab.ops_shell import shell
+from ducklab.operations_write_repository import CONCEPTS, STATES
 from ducklab.ops_stores_state import (
-    SETUP_MANPOWER, SETUP_PAYROLL, SETUP_SALES, SETUP_STOCK, StoresState,
+    SETUP_DAILY, SETUP_MANPOWER, SETUP_PAYROLL, SETUP_SALES, SETUP_STOCK,
+    StoresState,
 )
 
 S = StoresState
@@ -22,6 +24,7 @@ def _store_row(row) -> rx.Component:
         ui.td(rx.text(row["code"], weight="medium")),
         ui.td(row["name"]),
         ui.td(row["concept"]),
+        ui.td(row["state"]),
         ui.td(row["zone"]),
         ui.td(row["zone_pic"]),
         ui.td(row["branch_manager"]),
@@ -50,7 +53,7 @@ def _stores_table() -> rx.Component:
         rx.cond(
             S.store_rows.length() > 0,
             ui.data_table(
-                ["Code", "Name", "Concept", "Zone", "Zone PIC",
+                ["Code", "Name", "Concept", "State", "Zone", "Zone PIC",
                  "Branch manager", "Status", "Actions"],
                 rx.foreach(S.store_rows, _store_row),
                 phone=("Code", "Status", "Actions"),
@@ -83,8 +86,17 @@ def _store_form_dialog() -> rx.Component:
                           "e.g. A01", required=True),
                 _sf_field("Name", S.sf_name, S.set_sf_name, "sf-name",
                           required=True),
-                _sf_field("Concept", S.sf_concept, S.set_sf_concept,
-                          "sf-concept"),
+                ui.form_field(
+                    "Concept",
+                    rx.select(list(CONCEPTS), value=S.sf_concept,
+                              on_change=S.set_sf_concept,
+                              placeholder="Select…", id="sf-concept"),
+                    hint=S.sf_concept_hint),
+                ui.form_field(
+                    "State",
+                    rx.select(list(STATES), value=S.sf_state,
+                              on_change=S.set_sf_state,
+                              placeholder="Select…", id="sf-state")),
             ),
         ),
         ui.form_section(
@@ -187,6 +199,35 @@ def _levels_panel() -> rx.Component:
     )
 
 
+def _holiday_chip(h) -> rx.Component:
+    return rx.badge(
+        h["label"],
+        rx.cond(S.can_edit_setup,
+                rx.icon("x", size=12, cursor="pointer",
+                        on_click=S.remove_holiday(h["iso"]),
+                        id="setup-ph-remove-" + h["iso"])),
+        variant="soft", color_scheme="indigo", size="2",
+        id="setup-ph-" + h["iso"],
+    )
+
+
+def _holidays_field() -> rx.Component:
+    # pick a date to add it; × removes it (saved with Save Setup)
+    return ui.form_field(
+        "Public Holidays",
+        rx.vstack(
+            rx.input(type="date", value="", min=S.s_holiday_min,
+                     max=S.s_holiday_max, on_change=S.add_holiday,
+                     id="setup-public-holidays",
+                     disabled=~S.can_edit_setup),
+            rx.cond(S.holiday_chips.length() > 0,
+                    rx.hstack(rx.foreach(S.holiday_chips, _holiday_chip),
+                              spacing="2", wrap="wrap"),
+                    ui.note("None")),
+            spacing="2", width="100%"),
+    )
+
+
 def _budget_row(row) -> rx.Component:
     return ui.form_field(
         row["name"],
@@ -238,6 +279,13 @@ def _setup_section() -> rx.Component:
                 hint="Levels 2–4 uplift is required when a Level 1 target "
                      "is set. Last year / last month are the bases for the "
                      "growth comparisons.",
+            ),
+            ui.form_section(
+                "Daily Sales",
+                ui.form_grid(*[_setup_field(spec) for spec in SETUP_DAILY],
+                             _holidays_field(), columns="3"),
+                hint="Daily targets split Level 1 by the Daily Sales "
+                     "Contribution for the store's State and Concept.",
             ),
             ui.form_section("Manpower", _setup_grid(SETUP_MANPOWER)),
             ui.form_section("Stock", _setup_grid(SETUP_STOCK)),

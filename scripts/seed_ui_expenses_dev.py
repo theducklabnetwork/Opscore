@@ -43,7 +43,7 @@ def main() -> int:
 
     try:
         sid = app.register_store(admin, "X01", "Expenses QA DEV",
-                                 concept="QA", zone="DEV")
+                                 concept="Mall", zone="DEV")
     except DuplicateRecordError:
         sid = app.read_repo.get_store_by_code("X01").id
     if sid not in admin.store_ids:

@@ -49,12 +49,12 @@ class StoresFixture(unittest.TestCase):
 class TestStoreCrud(StoresFixture):
     def test_create_and_edit_store(self):
         sid = self.app.register_store(
-            self.admin, "C03", "Gamma", concept="Kiosk", zone="East",
+            self.admin, "C03", "Gamma", concept="Retail", zone="East",
             zone_pic="Amin", branch_manager="Siti")
         st = self.app.read_repo.get_store(sid)
         self.assertEqual((st.code, st.concept, st.zone, st.zone_pic,
                           st.branch_manager),
-                         ("C03", "Kiosk", "East", "Amin", "Siti"))
+                         ("C03", "Retail", "East", "Amin", "Siti"))
         self.app.write.update_store_details(
             sid, name="Gamma Two", zone="West")
         st = self.app.read_repo.get_store(sid)

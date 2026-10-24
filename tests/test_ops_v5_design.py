@@ -101,7 +101,7 @@ PHONE_SETS = {
                                           "Amount", "Status", ""),
     ("ops_expenses_pages", "_budget_monitor"): ("Category", "Paid",
                                                 "Status"),
-    ("ops_sales_pages", "_daily_table"): ("Date", "Sales", "Status", ""),
+    ("ops_sales_pages", "_daily_table"): ("Date", "Sales", "Result", ""),
     ("ops_daily_pages", "_records_table"): ("Date", "Sales", "Status", ""),
     ("ops_manpower_pages", "_staffing_table"): ("Date", "Effective",
                                                 "Status", ""),

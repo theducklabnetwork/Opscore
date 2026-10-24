@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -221,6 +221,10 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 2 and current >= 1:
             _apply_v2(conn)
             conn.execute("PRAGMA user_version = 2")
+            current = 2
+        if current < 3 and current >= 2:
+            _apply_v3(conn)
+            conn.execute("PRAGMA user_version = 3")
         conn.commit()
     finally:
         conn.close()
@@ -240,4 +244,51 @@ def _apply_v2(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA_V2)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (2,)
+    )
+
+
+_SCHEMA_V3 = """
+-- v3: daily targets from the Daily Sales Contribution (DSC). Additive:
+-- store state, three monthly basket targets, per-store public holidays,
+-- the imported contribution shares and the SPR/IPR benchmarks. Existing
+-- rows keep NULL (no state = no daily targets; no target = no %).
+ALTER TABLE stores ADD COLUMN state TEXT;
+ALTER TABLE monthly_configs ADD COLUMN target_transactions INTEGER;
+ALTER TABLE monthly_configs ADD COLUMN target_spr_cents INTEGER;
+ALTER TABLE monthly_configs ADD COLUMN target_ipr REAL;
+
+CREATE TABLE public_holidays (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id INTEGER NOT NULL REFERENCES stores(id),
+    date TEXT NOT NULL,  -- 'YYYY-MM-DD'
+    UNIQUE (store_id, date)
+);
+
+-- One day's share of the month by State + Concept (exact text) + weekday
+-- (Mon..Sun) or PH, per calendar month (1-12, any year).
+CREATE TABLE contribution_shares (
+    state TEXT NOT NULL,
+    concept TEXT NOT NULL,
+    day TEXT NOT NULL CHECK (day IN ('Mon', 'Tue', 'Wed', 'Thu', 'Fri',
+                                     'Sat', 'Sun', 'PH')),
+    month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+    share REAL NOT NULL,
+    PRIMARY KEY (state, concept, day, month)
+);
+
+-- 12-month average SPR (RM) / IPR per Concept + State (later benchmarks).
+CREATE TABLE basket_benchmarks (
+    concept TEXT NOT NULL,
+    state TEXT NOT NULL,
+    avg_spr REAL,
+    avg_ipr REAL,
+    PRIMARY KEY (concept, state)
+);
+"""
+
+
+def _apply_v3(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA_V3)
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (3,)
     )

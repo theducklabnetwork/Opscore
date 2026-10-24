@@ -155,6 +155,10 @@ class MonthConfig:
     salary_basic_allowance_cents: Optional[int] = None   # None = awaiting payroll
     overtime_cents: Optional[int] = None
     support_team_cost_cents: Optional[int] = None
+    # Daily Sales basket targets (monthly transactions; SPR in cents)
+    target_transactions: Optional[int] = None
+    target_spr_cents: Optional[int] = None
+    target_ipr: Optional[Decimal] = None
 
 
 # --------------------------------------------------------------------------
@@ -510,6 +514,105 @@ def asp_cents(sales_cents: int, units: int) -> Optional[Decimal]:
     if units == 0:
         return None
     return Decimal(sales_cents) / units
+
+
+# --------------------------------------------------------------------------
+# 4b. DAILY TARGETS (Daily Sales Contribution)
+# --------------------------------------------------------------------------
+
+# Contribution day keys: weekday (date.weekday() order) or public holiday.
+DSC_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+DSC_PH = "PH"
+RESULT_ACHIEVED = "Achieved"
+RESULT_NOT_ACHIEVED = "Not Achieved"
+
+
+@dataclass
+class DailyTarget:
+    """One day of the Daily Sales table. Money in integer cents."""
+    date: date
+    public_holiday: bool
+    share: Decimal
+    target_cents: int
+    adjusted_cents: Optional[int]     # None: unreported (not the next day)
+    result: Optional[str]             # None: unreported
+
+
+def day_share(day: date, shares: dict[str, Decimal],
+              holidays) -> Optional[Decimal]:
+    """The PH share on a public holiday when one exists, else the weekday
+    share. None when the share is missing."""
+    if day in holidays and shares.get(DSC_PH) is not None:
+        return to_decimal(shares[DSC_PH])
+    return to_decimal(shares.get(DSC_WEEKDAYS[day.weekday()]))
+
+
+def daily_targets(month: str, level1_cents: Optional[int],
+                  shares: dict[str, Decimal], holidays,
+                  sales_by_day: dict[date, Optional[int]]
+                  ) -> Optional[list[DailyTarget]]:
+    """Daily Target = Level 1 x day share / sum of the month's day shares,
+    rounded half-up to the cent (the figure shown is the one compared).
+
+    Adjusted Target = Daily Target + shortfall carried from earlier
+    reported days (their cumulative Daily Target - cumulative sales, when
+    > 0); a surplus is never subtracted. Unreported days (no sales) are
+    left out of the carry-forward: neither their target nor their sales
+    count. Shown on reported days and on the next day after the last
+    reported one; Result ("Achieved" when sales >= Adjusted Target) only
+    on reported days.
+
+    None when there is no Level 1 target or a day has no share (no
+    State/Concept match) — the table then shows "—".
+    """
+    if level1_cents is None:
+        return None
+    start, _, dim = month_bounds(month)
+    days = [date(start.year, start.month, n) for n in range(1, dim + 1)]
+    day_shares = [day_share(d, shares, holidays) for d in days]
+    if any(s is None for s in day_shares):
+        return None
+    total = sum(day_shares)
+    if total <= 0:
+        return None
+    reported = [d for d in days if sales_by_day.get(d) is not None]
+    next_day = (reported[-1].toordinal() + 1) if reported else days[0].toordinal()
+    out, cum_target, cum_sales = [], 0, 0
+    for d, share in zip(days, day_shares):
+        target = int((Decimal(level1_cents) * share / total)
+                     .quantize(Decimal(1), ROUND_HALF_UP))
+        adjusted = target + max(0, cum_target - cum_sales)
+        sales = sales_by_day.get(d)
+        result = None
+        if sales is not None:
+            result = (RESULT_ACHIEVED if sales >= adjusted
+                      else RESULT_NOT_ACHIEVED)
+        show = sales is not None or d.toordinal() == next_day
+        out.append(DailyTarget(d, d in holidays, share, target,
+                               adjusted if show else None, result))
+        if sales is not None:  # only reported days build the shortfall
+            cum_target += target
+            cum_sales += sales
+    return out
+
+
+def pct_vs_target(actual, target) -> Optional[Decimal]:
+    """actual / target - 1 (SPR %, IPR %). None when either is missing or
+    the target is zero."""
+    a, t = to_decimal(actual), to_decimal(target)
+    if a is None or not t:
+        return None
+    return a / t - 1
+
+
+def transactions_pct(transactions: Optional[int],
+                     target_transactions: Optional[int],
+                     days_in_month: int) -> Optional[Decimal]:
+    """Transactions / (monthly Target Transactions / days in month) - 1."""
+    if target_transactions is None or not days_in_month:
+        return None
+    return pct_vs_target(transactions,
+                         Decimal(target_transactions) / days_in_month)
 
 
 # --------------------------------------------------------------------------
