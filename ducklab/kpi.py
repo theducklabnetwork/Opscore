@@ -554,11 +554,13 @@ def daily_targets(month: str, level1_cents: Optional[int],
     """Daily Target = Level 1 x day share / sum of the month's day shares,
     rounded half-up to the cent (the figure shown is the one compared).
 
-    Adjusted Target = Daily Target + shortfall carried from earlier days
-    (cumulative Daily Target - cumulative reported sales, when > 0); a
-    surplus is never subtracted. Shown on reported days and on the next
-    day after the last reported one; Result ("Achieved" when sales >=
-    Adjusted Target) only on reported days.
+    Adjusted Target = Daily Target + shortfall carried from earlier
+    reported days (their cumulative Daily Target - cumulative sales, when
+    > 0); a surplus is never subtracted. Unreported days (no sales) are
+    left out of the carry-forward: neither their target nor their sales
+    count. Shown on reported days and on the next day after the last
+    reported one; Result ("Achieved" when sales >= Adjusted Target) only
+    on reported days.
 
     None when there is no Level 1 target or a day has no share (no
     State/Concept match) — the table then shows "—".
@@ -588,8 +590,9 @@ def daily_targets(month: str, level1_cents: Optional[int],
         show = sales is not None or d.toordinal() == next_day
         out.append(DailyTarget(d, d in holidays, share, target,
                                adjusted if show else None, result))
-        cum_target += target
-        cum_sales += sales or 0
+        if sales is not None:  # only reported days build the shortfall
+            cum_target += target
+            cum_sales += sales
     return out
 
 

@@ -234,7 +234,7 @@ def _daily_table() -> rx.Component:
         ),
         ui.note("Targets split Level 1 by the Daily Sales Contribution for "
                 "the store's State and Concept; a shortfall carries to the "
-                "next day."),
+                "next reported day."),
         title="Daily Sales", id="sales-daily-section",
     )
 

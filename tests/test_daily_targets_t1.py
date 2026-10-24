@@ -79,6 +79,28 @@ class DailyTargetKpiTests(unittest.TestCase):
         self.assertTrue(all(r.adjusted_cents is None and r.result is None
                             for r in rows[7:]))
 
+    def test_gap_day_left_out_of_carry_forward(self):
+        # 2 Jul not reported: its target (7,780.55) is not carried and it
+        # has no Adjusted Target or Result
+        sales = july_sales()
+        del sales[date(2026, 7, 2)]
+        rows = self.targets(sales=sales)
+        self.assertEqual([r.adjusted_cents for r in rows[:6]],
+                         # 3 Jul: 9,276.81 + (8,827.93 - 8,800) = 9,304.74
+                         # 4 Jul: (8,827.93 + 9,276.81) - 18,800 < 0
+                         [882793, None, 930474, 1167082, 1331671, 897756])
+        self.assertEqual([r.result for r in rows[:6]],
+                         ["Not Achieved", None, "Achieved", "Achieved",
+                          "Achieved", "Not Achieved"])
+        self.assertEqual(rows[1].target_cents, 778055)
+        # 1-3 Jul all unreported: 4 Jul carries nothing
+        sales = {d: v for d, v in july_sales().items() if d.day > 3}
+        rows = self.targets(sales=sales)
+        self.assertEqual(rows[3].adjusted_cents, 1167082)
+        self.assertEqual(rows[3].result, "Achieved")
+        self.assertEqual([r.adjusted_cents for r in rows[:3]],
+                         [None, None, None])
+
     def test_nothing_reported_first_day_is_next(self):
         rows = self.targets(sales={})
         self.assertEqual(rows[0].adjusted_cents, 882793)
@@ -351,6 +373,20 @@ class SalesTableTests(Fixture):
         self.assertEqual(rows[7]["adjusted"], "—")
         self.assertEqual(len(st.sp_rows_reported), 6)
         self.assertEqual(st.sp_hidden_label, "25 days not reported")
+
+    def test_gap_day_in_table(self):
+        self.insert_shares()
+        self.july()
+        conn = store_ops_db.connect(self.db)
+        with conn:
+            conn.execute("DELETE FROM daily_records WHERE date = '2026-07-02'")
+        conn.close()
+        rows = self.sales().sp_rows
+        self.assertEqual([r["adjusted"] for r in rows[:3]],
+                         ["RM 8,827.93", "—", "RM 9,304.74"])
+        self.assertEqual([r["result"] for r in rows[:3]],
+                         ["Not Achieved", "", "Achieved"])
+        self.assertEqual(rows[1]["target"], "RM 7,780.55")
 
     def test_public_holiday_marked(self):
         self.insert_shares(shares={**JULY, "PH": D("0.05")})
