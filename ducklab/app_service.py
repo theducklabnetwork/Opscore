@@ -214,6 +214,32 @@ class AppService:
         self._store_write(user, store_id)
         self.write.rename_expense_category(store_id, category_id, name)
 
+    def move_expense_category(self, user: User, store_id: int,
+                              category_id: int, direction: int) -> None:
+        """Swap a category with its neighbour in the ordered list
+        (direction -1 up / +1 down). No delete exists by design."""
+        authz.require_config_manager(user)
+        self._store_write(user, store_id)
+        cats = self.read_repo.get_expense_categories(store_id)
+        idx = next((i for i, c in enumerate(cats) if c.id == category_id),
+                   None)
+        if idx is None:
+            from ducklab.operations_write_repository import (
+                RecordNotFoundError,
+            )
+            raise RecordNotFoundError(
+                f"Category {category_id} not found in store {store_id}")
+        target = idx + direction
+        if not (0 <= target < len(cats)):
+            return  # already at the edge: nothing to do
+        cats[idx], cats[target] = cats[target], cats[idx]
+        with self.transaction():
+            # normalize: position index becomes sort_order, so tied
+            # sort_orders from older data never fight the id tie-break
+            for pos, cat in enumerate(cats):
+                self.write.repo.update_expense_category(
+                    store_id, cat.id, sort_order=pos)
+
     def set_expense_budget(self, user: User, store_id: int, month: str,
                            category_id: int, budget_cents) -> None:
         authz.require_config_manager(user)
@@ -285,6 +311,23 @@ class AppService:
             self.write.activate_store(store_id)
         else:
             self.write.deactivate_store(store_id)
+
+    def reference_data_info(self, user: User) -> dict:
+        """DSC reference data: State/Concept pairs, benchmark months and
+        the last import date (None if never imported). Config managers."""
+        authz.require_config_manager(user)
+        from ducklab import dsc_import
+        return dsc_import.reference_data_info(
+            Path(self.read_repo._db_path))
+
+    def import_dsc_workbook(self, user: User, xlsx: Path) -> dict:
+        """Replace the DSC reference tables from an uploaded workbook.
+        All-or-nothing (same validation/messages as scripts/import_dsc.py).
+        Config managers only."""
+        authz.require_config_manager(user)
+        from ducklab import dsc_import
+        return dsc_import.import_workbook(Path(xlsx),
+                                          Path(self.read_repo._db_path))
 
     # -- user administration ------------------------------------------------------
     def create_user(self, actor: User, email: str, display_name: str,

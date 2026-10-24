@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from ducklab import store_ops_db
 from ducklab.app_service import AppService
 from ducklab import ops_settings_pages as mod
 from ducklab.ops_settings_pages import SettingsState, app_version
@@ -59,12 +60,15 @@ class TestLoad(SettingsFixture):
                 self.user(f"{roles and roles[0] or 'none'}@ducklab.com",
                           roles)
             st = self.state(actor)
-            self.assertEqual(st.visible_tabs, ["account", "about"])
+            expected = ["account", "about"] if roles not in (
+                ("super_admin",), ("administrator",)) else \
+                ["account", "reference", "about"]
+            self.assertEqual(st.visible_tabs, expected)
 
     def test_about_fields(self):
         st = self.state(self.admin)
         self.assertTrue(st.about_version)          # release id or git sha
-        self.assertEqual(st.about_schema, "4")     # SCHEMA_VERSION
+        self.assertEqual(st.about_schema, str(store_ops_db.SCHEMA_VERSION))
         self.assertTrue(st.about_db_path)          # super admin sees path
 
     def test_db_path_hidden_for_non_super(self):
