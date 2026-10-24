@@ -136,7 +136,9 @@ def _basket() -> rx.Component:
             _basket_pair("IPR", S.sp_upt, S.sp_ipr_state, S.sp_ipr_state_pct,
                          S.sp_ipr_state_neg, "basket-ipr-state"),
             ui.stat("ASP", S.sp_asp, size="6"),
-            columns="3", spacing="5", width="100%",
+            # two across on phones (ASP wraps), three from tablet up
+            columns=rx.breakpoints(initial="2", sm="3"), spacing="5",
+            width="100%",
         ),
         title="Basket", id="basket-section",
     )
