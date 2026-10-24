@@ -27,11 +27,11 @@ class StoreOpsDbTestCase(unittest.TestCase):
         self._tmp.cleanup()
 
     # -- helpers -----------------------------------------------------------
-    def add_store(self, code="ZI68", name="SLP") -> int:
+    def add_store(self, code="S01", name="Store A") -> int:
         cur = self.conn.execute(
             "INSERT INTO stores (code, name, concept, zone, zone_pic, "
             "branch_manager) VALUES (?,?,?,?,?,?)",
-            (code, name, "DIY", "KV4", "NURDIN AHMAD", "AZRUL HAZRIQ"),
+            (code, name, "DIY", "Z01", "Staff A", "Staff B"),
         )
         return cur.lastrowid
 
@@ -166,7 +166,7 @@ class TestBudgetsAndCrossStore(StoreOpsDbTestCase):
         self.conn.execute(
             "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
             "category_id, budget_cents) VALUES (?,?,?,?)",
-            (sid, cfg, cat, 320000),
+            (sid, cfg, cat, 400000),
         )
 
     def test_cross_store_config_rejected(self):
@@ -289,7 +289,7 @@ class TestSnapshots(StoreOpsDbTestCase):
         cur = self.conn.execute(
             "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
             "finalized) VALUES (?,?,?,?,1)",
-            (sid, "2026-09", 1, '{"sales": 35081900}'),
+            (sid, "2026-09", 1, '{"sales": 10000000}'),
         )
         v1 = cur.lastrowid
         # Same store/month/version rejected.
@@ -303,7 +303,7 @@ class TestSnapshots(StoreOpsDbTestCase):
         cur2 = self.conn.execute(
             "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json) "
             "VALUES (?,?,?,?)",
-            (sid, "2026-09", 2, '{"sales": 35081901}'),
+            (sid, "2026-09", 2, '{"sales": 10000001}'),
         )
         self.conn.execute(
             "UPDATE monthly_snapshots SET superseded_by=? WHERE id=?",

@@ -5,13 +5,13 @@
 Data contract (asserted by the test — keep in sync):
   * Stores A01 "Alpha Pavilion" and B02 "Beta Galleria".
   * October 2026 configured for A01 ONLY (B02 shows "No report available").
-  * A01 October daily sales: Oct 1 = RM 12,000.00, Oct 2 = RM 11,500.00
-    -> live sales MTD RM 23,500.00.
+  * A01 October daily sales: Oct 1 = RM 12,000.00, Oct 2 = RM 10,000.00
+    -> live sales MTD RM 22,000.00.
   * September 2026 configured for BOTH stores, no daily records
-    -> A01 September sales MTD RM 0.00... (report shows RM 19,881.00 expenses
+    -> A01 September sales MTD RM 0.00... (report shows RM 20,000.00 expenses
        figure for A01 September; see below).
   * Expense categories + budgets and transactions such that:
-      - A01 September expenses total RM 19,881.00 (asserted on report page).
+      - A01 September expenses total RM 20,000.00 (asserted on report page).
   * Users: admin@ducklab.com / AdminPass1234 (super admin, both stores),
            viewer@ducklab.com / ViewerPass123 (viewer, A01).
 
@@ -60,23 +60,23 @@ def main() -> None:
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
 
-    # Daily sales for A01 October: 12,000 + 11,500 -> MTD RM 23,500.00.
+    # Daily sales for A01 October: 12,000 + 10,000 -> MTD RM 22,000.00.
     app.record_daily(admin, a, date(2026, 10, 1), sales_cents=rm(12000),
                      transactions=350, units=1400, ft_working=8, pt_working=1,
                      stock_losses={"DMO": rm(45), "EXTRA": rm(10)})
-    app.record_daily(admin, a, date(2026, 10, 2), sales_cents=rm(11500),
+    app.record_daily(admin, a, date(2026, 10, 2), sales_cents=rm(10000),
                      transactions=340, units=1350, ft_working=8, pt_working=1,
                      stock_losses={"DMO": rm(30)})
 
-    # September A01: sales total RM 19,881.00 (asserted in #sales-section on
+    # September A01: sales total RM 20,000.00 (asserted in #sales-section on
     # the report page, both Live and Finalized modes).
     app.record_daily(admin, a, date(2026, 9, 10), sales_cents=rm(10000),
                      transactions=300, units=1200, ft_working=8, pt_working=1)
-    app.record_daily(admin, a, date(2026, 9, 20), sales_cents=rm(9881),
+    app.record_daily(admin, a, date(2026, 9, 20), sales_cents=rm(10000),
                      transactions=290, units=1100, ft_working=8, pt_working=1)
 
     # Finalized September snapshot for A01 (the report's "Finalized" mode
-    # asserts "Finalized version 1" and the same RM 19,881.00 sales MTD).
+    # asserts "Finalized version 1" and the same RM 20,000.00 sales MTD).
     app.finalize_month(admin, a, "2026-09")
 
     viewer = app.create_user(admin, "viewer@ducklab.com", "Test Viewer",

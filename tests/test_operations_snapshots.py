@@ -57,9 +57,9 @@ class SnapFixture(unittest.TestCase):
 class TestPreview(SnapFixture):
     def test_preview_writes_nothing(self):
         sid, _ = self.seed_store()
-        self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(9681))
+        self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(10000))
         report = self.snaps.preview_month(sid, "2026-09", as_of=date(2026, 9, 30))
-        self.assertEqual(report.sales.sales_mtd_cents, rm(9681))
+        self.assertEqual(report.sales.sales_mtd_cents, rm(10000))
         self.assertFalse(report.is_snapshot)
         self.assertEqual(self.count_snapshots(), 0)  # no auto-finalization
 
@@ -75,16 +75,16 @@ class TestPreview(SnapFixture):
 class TestFinalization(SnapFixture):
     def test_finalize_v1_roundtrip(self):
         sid, cat = self.seed_store()
-        self.svc.set_expense_budget(sid, "2026-09", cat, rm(3200))
-        self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(9681),
+        self.svc.set_expense_budget(sid, "2026-09", cat, rm(4000))
+        self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(10000),
                               transactions=321, units=1298, ft_working=7,
                               pt_working=1,
                               stock_losses={"DMO": rm(70), "EXTRA": rm(5)})
         eid = self.svc.record_expense(sid, incurred_date=date(2026, 9, 1),
                                       paid_date=date(2026, 9, 2), category_id=cat,
-                                      description="bill", amount_cents=rm(2850),
+                                      description="bill", amount_cents=rm(3000),
                                       paid_by="HQ / Central", status="Paid",
-                                      verification="Verified", recorded_by="ABM")
+                                      verification="Verified", recorded_by="Staff A")
         self.svc.raise_action(sid, date(2026, 9, 1), "Sales Performance",
                               "pace", "High", due_date=date(2026, 9, 5))
         result = self.snaps.finalize_month(sid, "2026-09", as_of=date(2026, 9, 30))
@@ -97,8 +97,8 @@ class TestFinalization(SnapFixture):
         rep = snap["report"]
         self.assertTrue(snap["finalized"])
         # Exact cents round-trip — no float drift.
-        self.assertEqual(rep["sales"]["sales_mtd_cents"], rm(9681))
-        self.assertEqual(rep["expenses"]["paid_cents"], rm(2850))
+        self.assertEqual(rep["sales"]["sales_mtd_cents"], rm(10000))
+        self.assertEqual(rep["expenses"]["paid_cents"], rm(3000))
         self.assertEqual(rep["stock"]["total_loss_cents"], rm(65))
         self.assertEqual(rep["manpower"]["total_salary_cents"], rm(11000))
         self.assertEqual(rep["actions"]["open"], 1)
@@ -106,17 +106,17 @@ class TestFinalization(SnapFixture):
         # Decimal round-trip.
         spr = rep["sales"]["spr"]
         self.assertIsInstance(spr, Decimal)
-        self.assertEqual(spr, Decimal(rm(9681)) / 321)
+        self.assertEqual(spr, Decimal(rm(10000)) / 321)
         # NULL preserved (no last-year sales configured -> growth is null).
         self.assertIsNone(rep["sales"]["growth_last_year"])
 
     def test_serialization_no_float_money(self):
         sid, _ = self.seed_store()
-        self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(350819))
+        self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(100000))
         self.snaps.finalize_month(sid, "2026-09", as_of=date(2026, 9, 30))
         raw = self.repo.get_snapshot(sid, "2026-09")["kpi_json"]
         self.assertIn('"format": "ducklab.snapshot.v1"', raw)
-        self.assertIn("35081900", raw)  # integer cents, not 350819.00000001
+        self.assertIn("10000000", raw)  # integer cents, not 100000.00000001
 
     def test_finalize_missing_config_raises(self):
         sid = self.svc.register_store("X01", "X")
@@ -269,7 +269,7 @@ class TestSerializationRoundTrip(unittest.TestCase):
     def test_edge_values(self):
         payload = serialize_report_minimal()
         out = deserialize_report(payload)
-        self.assertEqual(out["exact_cents"], 35081900)
+        self.assertEqual(out["exact_cents"], 10000000)
         self.assertEqual(out["ratio"], Decimal("0.06818"))
         self.assertIsNone(out["missing"])
         self.assertEqual(out["negative_cents"], -2000)
@@ -281,7 +281,7 @@ def serialize_report_minimal() -> str:
     from ducklab.operations_snapshots import _encode
     import json
     return json.dumps({"format": PAYLOAD_FORMAT, "report": _encode({
-        "exact_cents": 35081900, "ratio": Decimal("0.06818"),
+        "exact_cents": 10000000, "ratio": Decimal("0.06818"),
         "missing": None, "negative_cents": -2000, "zero": 0})}, sort_keys=True)
 
 

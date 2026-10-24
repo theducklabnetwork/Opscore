@@ -25,7 +25,7 @@ K = E.exp_kpis
 # ---------------------------------------------------------------------------
 
 def _tile(label, value, **kw) -> rx.Component:
-    # plain label + full value (RM 350,819.00); no sub-lines
+    # plain label + full value (RM 100,000.00); no sub-lines
     return ui.kpi_tile(label, value, size_narrow="4", **kw)
 
 

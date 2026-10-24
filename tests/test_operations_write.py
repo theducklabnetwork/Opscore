@@ -41,18 +41,18 @@ class WriteFixture(unittest.TestCase):
 
 class TestStoreWrites(WriteFixture):
     def test_create_and_update(self):
-        sid = self.svc.register_store("ZI68", "SLP", concept="Mall", zone="KV4")
+        sid = self.svc.register_store("S01", "Store A", concept="Mall", zone="Z01")
         s = self.r.get_store(sid)
-        self.assertEqual((s.code, s.name, s.active), ("ZI68", "SLP", True))
+        self.assertEqual((s.code, s.name, s.active), ("S01", "Store A", True))
         self.svc.update_store_details(sid, zone="KV5", branch_manager="NEW BM")
         s = self.r.get_store(sid)
         self.assertEqual((s.zone, s.branch_manager, s.concept),
                          ("KV5", "NEW BM", "Mall"))  # partial update preserved concept
 
     def test_duplicate_code_rejected(self):
-        self.svc.register_store("ZI68", "SLP")
+        self.svc.register_store("S01", "Store A")
         with self.assertRaises(DuplicateRecordError):
-            self.svc.register_store("ZI68", "Clone")
+            self.svc.register_store("S01", "Clone")
 
     def test_required_fields(self):
         with self.assertRaises(ValidationError):
@@ -61,7 +61,7 @@ class TestStoreWrites(WriteFixture):
             self.w.update_store(1, bogus_field="x")
 
     def test_deactivation_preserves_history(self):
-        sid = self.svc.register_store("ZI68", "SLP")
+        sid = self.svc.register_store("S01", "Store A")
         self.svc.configure_month(sid, "2026-09", opening_headcount_ft=9)
         self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(100))
         self.svc.deactivate_store(sid)
@@ -79,21 +79,21 @@ class TestStoreWrites(WriteFixture):
 class TestConfigWrites(WriteFixture):
     def setUp(self):
         super().setUp()
-        self.sid = self.svc.register_store("ZI68", "SLP")
+        self.sid = self.svc.register_store("S01", "Store A")
 
     def test_create_update_partial(self):
-        self.svc.configure_month(self.sid, "2026-09", level1_base_cents=rm(269861), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+        self.svc.configure_month(self.sid, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                                  salary_ratio_target=0.06818)
         # Partial update: only opening headcount changes.
         self.svc.configure_month(self.sid, "2026-09", opening_headcount_ft=9)
         cfg = self.r.get_month_config(self.sid, "2026-09")
-        self.assertEqual(cfg.level1_base_cents, rm(269861))
+        self.assertEqual(cfg.level1_base_cents, rm(200000))
         self.assertEqual(cfg.opening_headcount_ft, 9)
 
     def test_nullable_payroll_roundtrip(self):
-        self.svc.record_payroll(self.sid, "2026-09", rm(13275.75), rm(4198.50), None)
+        self.svc.record_payroll(self.sid, "2026-09", rm(12000.00), rm(1000.00), None)
         cfg = self.r.get_month_config(self.sid, "2026-09")
-        self.assertEqual(cfg.salary_basic_allowance_cents, rm("13275.75"))
+        self.assertEqual(cfg.salary_basic_allowance_cents, rm("12000.00"))
         self.assertIsNone(cfg.support_team_cost_cents)
         # Reset to awaiting payroll explicitly.
         self.svc.record_payroll(self.sid, "2026-09", None, None)
@@ -138,7 +138,7 @@ class TestCategoryBudgetWrites(WriteFixture):
                                       category_id=self.cat1, amount_cents=rm(50),
                                       status="Paid", paid_date=date(2026, 9, 2),
                                       description="x", paid_by="Petty Cash",
-                                      verification="Verified", recorded_by="ABM")
+                                      verification="Verified", recorded_by="Staff A")
         self.svc.rename_expense_category(self.s1, self.cat1, "Power")
         cats = self.r.get_expense_categories(self.s1)
         self.assertEqual((cats[0].id, cats[0].name), (self.cat1, "Power"))
@@ -147,7 +147,7 @@ class TestCategoryBudgetWrites(WriteFixture):
         self.assertEqual(tx[0].input.category_id, self.cat1)
 
     def test_budget_upsert_and_isolation(self):
-        b1 = self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, rm(3200))
+        b1 = self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, rm(4000))
         self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, rm(3100))
         budgets = self.r.get_expense_budgets(self.s1, "2026-09")
         self.assertEqual(budgets, {self.cat1: rm(3100)})  # updated, not duplicated
@@ -176,10 +176,10 @@ class TestDailyWrites(WriteFixture):
         self.svc.record_daily(self.s1, date(2026, 9, 2), sales_cents=0)
         # Partial update of day 1: sales only, staffing untouched.
         self.svc.record_daily(self.s1, date(2026, 9, 1), ft_working=7)
-        self.svc.correct_daily(self.s1, date(2026, 9, 1), sales_cents=rm(9681))
+        self.svc.correct_daily(self.s1, date(2026, 9, 1), sales_cents=rm(10000))
         days = self.r.get_daily_records(self.s1, "2026-09")
         self.assertEqual(len(days), 2)
-        self.assertEqual(days[0].sales_cents, rm(9681))
+        self.assertEqual(days[0].sales_cents, rm(10000))
         self.assertEqual(days[0].ft_working, 7)
         self.assertEqual(days[1].sales_cents, 0)
         self.assertIsNone(days[1].ft_working)
@@ -280,7 +280,7 @@ class TestExpenseWrites(WriteFixture):
         eid = self.svc.record_expense(self.s1, incurred_date=date(2026, 8, 28),
                                       category_id=self.cat1, amount_cents=rm(100),
                                       status="Pending", description="x",
-                                      recorded_by="ABM")
+                                      recorded_by="Staff A")
         # Paid in October — update, not new row.
         self.svc.mark_expense_paid(self.s1, eid, date(2026, 10, 3), "Petty Cash")
         rows = self.r.get_expense_transactions(self.s1)
@@ -314,7 +314,7 @@ class TestActionWrites(WriteFixture):
 
     def test_lifecycle(self):
         aid = self.svc.raise_action(self.s1, date(2026, 9, 1), "Sales Performance",
-                                    "Low pace", "High", pic="ABM",
+                                    "Low pace", "High", pic="Staff A",
                                     due_date=date(2026, 9, 10))
         self.svc.update_action(self.s1, aid, corrective_action="Coach team")
         self.svc.update_action_status(self.s1, aid, "In progress")
@@ -347,7 +347,7 @@ class TestActionWrites(WriteFixture):
 
 class TestReadAfterWriteIntegration(WriteFixture):
     def test_write_then_recalculate_then_update(self):
-        sid = self.svc.register_store("ZI68", "SLP")
+        sid = self.svc.register_store("S01", "Store A")
         self.svc.configure_month(
             sid, "2026-09", level1_base_cents=rm(20000), min_rtm_target_cents=rm(200000),
             level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,

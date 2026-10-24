@@ -129,8 +129,8 @@ class Fixture(unittest.TestCase):
                          "Below target")
         self.assertEqual(kpi.sales_status(1051, Decimal("1051.00")),
                          "Achieved")
-        # September parity case: 350,819 vs 350,819.30 -> "Below target"
-        self.assertEqual(kpi.sales_status(rm(350819), rm(350819.30)),
+        # A fractional-cent target is not truncated before comparison.
+        self.assertEqual(kpi.sales_status(rm(10000), rm(10000.30)),
                          "Below target")
 
     # projection_state boundaries ------------------------------------------

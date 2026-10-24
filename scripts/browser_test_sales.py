@@ -87,7 +87,7 @@ def main() -> int:
         body = page.locator("body").inner_text()
         check("projected label on partial month",
               "Projected: " in body)
-        check("Sales seeded (RM 115,200.00)", "RM 115,200.00" in body)
+        check("Sales seeded (RM 120,000.00)", "RM 120,000.00" in body)
         check("Projected Sales tile on a partial month (P1)",
               "Projected Sales" in body
               and "days reported" not in body)
@@ -127,7 +127,7 @@ def main() -> int:
         page.wait_for_timeout(2500)
         body2 = page.locator("body").inner_text()
         check("store switch works (S01 MTD gone, A01 loaded)",
-              "RM 115,200" not in body2 and "Level Reached" in body2)
+              "RM 120,000" not in body2 and "Level Reached" in body2)
 
         # screenshots
         goto_sales(page)

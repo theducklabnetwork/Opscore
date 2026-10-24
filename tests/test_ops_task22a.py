@@ -73,11 +73,11 @@ class Fixture(unittest.TestCase):
 # 1 ---------------------------------------------------------------------------
 class KpiHelperTests(unittest.TestCase):
     def test_budget_utilization_and_variance(self):
-        self.assertEqual(kpi.budget_utilization(256000, 320000),
+        self.assertEqual(kpi.budget_utilization(320000, 400000),
                          Decimal("0.8"))
         self.assertIsNone(kpi.budget_utilization(100, None))   # no budget
         self.assertIsNone(kpi.budget_utilization(100, 0))      # zero budget
-        self.assertEqual(kpi.budget_variance_cents(320000, 256000), 64000)
+        self.assertEqual(kpi.budget_variance_cents(400000, 320000), 80000)
         self.assertEqual(kpi.budget_variance_cents(100, 150), -50)
         self.assertEqual(kpi.budget_variance_cents(0, 0), 0)
         self.assertIsNone(kpi.budget_variance_cents(None, 150))
@@ -562,7 +562,7 @@ class BudgetClearConflictTests(Fixture):
         import ducklab.ops_expenses_state as mod
         from ducklab.ops_expenses_state import ExpensesState
         st = ExpensesState()
-        st.b_category, st.b_amount, st.b_clear = "Elec", "3200.00", True
+        st.b_category, st.b_amount, st.b_clear = "Elec", "4000.00", True
         self.run_bound(self.bind(mod, ExpensesState),
                        lambda: list(st.save_budget()))
         self.assertEqual(st.b_error, CLEAR_CONFLICT)

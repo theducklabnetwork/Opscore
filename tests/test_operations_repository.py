@@ -39,7 +39,7 @@ class RepoFixture(unittest.TestCase):
         cur = self.conn.execute(
             "INSERT INTO stores (code, name, concept, zone, zone_pic, "
             "branch_manager, active) VALUES (?,?,?,?,?,?,?)",
-            (code, name, "DIY", "KV4", "PIC " + code, "BM " + code, active),
+            (code, name, "DIY", "Z01", "Staff A " + code, "Staff B " + code, active),
         )
         return cur.lastrowid
 
@@ -55,16 +55,16 @@ class RepoFixture(unittest.TestCase):
 
 class TestStores(RepoFixture):
     def test_list_and_lookup(self):
-        s1 = self.add_store("ZI68", "SLP")
+        s1 = self.add_store("S01", "Store A")
         s2 = self.add_store("AB12", "Other Store", active=0)
         stores = self.repo.list_stores()
-        self.assertEqual([s.code for s in stores], ["AB12", "ZI68"])
-        self.assertEqual(self.repo.get_store(s1).name, "SLP")
-        self.assertEqual(self.repo.get_store_by_code("AB12").zone, "KV4")
+        self.assertEqual([s.code for s in stores], ["AB12", "S01"])
+        self.assertEqual(self.repo.get_store(s1).name, "Store A")
+        self.assertEqual(self.repo.get_store_by_code("AB12").zone, "Z01")
         # Inactive stores remain accessible for historical reporting.
         inactive = self.repo.get_store(s2)
         self.assertFalse(inactive.active)
-        self.assertEqual(inactive.branch_manager, "BM AB12")
+        self.assertEqual(inactive.branch_manager, "Staff B AB12")
 
     def test_unknown_store(self):
         with self.assertRaises(StoreNotFoundError):
@@ -75,16 +75,16 @@ class TestStores(RepoFixture):
 
 class TestMonthConfig(RepoFixture):
     def test_lookup_and_nullable_payroll(self):
-        sid = self.add_store("ZI68", "SLP")
-        self.add_config(sid, "2026-09", level1_base_cents=rm(269861),
+        sid = self.add_store("S01", "Store A")
+        self.add_config(sid, "2026-09", level1_base_cents=rm(200000),
                         salary_ratio_target=0.06818, opening_headcount_ft=9)
         cfg = self.repo.get_month_config(sid, "2026-09")
-        self.assertEqual(cfg.level1_base_cents, rm(269861))
+        self.assertEqual(cfg.level1_base_cents, rm(200000))
         self.assertEqual(cfg.salary_ratio_target, Decimal("0.06818"))  # REAL->Decimal safe
         self.assertIsNone(cfg.salary_basic_allowance_cents)  # awaiting payroll
 
     def test_missing_config_not_substituted(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         self.add_config(sid, "2026-09")
         with self.assertRaises(ConfigNotFoundError):
             self.repo.get_month_config(sid, "2026-10")
@@ -92,7 +92,7 @@ class TestMonthConfig(RepoFixture):
             self.repo.get_month_config(999, "2026-09")
 
     def test_invalid_month_rejected(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         for bad in ("2026-13", "2026-9", "junk", ""):
             with self.assertRaises(InvalidMonthError):
                 self.repo.get_month_config(sid, bad)
@@ -110,7 +110,7 @@ class TestMonthConfig(RepoFixture):
 
 class TestDailyRecords(RepoFixture):
     def test_retrieval_and_null_vs_zero(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         other = self.add_store("B02", "B")
         self.conn.execute(
             "INSERT INTO daily_records (store_id, date, sales_cents, transactions, "
@@ -133,14 +133,14 @@ class TestDailyRecords(RepoFixture):
         self.assertEqual(days[1].ft_working, 7)
 
     def test_empty_month_returns_empty(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         self.assertEqual(self.repo.get_daily_records(sid, "2026-09"), [])
 
 
 class TestExpenses(RepoFixture):
     def setUp(self):
         super().setUp()
-        self.sid = self.add_store("ZI68", "SLP")
+        self.sid = self.add_store("S01", "Store A")
         self.other = self.add_store("B02", "B")
         self.cat = self.conn.execute(
             "INSERT INTO expense_categories (store_id, name) VALUES (?,?)",
@@ -150,7 +150,7 @@ class TestExpenses(RepoFixture):
             (self.other, "Electricity")).lastrowid
 
     def add_expense(self, store_id, cat, incurred, paid, amount, status="Paid",
-                    verification="Verified", recorded_by="ABM",
+                    verification="Verified", recorded_by="Staff A",
                     paid_by="Petty Cash", desc="x"):
         cur = self.conn.execute(
             "INSERT INTO expense_transactions (store_id, incurred_date, paid_date, "
@@ -170,9 +170,9 @@ class TestExpenses(RepoFixture):
         self.conn.execute(
             "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
             "category_id, budget_cents) VALUES (?,?,?,?)",
-            (self.sid, cfg, self.cat, 320000))
+            (self.sid, cfg, self.cat, 400000))
         budgets = self.repo.get_expense_budgets(self.sid, "2026-09")
-        self.assertEqual(budgets, {self.cat: 320000})
+        self.assertEqual(budgets, {self.cat: 400000})
         self.assertEqual(self.repo.get_expense_budgets(self.other, "2026-09"), {})
 
     def test_cross_month_transaction_retrieved_once(self):
@@ -215,7 +215,7 @@ class TestStock(RepoFixture):
                                  "DMN", "DME", "DMQ", "DST", "MISSING", "EXTRA"})
 
     def test_daily_losses_attached(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         rec = self.conn.execute(
             "INSERT INTO daily_records (store_id, date) VALUES (?,?)",
             (sid, "2026-09-01")).lastrowid
@@ -234,12 +234,12 @@ class TestStock(RepoFixture):
 
 class TestActions(RepoFixture):
     def test_month_and_unscoped_retrieval(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         self.conn.execute(
             "INSERT INTO actions (store_id, raised_date, pillar, issue, priority, "
             "status, pic, due_date) VALUES (?,?,?,?,?,?,?,?)",
             (sid, "2026-09-10", "Sales Performance", "Low pace", "High", "Open",
-             "ABM", "2026-09-20"))
+             "Staff A", "2026-09-20"))
         self.conn.execute(
             "INSERT INTO actions (store_id, raised_date, pillar, status) "
             "VALUES (?,?,?,?)",
@@ -255,7 +255,7 @@ class TestActions(RepoFixture):
 
 class TestSnapshots(RepoFixture):
     def test_latest_version_and_specific_version(self):
-        sid = self.add_store("ZI68", "SLP")
+        sid = self.add_store("S01", "Store A")
         self.conn.execute(
             "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
             "finalized) VALUES (?,?,?,?,1)", (sid, "2026-09", 1, '{"v":1}'))
@@ -288,7 +288,7 @@ class TestEndToEndIntegration(RepoFixture):
         self.conn.execute(
             "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
             "category_id, budget_cents) VALUES (?,?,?,?)",
-            (sid, cfg, cat, rm(3200)))
+            (sid, cfg, cat, rm(4000)))
         for i, s in enumerate(sales_rm):
             rec = self.conn.execute(
                 "INSERT INTO daily_records (store_id, date, sales_cents, transactions, "
@@ -300,27 +300,27 @@ class TestEndToEndIntegration(RepoFixture):
         return sid, cat
 
     def test_two_store_pipeline(self):
-        s1, cat1 = self._seed_store("A01", rm(269861), [10000] * 30)
+        s1, cat1 = self._seed_store("A01", rm(200000), [10000] * 30)
         s2, cat2 = self._seed_store("B02", rm(150000), [2000] * 30, pt_factor=0.4)
         # Expenses: s1 paid-in-month, plus a cross-month item for s1; s2 foreign.
         self.conn.execute(
             "INSERT INTO expense_transactions (store_id, incurred_date, paid_date, "
             "category_id, description, amount_cents, paid_by, status, verification, "
             "recorded_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (s1, "2026-09-01", "2026-09-02", cat1, "bill", rm(2850), "HQ / Central",
-             "Paid", "Verified", "ABM"))
+            (s1, "2026-09-01", "2026-09-02", cat1, "bill", rm(3000), "HQ / Central",
+             "Paid", "Verified", "Staff A"))
         self.conn.execute(
             "INSERT INTO expense_transactions (store_id, incurred_date, paid_date, "
             "category_id, description, amount_cents, paid_by, status, verification, "
             "recorded_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (s1, "2026-08-28", "2026-09-03", cat1, "aug item", rm(100), "Petty Cash",
-             "Paid", "Verified", "ABM"))
+             "Paid", "Verified", "Staff A"))
         self.conn.execute(
             "INSERT INTO expense_transactions (store_id, incurred_date, paid_date, "
             "category_id, description, amount_cents, paid_by, status, verification, "
             "recorded_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (s2, "2026-09-01", "2026-09-02", cat2, "bill", rm(500), "Petty Cash",
-             "Paid", "Verified", "BM"))
+             "Paid", "Verified", "Staff B"))
         # Actions
         self.conn.execute(
             "INSERT INTO actions (store_id, raised_date, pillar, status, due_date) "
@@ -333,14 +333,14 @@ class TestEndToEndIntegration(RepoFixture):
         r1 = assemble_month(self.repo, s1, "2026-09", as_of=date(2026, 9, 30))
         r2 = assemble_month(self.repo, s2, "2026-09", as_of=date(2026, 9, 30))
 
-        # Sales pillar: 30 x 10000 = 300,000 vs target 269,861 -> Achieved.
+        # Sales pillar: 30 x 10000 = 300,000 vs target 200,000 -> Achieved.
         self.assertEqual(r1.sales.sales_mtd_cents, rm(300000))
         self.assertEqual(r1.sales.status_by_level["level1"], "Achieved")
         self.assertEqual(r2.sales.sales_mtd_cents, rm(60000))
         self.assertEqual(r2.sales.status_by_level["level1"], "Below target")
 
         # Expenses pillar: cross-month paid item counts in September for s1.
-        self.assertEqual(r1.expenses.paid_cents, rm(2950))
+        self.assertEqual(r1.expenses.paid_cents, rm(3100))
         self.assertEqual(r2.expenses.paid_cents, rm(500))
         self.assertEqual(r1.expenses.categories[0].name, "Electricity")
 
@@ -366,7 +366,7 @@ class TestEndToEndIntegration(RepoFixture):
         self.assertFalse(r1.is_snapshot)
 
     def test_historical_month_still_queryable(self):
-        sid, _ = self._seed_store("A01", rm(269861), [10000] * 30)
+        sid, _ = self._seed_store("A01", rm(200000), [10000] * 30)
         self.add_config(sid, "2026-08", level1_base_cents=rm(250000),
                         opening_headcount_ft=8)
         self.conn.execute(

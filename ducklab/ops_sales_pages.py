@@ -52,7 +52,7 @@ def _compare_control() -> rx.Component:
 
 
 # --- headline tiles: built per layout (a component is placed once). Plain
-# label + full value (RM 350,819.00); status chips stay, no sub-lines -------
+# label + full value (RM 100,000.00); status chips stay, no sub-lines -------
 def _tile(label, value, id=None, **kw) -> rx.Component:
     # a size down on wide screens too: exact money fits five across
     return ui.kpi_tile(label, value, id=id, size="6", size_narrow="4", **kw)

@@ -42,28 +42,28 @@ def main() -> None:
     water_a = app.add_expense_category(admin, a, "Water", sort_order=2)
     cons_a = app.add_expense_category(admin, a, "Consumables", sort_order=3)
     elec_b = app.add_expense_category(admin, b, "Electricity", sort_order=1)
-    # budgets: A electricity RM3,200 (paid 2,850 -> Watch), A water RM500
+    # budgets: A electricity RM3,500 (paid 3,000 -> Watch), A water RM500
     # (paid 600 -> OVER), B electricity RM1,500
-    app.set_expense_budget(admin, a, "2026-10", elec_a, rm(3200))
+    app.set_expense_budget(admin, a, "2026-10", elec_a, rm(3500))
     app.set_expense_budget(admin, a, "2026-10", water_a, rm(500))
     app.set_expense_budget(admin, b, "2026-10", elec_b, rm(1500))
     # transactions (store A, October)
     app.record_expense(
         admin, a, incurred_date=date(2026, 10, 2),
         paid_date=date(2026, 10, 3), category_id=elec_a,
-        description="TNB electricity bill", amount_cents=rm(2850),
+        description="Utility electricity bill", amount_cents=rm(3000),
         status="Paid", paid_by="Store Account", receipt_ref="RCP-2001",
-        verification="Verified", recorded_by="Branch Manager")
+        verification="Verified", recorded_by="Staff A")
     app.record_expense(
         admin, a, incurred_date=date(2026, 10, 4),
         paid_date=date(2026, 10, 5), category_id=water_a,
         description="Water utility", amount_cents=rm(600),
         status="Paid", paid_by="Petty Cash", receipt_ref="RCP-2002",
-        verification="Unverified", recorded_by="Branch Manager")
+        verification="Unverified", recorded_by="Staff A")
     app.record_expense(
         admin, a, incurred_date=date(2026, 10, 6), category_id=cons_a,
         description="Cleaning supplies (pending invoice)",
-        amount_cents=rm(185), status="Pending", recorded_by="Branch Manager")
+        amount_cents=rm(185), status="Pending", recorded_by="Staff A")
     # cross-month: incurred Sep, paid Oct
     app.record_expense(
         admin, a, incurred_date=date(2026, 9, 28),
@@ -71,7 +71,7 @@ def main() -> None:
         description="September consumables settled in October",
         amount_cents=rm(100), status="Paid", paid_by="Other",
         receipt_ref="RCP-1990", verification="Verified",
-        recorded_by="Branch Manager")
+        recorded_by="Staff A")
     # store B transaction (isolation check)
     app.record_expense(
         admin, b, incurred_date=date(2026, 10, 3),
@@ -79,7 +79,7 @@ def main() -> None:
         description="B02 electricity", amount_cents=rm(500), status="Paid",
         paid_by="HQ / Central", verification="Verified", recorded_by="HQ")
     # users
-    bm = app.create_user(admin, "manager@ducklab.com", "Branch Manager",
+    bm = app.create_user(admin, "manager@ducklab.com", "Staff A",
                          "ManagerPass123")
     app.assign_role(admin, bm.id, "branch_manager")
     app.assign_store(admin, bm.id, a)

@@ -345,7 +345,7 @@ class TestStateValidation(ManpowerFixture):
         with self.assertRaises(ValueError):
             _parse_decimal("abc", "x", Decimal(0), Decimal(2))
         from ducklab.ops_daily_state import _parse_money, _parse_count
-        self.assertEqual(_parse_money("13,275.75"), rm("13275.75"))
+        self.assertEqual(_parse_money("12,000.00"), rm("12000.00"))
         with self.assertRaises(ValueError):
             _parse_money("10.001")   # sub-cent
         with self.assertRaises(ValueError):

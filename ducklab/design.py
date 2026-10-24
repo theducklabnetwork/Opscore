@@ -56,7 +56,7 @@ def _sign(cents) -> str:
 
 
 def fmt_rm(cents, dash="—") -> str:
-    """Integer cents -> 'RM 350,819.00' / '−RM 85.00'. None stays a dash
+    """Integer cents -> 'RM 100,000.00' / '−RM 50.00'. None stays a dash
     (missing != 0)."""
     if cents is None:
         return dash
@@ -64,7 +64,7 @@ def fmt_rm(cents, dash="—") -> str:
 
 
 def fmt_rm0(cents, dash="—") -> str:
-    """Whole-ringgit display for large figures: 'RM 350,819' / '−RM 9,898'."""
+    """Whole-ringgit display for large figures: 'RM 100,000' / '−RM 10,000'."""
     if cents is None:
         return dash
     return f"{_sign(cents)}RM {round(abs(cents) / 100):,}"
@@ -116,7 +116,7 @@ def fmt_share(share, dash="—") -> str:
 def fmt_achievement(ratio, status: str, dash="—") -> str:
     """Achievement vs a target level, 1 decimal. A shortfall is never
     rounded up: when the level's status is Below target the percentage is
-    rounded DOWN (350,819 / 350,819.30 -> '99.9%', not '100.0%')."""
+    rounded DOWN (99,999.99 / 100,000 -> '99.9%', not '100.0%')."""
     if ratio is None:
         return dash
     if status != SALES_BELOW:

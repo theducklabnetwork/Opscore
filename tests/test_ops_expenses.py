@@ -70,7 +70,7 @@ class TestExpenseCRUD(ExpenseFixture):
     def test_create_and_read_after_write(self):
         eid = self.app.record_expense(
             self.admin, self.sa, incurred_date=date(2026, 10, 2),
-            category_id=self.cat_a, description="TNB bill",
+            category_id=self.cat_a, description="Utility bill",
             amount_cents=rm(125.50), status="Paid",
             paid_date=date(2026, 10, 3), paid_by="Store Account",
             receipt_ref="RCP-1", verification="Verified",
@@ -83,12 +83,12 @@ class TestExpenseCRUD(ExpenseFixture):
     def test_partial_update_preserves_untouched(self):
         eid = self.app.record_expense(
             self.admin, self.sa, incurred_date=date(2026, 10, 2),
-            category_id=self.cat_a, description="TNB bill",
+            category_id=self.cat_a, description="Utility bill",
             amount_cents=rm(100), status="Pending", recorded_by="Manager")
         self.app.update_expense(self.admin, self.sa, eid, remarks="note")
         rec = self.get(self.sa, eid)
         self.assertEqual(rec.input.amount_cents, rm(100))     # preserved
-        self.assertEqual(rec.input.description, "TNB bill")   # preserved
+        self.assertEqual(rec.input.description, "Utility bill")   # preserved
         self.assertEqual(rec.remarks, "note")
 
     def test_pending_to_paid_workflow(self):
@@ -125,7 +125,7 @@ class TestExpenseCRUD(ExpenseFixture):
             self.admin, self.sa, incurred_date=date(2026, 10, 1),
             category_id=self.cat_a, description="x", amount_cents=rm(10),
             status="Paid", paid_date=date(2026, 10, 2),
-            paid_by="Other", recorded_by="M", verification="Unverified")
+            paid_by="Other", recorded_by="Staff A", verification="Unverified")
         rec = self.get(self.sa, eid)
         self.assertEqual(rec.input.status, "Paid")
         self.assertEqual(rec.input.verification, "Unverified")
@@ -176,7 +176,7 @@ class TestValidationLadder(ExpenseFixture):
     def _input(self, **kw):
         base = dict(incurred_date=date(2026, 10, 1), category_id=self.cat_a,
                     description="d", amount_cents=rm(1), status="Pending",
-                    verification="Verified", recorded_by="M", paid_date=None,
+                    verification="Verified", recorded_by="Staff A", paid_date=None,
                     paid_by=None, store_id=self.sa)
         base.update(kw)
         return kpi.ExpenseInput(**base)
@@ -226,9 +226,9 @@ class TestValidationLadder(ExpenseFixture):
 class TestBudgets(ExpenseFixture):
     def test_budget_create_update_and_status(self):
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, rm(3200))
+                                    self.cat_a, rm(4000))
         budgets = self.app.get_expense_budgets(self.admin, self.sa, "2026-10")
-        self.assertEqual(budgets[self.cat_a], rm(3200))
+        self.assertEqual(budgets[self.cat_a], rm(4000))
         # update (idempotent, no duplicates)
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
                                     self.cat_a, rm(3000))
@@ -248,10 +248,10 @@ class TestBudgets(ExpenseFixture):
         self.assertEqual(kpi.budget_status(1, 0), "OVER BUDGET")
 
     def test_watch_threshold_80_percent(self):
-        self.assertEqual(kpi.budget_status(rm(2560), rm(3200)), "Watch")
-        self.assertEqual(kpi.budget_status(rm(2559.99), rm(3200)),
+        self.assertEqual(kpi.budget_status(rm(3200), rm(4000)), "Watch")
+        self.assertEqual(kpi.budget_status(rm(3199.99), rm(4000)),
                          "Within budget")
-        self.assertEqual(kpi.budget_status(rm(3200.01), rm(3200)),
+        self.assertEqual(kpi.budget_status(rm(4000.01), rm(4000)),
                          "OVER BUDGET")
 
     def test_cross_store_budget_rejected(self):
@@ -278,7 +278,7 @@ class TestCrossMonthAccounting(ExpenseFixture):
             self.admin, self.sa, incurred_date=date(2026, 9, 28),
             paid_date=date(2026, 10, 3), category_id=self.cat_a,
             description="cross-month", amount_cents=rm(100),
-            status="Paid", paid_by="Other", recorded_by="M",
+            status="Paid", paid_by="Other", recorded_by="Staff A",
             verification="Verified")
         recs = self.app.get_expense_transactions(self.admin, self.sa)
         self.assertEqual(len([r for r in recs if r.id == eid]), 1)  # one row
@@ -297,7 +297,7 @@ class TestCrossMonthAccounting(ExpenseFixture):
         self.app.record_expense(
             self.admin, self.sa, incurred_date=date(2026, 9, 15),
             category_id=self.cat_a, description="pending", amount_cents=rm(40),
-            status="Pending", recorded_by="M")
+            status="Pending", recorded_by="Staff A")
         for month in ("2026-08", "2026-09", "2026-10"):
             self.app.configure_month(self.admin, self.sa, month)
         aug = self.app.preview_month(self.admin, self.sa, "2026-08",
@@ -320,7 +320,7 @@ class TestCrossMonthAccounting(ExpenseFixture):
             self.admin, self.sa, incurred_date=date(2026, 10, 2),
             paid_date=date(2026, 10, 2), category_id=self.cat_a,
             description="paid now", amount_cents=rm(250), status="Paid",
-            paid_by="Other", recorded_by="M")
+            paid_by="Other", recorded_by="Staff A")
         r2 = self.app.preview_month(self.admin, self.sa, "2026-10",
                                     as_of=date(2026, 10, 31))
         self.assertEqual(r1.expenses.paid_cents, 0)
@@ -352,7 +352,7 @@ class TestExpenseSecurity(ExpenseFixture):
         eid = bm and self.app.record_expense(
             bm, self.sa, incurred_date=date(2026, 10, 1),
             category_id=self.cat_a, description="ok", amount_cents=rm(5),
-            status="Pending", recorded_by="BM")
+            status="Pending", recorded_by="Staff B")
         self.assertIsInstance(eid, int)
         # but cross-store write rejected
         with self.assertRaises(AuthorizationError):
@@ -382,7 +382,7 @@ class TestExpenseSecurity(ExpenseFixture):
             self.admin, self.sa, incurred_date=date(2026, 9, 10),
             paid_date=date(2026, 9, 10), category_id=self.cat_a,
             description="late entry", amount_cents=rm(999), status="Paid",
-            paid_by="Other", recorded_by="M")
+            paid_by="Other", recorded_by="Staff A")
         live = self.app.preview_month(self.admin, self.sa, "2026-09",
                                       as_of=date(2026, 9, 30))
         snap = self.app.get_finalized_report(self.admin, self.sa, "2026-09")
@@ -391,21 +391,21 @@ class TestExpenseSecurity(ExpenseFixture):
 
     def test_store_isolation_kpis(self):
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, rm(3200))
+                                    self.cat_a, rm(3500))
         self.app.set_expense_budget(self.admin, self.sb, "2026-10",
                                     self.cat_b, rm(1500))
-        for sid, cat, amt in ((self.sa, self.cat_a, 2850),
+        for sid, cat, amt in ((self.sa, self.cat_a, 3000),
                               (self.sb, self.cat_b, 500)):
             self.app.record_expense(
                 self.admin, sid, incurred_date=date(2026, 10, 2),
                 paid_date=date(2026, 10, 2), category_id=cat,
                 description="bill", amount_cents=rm(amt), status="Paid",
-                paid_by="Other", recorded_by="M")
+                paid_by="Other", recorded_by="Staff A")
         ra = self.app.preview_month(self.admin, self.sa, "2026-10",
                                     as_of=date(2026, 10, 31))
         rb = self.app.preview_month(self.admin, self.sb, "2026-10",
                                     as_of=date(2026, 10, 31))
-        self.assertEqual(ra.expenses.paid_cents, rm(2850))
+        self.assertEqual(ra.expenses.paid_cents, rm(3000))
         self.assertEqual(rb.expenses.paid_cents, rm(500))
         self.assertEqual(ra.expenses.categories[0].budget_status, "Watch")
         self.assertEqual(rb.expenses.categories[0].budget_status,

@@ -178,8 +178,8 @@ MAX_COUNT = 1_000_000
 
 
 def parse_money_cents(raw: str) -> int:
-    """Shared money parser for all data-entry pages: '350819' or
-    '350,819.00' -> integer cents. Rejects sub-cent input, inf, nan and
+    """Shared money parser for all data-entry pages: '100000' or
+    '100,000.00' -> integer cents. Rejects sub-cent input, inf, nan and
     amounts above RM 100,000,000.00 ("Amount too large").
     Negative amounts are allowed here (refunds are valid money); callers
     that forbid negatives say so themselves. Raises ValueError."""
@@ -434,7 +434,7 @@ def highest_level_achieved(
     level: None when no level is reached. next: None when the top level is
     reached or there is no target. gap: next target minus month-end
     (exact, positive = short); None when either side is missing.
-    September 2026: 350,819 vs L4 350,819.30 -> (3, 4, Decimal('30')).
+    Example: 120,000 vs L4 120,000.30 -> (3, 4, Decimal('30')).
     """
     names = level_names(targets)
     if not names or targets[names[0]] is None:
