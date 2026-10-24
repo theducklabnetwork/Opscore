@@ -69,7 +69,7 @@ def main() -> int:
         # --- login + shell -------------------------------------------------
         login(page, "admin@ducklab.com", "AdminPass1234")
         page.wait_for_selector("#store-selector")
-        check("authenticated shell renders", page.locator("text=DuckLab").count() > 0)
+        check("authenticated shell renders", page.locator("text=Opscore").count() > 0)
         page.screenshot(path=str(OUT / "shell_dark.png"), full_page=True)
 
         # --- report page (live, default month = October 2026) ---------------

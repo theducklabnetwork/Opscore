@@ -60,23 +60,26 @@ def _sidebar_nav() -> rx.Component:
     return rx.vstack(*blocks, spacing="5", width="100%", align="start")
 
 
+def _wordmark() -> rx.Component:
+    return rx.image(
+        src=rx.asset("opscore-wordmark.svg"),
+        alt="Opscore",
+        width="100%",
+        height="auto",
+        display="block",
+    )
+
+
 def sidebar() -> rx.Component:
     # The outer column stretches to the full page height (background and
     # border never stop at the first screen); the nav inside stays sticky.
     return rx.box(
         rx.vstack(
-            rx.hstack(
-                rx.box(rx.icon("chart-no-axes-combined", size=20,
-                               color="white"),
-                       background=f"linear-gradient(135deg, "
-                                  f"{rx.color('indigo', 9)},"
-                                  f" {rx.color('violet', 10)})",
-                       border_radius="10px", padding="8px"),
-                rx.vstack(rx.heading("DuckLab", size="4"),
-                          rx.text("Operations", size="1",
-                                  color=ds.TEXT_FAINT),
-                          spacing="0", align="start"),
-                spacing="2", align="center",
+            rx.link(
+                _wordmark(),
+                href="/ops",
+                aria_label="Opscore Dashboard",
+                width="100%",
             ),
             _sidebar_nav(),
             spacing="6", align="start", padding="1.25em", width="100%",
@@ -100,7 +103,13 @@ def mobile_drawer() -> rx.Component:
             rx.drawer.content(
                 rx.vstack(
                     rx.hstack(
-                        rx.heading("DuckLab", size="4"), rx.spacer(),
+                        rx.link(
+                            _wordmark(),
+                            href="/ops",
+                            aria_label="Opscore Dashboard",
+                            width="75%",
+                        ),
+                        rx.spacer(),
                         rx.drawer.close(rx.icon_button(rx.icon("x", size=16),
                                                        variant="ghost")),
                         width="100%", align="center",

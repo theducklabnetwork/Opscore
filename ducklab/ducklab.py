@@ -354,13 +354,25 @@ def report_page() -> rx.Component:
 
 
 app = rx.App(
+    head_components=[
+        rx.el.link(rel="icon", type="image/png", sizes="48x48",
+                   href=rx.asset("favicon-48.png")),
+        rx.el.link(rel="icon", type="image/png", sizes="96x96",
+                   href=rx.asset("favicon-96.png")),
+        rx.el.link(rel="apple-touch-icon", sizes="176x176",
+                   href=rx.asset("apple-touch-icon.png")),
+        rx.el.link(rel="icon", type="image/png", sizes="192x192",
+                   href=rx.asset("icon-192.png")),
+        rx.el.link(rel="icon", type="image/png", sizes="512x512",
+                   href=rx.asset("icon-512.png")),
+    ],
     stylesheets=["/drawer_fixes.css"],
     # page language: screen readers, and CSS hyphenation of long words in
     # narrow phone table columns
     html_lang="en",
 )
 
-# --- DuckLab Operations: authentication ---
+# --- Opscore Operations: authentication ---
 # Legacy Placement Tracker prototype routes are not registered on the
 # deployed app: they render prototype business data with no authentication.
 # The prototype code is preserved in this module for local reference and is
@@ -400,64 +412,64 @@ from ducklab.ops_stores_state import StoresState  # noqa: E402
 from ducklab.ops_sales_pages import sales_page  # noqa: E402
 from ducklab.ops_sales_state import SalesState  # noqa: E402
 
-app.add_page(auth_pages.login_page, route="/login", title="Sign In — DuckLab")
+app.add_page(auth_pages.login_page, route="/login", title="Sign In — Opscore")
 app.add_page(
     auth_pages.root_page,
     route="/",
-    title="DuckLab Operations",
+    title="Opscore Operations",
     on_load=auth_pages.AuthState.root_redirect,
 )
 app.add_page(
     ops_pages.dashboard_page,
     route="/ops",
-    title="Dashboard — DuckLab Operations",
+    title="Dashboard — Opscore Operations",
     on_load=OverviewState.load_overview,
 )
 app.add_page(
     ops_pages.report_page,
     route="/ops/report",
-    title="Monthly Report — DuckLab Operations",
+    title="Monthly Report — Opscore Operations",
     on_load=OpsState.load_ops,
 )
 app.add_page(
     daily_page,
     route="/ops/daily",
-    title="Daily Operations — DuckLab",
+    title="Daily Operations — Opscore",
     on_load=DailyState.load_daily,
 )
 app.add_page(
     expenses_page,
     route="/ops/expenses",
-    title="Expenses Management — DuckLab",
+    title="Expenses Management — Opscore",
     on_load=ExpensesState.load_expenses,
 )
 app.add_page(
     manpower_page,
     route="/ops/manpower",
-    title="Manpower Efficiency — DuckLab",
+    title="Manpower Efficiency — Opscore",
     on_load=ManpowerState.load_manpower,
 )
 app.add_page(
     stock_page,
     route="/ops/stock",
-    title="Stock Management — DuckLab",
+    title="Stock Management — Opscore",
     on_load=StockState.load_stock,
 )
 app.add_page(
     stores_page,
     route="/ops/stores",
-    title="Store Management — DuckLab",
+    title="Store Management — Opscore",
     on_load=StoresState.load_stores,
 )
 app.add_page(
     sales_page,
     route="/ops/sales",
-    title="Sales Performance — DuckLab",
+    title="Sales Performance — Opscore",
     on_load=SalesState.load_sales,
 )
 app.add_page(
     actions_page,
     route="/ops/actions",
-    title="Action Tracker — DuckLab",
+    title="Action Tracker — Opscore",
     on_load=ActionsState.load_actions,
 )
