@@ -19,6 +19,7 @@ from ducklab.auth_pages import app_service
 from ducklab.auth_service import (
     AuthError, AuthenticationError, ValidationError,
 )
+from ducklab.ops_shell import shell
 from ducklab.ops_state import OpsState, SESSION_EXPIRED
 from ducklab.session_transport import DB_PATH
 
@@ -215,7 +216,7 @@ def _about_tab() -> rx.Component:
 
 
 def settings_page() -> rx.Component:
-    return ui.shell(
+    return shell(
         "Settings",
         rx.tabs.root(
             rx.tabs.list(
