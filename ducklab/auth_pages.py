@@ -219,7 +219,7 @@ def login_page() -> rx.Component:
                     rx.vstack(
                         _field(
                             "Email",
-                            placeholder="you@theducklab.com",
+                             placeholder="you@example.com",
                             type="email",
                             required=True,
                             value=AuthState.email,

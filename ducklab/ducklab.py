@@ -411,6 +411,7 @@ from ducklab.ops_stores_pages import stores_page  # noqa: E402
 from ducklab.ops_stores_state import StoresState  # noqa: E402
 from ducklab.ops_sales_pages import sales_page  # noqa: E402
 from ducklab.ops_sales_state import SalesState  # noqa: E402
+from ducklab.ops_settings_pages import SettingsState, settings_page  # noqa: E402
 
 app.add_page(auth_pages.login_page, route="/login", title="Sign In — Opscore")
 app.add_page(
@@ -472,4 +473,10 @@ app.add_page(
     route="/ops/actions",
     title="Action Tracker — Opscore",
     on_load=ActionsState.load_actions,
+)
+app.add_page(
+    settings_page,
+    route="/ops/settings",
+    title="Settings — Opscore",
+    on_load=SettingsState.load_settings,
 )
