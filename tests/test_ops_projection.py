@@ -154,6 +154,22 @@ class Fixture(unittest.TestCase):
         self.assertNotIn("sales_mtd_cents / entered", src_s)
         self.assertNotIn("rec.sales_cents) / eff", src_m)
 
+    def test_sales_projection_rounds_half_up_for_display(self):
+        from ducklab.ops_sales_state import SalesState
+        st = SalesState()
+        st._set_money("month_end", Decimal("100.50"))
+        self.assertEqual(st.sp_month_end_exact, "RM 1.01")
+        st._set_money("month_end", Decimal("100.49"))
+        self.assertEqual(st.sp_month_end_exact, "RM 1.00")
+
+    def test_sales_gap_rounds_half_up_for_display(self):
+        from types import SimpleNamespace
+        from ducklab.ops_sales_state import SalesState
+        sales = SimpleNamespace(gap_by_level={
+            "level1": Decimal("-100.50"), "level2": Decimal("100.49")})
+        self.assertEqual(SalesState._gap(sales, "level1"), "−RM 1.01")
+        self.assertEqual(SalesState._gap(sales, "level2"), "RM 1.00")
+
     # projection label helper -------------------------------------------------
     def test_projection_style_labels(self):
         from ducklab import design as ds

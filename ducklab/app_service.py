@@ -10,6 +10,7 @@ The underlying repositories remain user-unaware; kpi.py stays pure.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -28,6 +29,33 @@ class AppService:
         self.read_repo = OperationsRepository(db_path)
         self.write = OperationsWriteService(db_path)
         self.snapshots = SnapshotService(db_path)
+
+    @contextmanager
+    def transaction(self):
+        """Share one all-or-nothing SQLite transaction across services."""
+        services = (self.read_repo, self.write.repo, self.auth,
+                    self.snapshots, self.snapshots.repo)
+        original_paths = [service._db_path for service in services]
+        state = store_ops_db._TransactionState()
+        conn = store_ops_db.connect(self.read_repo._db_path)
+        try:
+            for service in services:
+                service._db_path = conn
+            store_ops_db._TRANSACTION_STATES[conn] = state
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            if state.failed:
+                conn.rollback()
+            else:
+                conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            for service, db_path in zip(services, original_paths):
+                service._db_path = db_path
+            store_ops_db._TRANSACTION_STATES.pop(conn, None)
+            conn.close()
 
     # -- session helpers ---------------------------------------------------
     def authenticate(self, token: str) -> User:

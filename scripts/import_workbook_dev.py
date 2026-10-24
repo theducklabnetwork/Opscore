@@ -5,16 +5,17 @@ Reads INPUT cells only (formulas/calculated columns are never imported),
 writes through AppService as Super Admin (id=1) so validation applies.
 Blank cell -> NULL; a typed 0 -> 0. Never turns a blank into 0.
 
-  scripts/import_workbook_dev.py <workbook.xlsx> [--replace]
-  scripts/import_workbook_dev.py <workbook.xlsx> --verify
+  DUCKLAB_DB_PATH=/path/to/dev.db scripts/import_workbook_dev.py <workbook.xlsx> [--replace]
+  DUCKLAB_DB_PATH=/path/to/dev.db scripts/import_workbook_dev.py <workbook.xlsx> --verify
 
+The database defaults to <repo>/.devdata/dev.db and must already exist.
 --replace: wipe ONLY this store/month (daily records, stock losses,
 expense transactions, month config, expense categories/budgets, payroll
-fields) in dev.db, then re-import.
+fields) in dev.db, then re-import in the same transaction.
 --verify:  read cached values (data_only=True) and compare with the app's
 KPI engine (assemble_month) for the imported store/month.
 
-Refuses any DB other than /home/duck/project/ducklab/.devdata/dev.db.
+Uses DUCKLAB_DB_PATH or <repo>/.devdata/dev.db, which must already exist.
 The workbook contains private data (names, salary): this script never
 prints those values.
 """
@@ -22,6 +23,7 @@ prints those values.
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 import sys
 from datetime import date, datetime
@@ -30,7 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-DEV_DB = Path("/home/duck/project/ducklab/.devdata/dev.db")
+ROOT = Path(__file__).resolve().parent.parent
+DEV_DB = Path(os.environ.get("DUCKLAB_DB_PATH", ROOT / ".devdata" / "dev.db"))
 
 SETUP_CELLS = {  # Setup!B-column inputs (B21-B24 are computed, not imported)
     "code": "B5", "name": "B6", "concept": "B7", "zone": "B8",
@@ -183,134 +186,130 @@ def read_workbook(path: Path) -> dict:
             "budgets": budgets, "days": days, "expenses": expenses}
 
 
+def _require_database(db_path: Path) -> None:
+    if not db_path.is_file():
+        raise SystemExit(
+            f"Database not found: {db_path}. Set DUCKLAB_DB_PATH to an "
+            "existing DuckLab database or create <repo>/.devdata/dev.db.")
+
+
 def do_import(db_path: Path, wb_path: Path, replace: bool) -> dict:
-    if db_path != DEV_DB:
-        raise SystemExit(f"Refusing DB path {db_path}: only {DEV_DB} allowed")
+    _require_database(db_path)
     from ducklab.app_service import AppService
-    from ducklab.operations_write_repository import DuplicateRecordError
 
     data = read_workbook(wb_path)
     month = data["month"]
     app = AppService(db_path)
     admin = app.auth.get_user(1)
 
-    st = data["store"]
-    # Concept is a dropdown now: a workbook value outside it is not imported
-    from ducklab.operations_write_repository import CONCEPTS
-    concept = {"concept": st["concept"]} if st["concept"] in CONCEPTS else {}
-    try:
-        sid = app.register_store(admin, st["code"], st["name"] or st["code"],
-                                 **concept, zone=st["zone"],
-                                 zone_pic=st["zone_pic"],
-                                 branch_manager=st["branch_manager"])
-    except DuplicateRecordError:
-        sid = app.read_repo.get_store_by_code(st["code"]).id
-        app.update_store_details(
-            admin, sid, name=st["name"] or st["code"], **concept,
-            zone=st["zone"], zone_pic=st["zone_pic"],
-            branch_manager=st["branch_manager"])
-    if sid not in admin.store_ids:
-        app.assign_store(admin, admin.id, sid)
+    with app.transaction() as conn:
+        st = data["store"]
+        # Concept is a dropdown now: an outside value is not imported
+        from ducklab.operations_write_repository import CONCEPTS
+        concept = {"concept": st["concept"]} if st["concept"] in CONCEPTS else {}
+        existing = next((store for store in app.list_my_stores(admin)
+                         if store["code"] == st["code"]), None)
+        if existing is None:
+            sid = app.register_store(
+                admin, st["code"], st["name"] or st["code"],
+                **concept, zone=st["zone"], zone_pic=st["zone_pic"],
+                branch_manager=st["branch_manager"])
+        else:
+            sid = existing["id"]
+            app.update_store_details(
+                admin, sid, name=st["name"] or st["code"], **concept,
+                zone=st["zone"], zone_pic=st["zone_pic"],
+                branch_manager=st["branch_manager"])
+        if sid not in admin.store_ids:
+            app.assign_store(admin, admin.id, sid)
 
-    if replace:
-        _wipe_store_month(db_path, sid, month)
+        if replace:
+            _wipe_store_month(conn, sid, month)
 
-    cfg = {k: v for k, v in data["config"].items() if v is not None}
-    app.configure_month(admin, sid, month, **cfg)
+        cfg = {k: v for k, v in data["config"].items() if v is not None}
+        app.configure_month(admin, sid, month, **cfg)
 
-    cat_ids = {}
-    for name, budget, order in data["budgets"]:
-        try:
-            cid = app.add_expense_category(admin, sid, name, sort_order=order)
-        except DuplicateRecordError:
-            cid = next(c.id for c in app.get_expense_categories(admin, sid)
-                       if c.name == name)
-        cat_ids[name] = cid
-        app.set_expense_budget(admin, sid, month, cid, budget)
+        cat_ids = {}
+        for name, budget, order in data["budgets"]:
+            cid = next((c.id for c in app.get_expense_categories(admin, sid)
+                        if c.name == name), None)
+            if cid is None:
+                cid = app.add_expense_category(admin, sid, name, sort_order=order)
+            cat_ids[name] = cid
+            app.set_expense_budget(admin, sid, month, cid, budget)
 
-    n_days = 0
-    for d in data["days"]:
-        fields = {k: v for k, v in d["fields"].items() if v is not None}
-        stock = d["stock"] or None
-        if not fields and not stock:
-            continue
-        app.record_daily(admin, sid, d["date"],
-                         stock_losses=stock, **fields)
-        n_days += 1
+        n_days = 0
+        for d in data["days"]:
+            fields = {k: v for k, v in d["fields"].items() if v is not None}
+            stock = d["stock"] or None
+            if not fields and not stock:
+                continue
+            app.record_daily(admin, sid, d["date"],
+                             stock_losses=stock, **fields)
+            n_days += 1
 
-    n_exp = 0
-    for e in data["expenses"]:
-        fields = dict(e)
-        cname = fields.pop("_category_name")
-        fields["category_id"] = cat_ids.get(cname) if cname else None
-        if _expense_exists(db_path, sid, e):
-            continue
-        app.record_expense(admin, sid, **fields)
-        n_exp += 1
+        n_exp = 0
+        for e in data["expenses"]:
+            fields = dict(e)
+            cname = fields.pop("_category_name")
+            fields["category_id"] = cat_ids.get(cname) if cname else None
+            if _expense_exists(conn, sid, e):
+                continue
+            app.record_expense(admin, sid, **fields)
+            n_exp += 1
 
     return {"store": st["code"], "month": month, "store_id": sid,
             "daily_rows": n_days, "expense_rows": n_exp,
             "categories": len(cat_ids)}
 
 
-def _expense_exists(db_path: Path, store_id: int, e: dict) -> bool:
+def _expense_exists(conn: sqlite3.Connection, store_id: int, e: dict) -> bool:
     """Natural-key match for idempotency (dates+amount+description+ref)."""
-    conn = sqlite3.connect(db_path)
-    try:
-        row = conn.execute(
-            "SELECT 1 FROM expense_transactions WHERE store_id=? AND "
-            "ifnull(incurred_date,'')=? AND ifnull(paid_date,'')=? AND "
-            "ifnull(amount_cents,-999999999)=? AND "
-            "ifnull(description,'')=? AND ifnull(receipt_ref,'')=?",
-            (store_id, e["incurred_date"].isoformat()
-             if e["incurred_date"] else "",
-             e["paid_date"].isoformat() if e["paid_date"] else "",
-             e["amount_cents"] if e["amount_cents"] is not None
-             else -999999999,
-             e["description"] or "", e["receipt_ref"] or ""),
-        ).fetchone()
-        return row is not None
-    finally:
-        conn.close()
+    row = conn.execute(
+        "SELECT 1 FROM expense_transactions WHERE store_id=? AND "
+        "ifnull(incurred_date,'')=? AND ifnull(paid_date,'')=? AND "
+        "ifnull(amount_cents,-999999999)=? AND "
+        "ifnull(description,'')=? AND ifnull(receipt_ref,'')=?",
+        (store_id, e["incurred_date"].isoformat()
+         if e["incurred_date"] else "",
+         e["paid_date"].isoformat() if e["paid_date"] else "",
+         e["amount_cents"] if e["amount_cents"] is not None
+         else -999999999,
+         e["description"] or "", e["receipt_ref"] or ""),
+    ).fetchone()
+    return row is not None
 
 
-def _wipe_store_month(db_path: Path, store_id: int, month: str) -> None:
-    """Remove ONLY this store/month's operational rows (dev.db only)."""
-    if db_path != DEV_DB:
-        raise SystemExit(f"Refusing DB path {db_path}")
-    conn = sqlite3.connect(db_path)
-    try:
-        ids = [r[0] for r in conn.execute(
-            "SELECT id FROM daily_records WHERE store_id=? AND "
-            "strftime('%Y-%m', date)=?", (store_id, month))]
-        if ids:
-            q = ",".join("?" * len(ids))
-            conn.execute(
-                f"DELETE FROM daily_stock_losses WHERE daily_id IN ({q})",
-                ids)
-        conn.execute("DELETE FROM daily_records WHERE store_id=? AND "
-                     "strftime('%Y-%m', date)=?", (store_id, month))
-        conn.execute("DELETE FROM expense_transactions WHERE store_id=? AND "
-                     "(strftime('%Y-%m', incurred_date)=? OR "
-                     "strftime('%Y-%m', paid_date)=?)",
-                     (store_id, month, month))
-        conn.execute("DELETE FROM monthly_expense_budgets WHERE store_id=? "
-                     "AND monthly_config_id IN (SELECT id FROM "
-                     "monthly_configs WHERE store_id=? AND month=?)",
-                     (store_id, store_id, month))
-        conn.execute("DELETE FROM monthly_configs WHERE store_id=? AND month=?",
-                     (store_id, month))
-        conn.commit()
-    finally:
-        conn.close()
+def _wipe_store_month(conn: sqlite3.Connection, store_id: int,
+                      month: str) -> None:
+    """Remove this store/month inside the caller's import transaction."""
+    ids = [r[0] for r in conn.execute(
+        "SELECT id FROM daily_records WHERE store_id=? AND "
+        "strftime('%Y-%m', date)=?", (store_id, month))]
+    if ids:
+        q = ",".join("?" * len(ids))
+        conn.execute(
+            f"DELETE FROM daily_stock_losses WHERE daily_record_id IN ({q})",
+            ids)
+    conn.execute("DELETE FROM daily_records WHERE store_id=? AND "
+                 "strftime('%Y-%m', date)=?", (store_id, month))
+    conn.execute("DELETE FROM expense_transactions WHERE store_id=? AND "
+                 "(strftime('%Y-%m', incurred_date)=? OR "
+                 "strftime('%Y-%m', paid_date)=?)",
+                 (store_id, month, month))
+    conn.execute("DELETE FROM monthly_expense_budgets WHERE store_id=? "
+                 "AND monthly_config_id IN (SELECT id FROM "
+                 "monthly_configs WHERE store_id=? AND month=?)",
+                 (store_id, store_id, month))
+    conn.execute("DELETE FROM monthly_configs WHERE store_id=? AND month=?",
+                 (store_id, month))
 
 
 # ---------------------------------------------------------------------------
 # verify
 # ---------------------------------------------------------------------------
 def verify(db_path: Path, wb_path: Path) -> int:
-    if db_path != DEV_DB:
-        raise SystemExit(f"Refusing DB path {db_path}: only {DEV_DB} allowed")
+    _require_database(db_path)
     import openpyxl
     from ducklab.app_service import AppService
     from ducklab import kpi

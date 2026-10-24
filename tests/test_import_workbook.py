@@ -1,13 +1,16 @@
-"""Tests for scripts/import_workbook_dev.py: dev-DB path refusal,
-blank-vs-zero import rule, and idempotency. Disposable temp DBs and
-synthetic workbooks only — never the real workbook or dev.db.
+"""Tests for workbook DB selection, blank-vs-zero, replacement
+transactions and idempotency. Disposable temp DBs and synthetic workbooks
+only — never the real workbook or dev.db.
 Run: python -m pytest tests/test_import_workbook.py -v
 """
 
+import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import date
 from pathlib import Path
 
@@ -39,7 +42,12 @@ def make_workbook(path: Path, blank_sales: bool) -> None:
     if not blank_sales:
         daily["C8"] = 500    # blank_sales=True -> cell left blank -> NULL
     wb.create_sheet("Summary")
-    wb.create_sheet("Expense Register")
+    register = wb.create_sheet("Expense Register")
+    register["A9"] = date(2026, 10, 1)
+    register["C9"] = "Electricity"
+    register["D9"] = "Test bill"
+    register["E9"] = 10
+    register["G9"] = "Pending"
     wb.save(path)
 
 
@@ -49,17 +57,133 @@ class TestImportScript(unittest.TestCase):
             [sys.executable, str(SCRIPT), *args],
             capture_output=True, text=True, cwd=ROOT)
 
-    def test_refuses_non_dev_db_path(self):
-        # the script's public entry only writes to dev.db; exercise the
-        # refusal by calling do_import directly with a foreign path
+    def test_db_path_from_environment_and_missing_file(self):
         sys.path.insert(0, str(ROOT / "scripts"))
-        from import_workbook_dev import do_import
+        import importlib
+        import import_workbook_dev as imp
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "custom.db"
+            with mock.patch.dict(os.environ, {"DUCKLAB_DB_PATH": str(db)}):
+                importlib.reload(imp)
+                self.assertEqual(imp.DEV_DB, db)
+            with self.assertRaises(SystemExit) as ctx:
+                imp.do_import(db, Path(tmp) / "missing.xlsx", replace=False)
+            self.assertIn(f"Database not found: {db}", str(ctx.exception))
+            self.assertIn("DUCKLAB_DB_PATH", str(ctx.exception))
+            with mock.patch.dict(os.environ, {}, clear=True):
+                importlib.reload(imp)
+                self.assertEqual(imp.DEV_DB, ROOT / ".devdata" / "dev.db")
+
+    def test_replace_updates_daily_record_and_stock(self):
+        """Replacement uses daily_record_id and replaces both linked rows."""
         with tempfile.TemporaryDirectory() as tmp:
             wb = Path(tmp) / "w.xlsx"
-            make_workbook(wb, blank_sales=True)
-            with self.assertRaises(SystemExit) as ctx:
-                do_import(Path(tmp) / "other.db", wb, replace=False)
-            self.assertIn("Refusing DB path", str(ctx.exception))
+            make_workbook(wb, blank_sales=False)
+            sys.path.insert(0, str(ROOT / "scripts"))
+            import import_workbook_dev as imp
+            db = Path(tmp) / "disp.db"
+            from ducklab.app_service import AppService
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin("a@x.dev", "A", "Sup3rSecure!x")
+            first = imp.do_import(db, wb, replace=False)
+            sid = first["store_id"]
+            with sqlite3.connect(db) as conn:
+                record_id = conn.execute(
+                    "SELECT id FROM daily_records WHERE store_id=? LIMIT 1",
+                    (sid,)).fetchone()[0]
+                conn.execute(
+                    "INSERT INTO daily_stock_losses "
+                    "(daily_record_id, code, amount_cents) VALUES (?, 'DMO', 70)",
+                    (record_id,))
+            second = imp.do_import(db, wb, replace=True)
+            self.assertEqual(second["daily_rows"], 2)
+            with sqlite3.connect(db) as conn:
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM daily_stock_losses").fetchone()[0], 0)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM daily_records WHERE store_id=?",
+                    (sid,)).fetchone()[0], 2)
+
+    def test_failed_replace_rolls_back_wipe_and_import(self):
+        """A failure after replacement preserves every original row."""
+        with tempfile.TemporaryDirectory() as tmp:
+            wb = Path(tmp) / "w.xlsx"
+            make_workbook(wb, blank_sales=False)
+            sys.path.insert(0, str(ROOT / "scripts"))
+            import import_workbook_dev as imp
+            db = Path(tmp) / "disp.db"
+            from ducklab.app_service import AppService
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin("a@x.dev", "A", "Sup3rSecure!x")
+            result = imp.do_import(db, wb, replace=False)
+            sid = result["store_id"]
+            with sqlite3.connect(db) as conn:
+                record_id = conn.execute(
+                    "SELECT id FROM daily_records WHERE store_id=? LIMIT 1",
+                    (sid,)).fetchone()[0]
+                conn.execute(
+                    "INSERT INTO daily_stock_losses "
+                    "(daily_record_id, code, amount_cents) VALUES (?, 'DMO', 70)",
+                    (record_id,))
+                before = conn.execute(
+                    "SELECT id, date, sales_cents FROM daily_records "
+                    "WHERE store_id=? ORDER BY date", (sid,)).fetchall()
+            with mock.patch.object(
+                    imp, "_expense_exists", side_effect=RuntimeError("late failure")):
+                with self.assertRaisesRegex(RuntimeError, "late failure"):
+                    imp.do_import(db, wb, replace=True)
+            with sqlite3.connect(db) as conn:
+                self.assertEqual(conn.execute(
+                    "SELECT id, date, sales_cents FROM daily_records "
+                    "WHERE store_id=? ORDER BY date", (sid,)).fetchall(), before)
+                self.assertEqual(conn.execute(
+                    "SELECT daily_record_id, code, amount_cents "
+                    "FROM daily_stock_losses").fetchall(),
+                    [(record_id, "DMO", 70)])
+
+    def test_transaction_restores_all_service_db_paths(self):
+        """Services remain usable with their original paths after a failure."""
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            services = (app.read_repo, app.write.repo, app.auth,
+                        app.snapshots, app.snapshots.repo)
+            with self.assertRaisesRegex(RuntimeError, "stop import"):
+                with app.transaction():
+                    self.assertTrue(all(s._db_path is not db for s in services))
+                    raise RuntimeError("stop import")
+            self.assertEqual([s._db_path for s in services], [db] * 5)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            sid = app.register_store(admin, "AFTER", "Usable after rollback")
+            self.assertEqual(app.read_repo.get_store(sid).code, "AFTER")
+
+    def test_inner_rollback_prevents_commit_without_exception(self):
+        """A swallowed repository error cannot commit earlier writes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            original_create = app.write.repo.create_store
+
+            def fail_after_write(*args, **kwargs):
+                store_id = original_create(*args, **kwargs)
+                app.write.repo._connect().rollback()
+                return store_id
+
+            with mock.patch.object(
+                    app.write.repo, "create_store", side_effect=fail_after_write):
+                with app.transaction():
+                    app.register_store(admin, "UNDO", "Must roll back")
+            self.assertEqual([s._db_path for s in
+                              (app.read_repo, app.write.repo, app.auth,
+                               app.snapshots, app.snapshots.repo)], [db] * 5)
+            with self.assertRaises(Exception) as ctx:
+                app.read_repo.get_store_by_code("UNDO")
+            self.assertIn("Unknown store code", str(ctx.exception))
 
     def test_blank_vs_zero_import_rule(self):
         """Typed 0 is stored as 0; a blank cell stays NULL."""
