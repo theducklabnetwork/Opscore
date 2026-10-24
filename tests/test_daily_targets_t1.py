@@ -26,8 +26,7 @@ from ducklab.operations_write_repository import ValidationError
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "import_dsc.py"
-sys.path.insert(0, str(ROOT / "scripts"))
-import import_dsc  # noqa: E402
+from ducklab import dsc_import as import_dsc  # noqa: E402
 
 D = Decimal
 # Synthetic case: July 2026 (1 Jul = Wednesday), Level 1 300,000, no PH.
@@ -167,7 +166,7 @@ class MigrationTests(unittest.TestCase):
             conn = store_ops_db.connect(db)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 4)
+                    conn.execute("PRAGMA user_version").fetchone()[0], 5)
                 row = conn.execute(
                     "SELECT concept, state FROM stores").fetchone()
                 self.assertEqual(tuple(row), ("Kiosk", None))
@@ -205,7 +204,7 @@ class MigrationTests(unittest.TestCase):
             conn = store_ops_db.connect(db)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 4)
+                    conn.execute("PRAGMA user_version").fetchone()[0], 5)
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM basket_benchmarks").fetchone()[0], 0)
                 self.assertEqual(conn.execute(

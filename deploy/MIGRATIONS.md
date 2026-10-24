@@ -2,7 +2,7 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **4** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **5** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -24,6 +24,10 @@ application schema version: **4** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
   only re-importable reference data, so it is dropped and recreated (the
   one sanctioned exception to rule 1); no other table changes. Re-run
   `scripts/import_dsc.py <xlsx>` after this migration to fill it.
+- **v5** — additive: `reference_data_info` singleton row records the last
+  DSC import timestamp; written by `ducklab/dsc_import` inside the same
+  transaction that replaces the reference tables (shown on Settings >
+  Reference Data, and importable there too). No existing table changes.
 
 ## Rules
 

@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -272,6 +272,10 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 4 and current >= 3:
             _apply_v4(conn)
             conn.execute("PRAGMA user_version = 4")
+            current = 4
+        if current < 5 and current >= 4:
+            _apply_v5(conn)
+            conn.execute("PRAGMA user_version = 5")
         conn.commit()
     finally:
         conn.close()
@@ -363,4 +367,22 @@ def _apply_v4(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA_V4)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (4,)
+    )
+
+
+_SCHEMA_V5 = """
+-- v5: DSC reference-data import bookkeeping (last import timestamp).
+-- Additive, one singleton row; written by ducklab/dsc_import inside the
+-- same transaction that replaces the reference tables.
+CREATE TABLE reference_data_info (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    imported_at TEXT NOT NULL
+);
+"""
+
+
+def _apply_v5(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA_V5)
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (5,)
     )
