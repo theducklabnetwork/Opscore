@@ -184,24 +184,12 @@ _LOGOUT_JS = """
 # ---------------------------------------------------------------------------
 
 def _brand() -> rx.Component:
-    return rx.vstack(
-        rx.center(
-            rx.box(
-                rx.icon("chart-no-axes-combined", size=34, color="white"),
-                background=f"linear-gradient(135deg, {rx.color('indigo', 9)}, "
-                           f"{rx.color('violet', 10)})",
-                border_radius="16px",
-                padding="16px",
-                box_shadow=f"0 8px 24px {rx.color('indigo', 8)}",
-            ),
-            width="100%",
-        ),
-        rx.heading("DuckLab", size="8", weight="bold", letter_spacing="-0.02em"),
-        rx.text("Multi-Store Operations Management",
-                size="3", color=rx.color("slate", 11)),
-        spacing="3",
-        align="center",
+    return rx.image(
+        src=rx.asset("opscore-wordmark.svg"),
+        alt="Opscore",
         width="100%",
+        height="auto",
+        display="block",
     )
 
 
@@ -334,7 +322,7 @@ def ops_landing_page() -> rx.Component:
                 rx.hstack(
                     rx.icon("shield-check", size=24,
                             color=rx.color("indigo", 9)),
-                    rx.heading("DuckLab Operations", size="6"),
+                    rx.heading("Opscore Operations", size="6"),
                     spacing="2",
                 ),
                 rx.text(

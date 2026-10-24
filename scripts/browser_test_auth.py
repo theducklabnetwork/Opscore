@@ -38,7 +38,7 @@ def main() -> int:
         # 1. Login page renders (dark theme default).
         page.goto(f"{BASE}/login")
         page.wait_for_selector("#login-email")
-        check("login page renders", page.locator("text=DuckLab").count() > 0)
+        check("login page renders", page.locator("text=Opscore").count() > 0)
         page.screenshot(path=str(OUT / "login_dark.png"), full_page=True)
 
         # 2. Light theme readable.

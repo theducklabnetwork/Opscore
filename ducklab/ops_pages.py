@@ -29,7 +29,7 @@ def dashboard_page() -> rx.Component:
                     rx.link(rx.button("Open Monthly Report",
                                       color_scheme="indigo"),
                             href="/ops/report"),
-                    title="Welcome to DuckLab Operations",
+                    title="Welcome to Opscore Operations",
                 ),
             ),
             rx.cond(
