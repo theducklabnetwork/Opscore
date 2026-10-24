@@ -36,6 +36,12 @@ PILLARS = ("Sales Performance", "Expenses Management", "Manpower Efficiency",
            "Stock Management", "General Operations")
 PRIORITIES = ("Low", "Medium", "High", "Critical")
 ACTION_STATUSES = ("Open", "In progress", "Blocked", "Done", "Cancelled")
+# Store dropdowns; matched to the Daily Sales Contribution by exact text.
+STATES = ("Johor", "Kedah", "Kelantan", "Melaka", "N9", "Pahang", "Penang",
+          "Perak", "Perlis", "Sabah", "Sarawak", "Selangor", "Terengganu",
+          "WP")
+CONCEPTS = ("Outlet", "Mall", "Retail", "Mini Mall", "Ringgit Mall", "Toys",
+            "Express Toys")
 
 
 class WriteError(RepositoryError):
@@ -85,7 +91,7 @@ _NON_NEGATIVE_CONFIG = (
     "min_rtm_target_cents", "level1_base_cents", "sales_last_year_cents",
     "sales_last_month_cents", "salary_basic_allowance_cents",
     "overtime_cents", "support_team_cost_cents", "budget_headcount",
-    "opening_headcount_ft",
+    "opening_headcount_ft", "target_transactions", "target_spr_cents",
 )
 
 
@@ -101,6 +107,19 @@ def _check_config_values(fields: dict) -> None:
         v = fields.get(pct)
         if v is not None and not (0 <= float(v) <= 10):
             raise ValidationError(f"{pct} out of range: {v}")
+    v = fields.get("target_ipr")
+    if v is not None and not (0 <= float(v) <= 1000):
+        raise ValidationError(f"target_ipr out of range: {v}")
+
+
+def _check_store_choices(fields: dict) -> None:
+    """State / Concept must be one of the dropdown options (or blank).
+    A stored legacy concept stays until the store is edited."""
+    if fields.get("state") is not None and fields["state"] not in STATES:
+        raise ValidationError("State: pick an option from the list")
+    if fields.get("concept") is not None \
+            and fields["concept"] not in CONCEPTS:
+        raise ValidationError("Concept: pick an option from the list")
 
 
 def _iso(d: Optional[date]) -> Optional[str]:
@@ -138,23 +157,27 @@ class OperationsWriteRepository:
     # ------------------------------------------------------------------
     def create_store(self, code: str, name: str, concept: Optional[str] = None,
                      zone: Optional[str] = None, zone_pic: Optional[str] = None,
-                     branch_manager: Optional[str] = None) -> int:
+                     branch_manager: Optional[str] = None,
+                     state: Optional[str] = None) -> int:
         if not code or not name:
             raise ValidationError("Store code and name are required")
+        _check_store_choices({"state": state, "concept": concept})
         cur = self._execute(
             "INSERT INTO stores (code, name, concept, zone, zone_pic, "
-            "branch_manager) VALUES (?,?,?,?,?,?)",
-            (code, name, concept, zone, zone_pic, branch_manager),
+            "branch_manager, state) VALUES (?,?,?,?,?,?,?)",
+            (code, name, concept, zone, zone_pic, branch_manager, state),
         )
         return cur.lastrowid
 
     def update_store(self, store_id: int, **fields) -> None:
         """Partial update of store details (name/concept/zone/zone_pic/
-        branch_manager). Unknown fields rejected."""
-        allowed = {"name", "concept", "zone", "zone_pic", "branch_manager"}
+        branch_manager/state). Unknown fields rejected."""
+        allowed = {"name", "concept", "zone", "zone_pic", "branch_manager",
+                   "state"}
         bad = set(fields) - allowed
         if bad:
             raise ValidationError(f"Unknown store fields: {sorted(bad)}")
+        _check_store_choices(fields)
         if not fields:
             return
         sets = ", ".join(f"{k} = ?" for k in fields)
@@ -198,6 +221,7 @@ class OperationsWriteRepository:
         "salary_ratio_target", "budget_headcount", "turnover_threshold",
         "stock_loss_target", "opening_headcount_ft", "part_timer_factor",
         "salary_basic_allowance_cents", "overtime_cents", "support_team_cost_cents",
+        "target_transactions", "target_spr_cents", "target_ipr",
     )
 
     def save_month_config(self, store_id: int, month: str, **fields) -> int:
@@ -326,11 +350,17 @@ class OperationsWriteRepository:
 
     def save_month_config_with_budgets(self, store_id: int, month: str,
                                        fields: dict,
-                                       budgets: dict[int, Optional[int]]
+                                       budgets: dict[int, Optional[int]],
+                                       holidays: Optional[list[date]] = None,
                                        ) -> dict:
-        """Atomic: monthly config + per-category budgets in ONE
+        """Atomic: monthly config + per-category budgets (+ the month's
+        public holidays, replaced as a set; None = unchanged) in ONE
         transaction — either everything is written or nothing."""
         _check_month(month)
+        for d in holidays or []:
+            if not isinstance(d, date) or d.strftime("%Y-%m") != month:
+                raise ValidationError(
+                    f"Public holiday {d} is not in {month}")
         bad = set(fields) - set(self._CONFIG_FIELDS)
         if bad:
             raise ValidationError(f"Unknown config fields: {sorted(bad)}")
@@ -379,6 +409,14 @@ class OperationsWriteRepository:
                     "DO UPDATE SET budget_cents = excluded.budget_cents",
                     (store_id, config_id, cat_id, cents),
                 )
+            if holidays is not None:
+                conn.execute(
+                    "DELETE FROM public_holidays WHERE store_id = ? "
+                    "AND strftime('%Y-%m', date) = ?", (store_id, month))
+                conn.executemany(
+                    "INSERT INTO public_holidays (store_id, date) "
+                    "VALUES (?, ?)",
+                    [(store_id, d.isoformat()) for d in sorted(set(holidays))])
             conn.commit()
             return {
                 "config_id": config_id,

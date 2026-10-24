@@ -2,7 +2,7 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **2** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **3** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -10,6 +10,14 @@ application schema version: **2** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 - **v2** — additive: `actions` gains `created_by`, `created_at`,
   `updated_by`, `updated_at` audit columns for the Action Tracker page.
   Existing rows keep NULL audit data; no KPI-relevant columns change.
+- **v3** — additive: `stores.state`; `monthly_configs` gains
+  `target_transactions`, `target_spr_cents`, `target_ipr`; new tables
+  `public_holidays` (per store/date), `contribution_shares` (Daily Sales
+  Contribution by State + Concept + Day + calendar month) and
+  `basket_benchmarks` (12-month average SPR / IPR). Existing rows keep NULL;
+  existing store concepts are kept until the store is edited. The two
+  reference tables are filled once with `scripts/import_dsc.py <xlsx>`
+  (requires `DUCKLAB_DB_PATH`; replaces both tables in one transaction).
 
 ## Rules
 

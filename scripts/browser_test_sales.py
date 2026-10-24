@@ -99,11 +99,16 @@ def main() -> int:
               "12 days not reported" in body)
         page.click("#sales-hidden-toggle")
         page.wait_for_selector("#sales-row-2026-10-11", timeout=15000)
-        check("Not reported vs Zero sales distinguished",
-              page.locator("#sales-row-2026-10-11 >> text=Not reported")
-              .count() == 1
-              and page.locator("#sales-row-2026-10-05 >> text=Zero sales")
+        check("Daily Sales columns",
+              all(h in body for h in ("Contribution", "Adjusted Target",
+                                      "IPR", "Result")))
+        check("unreported day has no Result; zero-sales day Not Achieved",
+              page.locator("#sales-row-2026-10-11 >> text=Achieved")
+              .count() == 0
+              and page.locator("#sales-row-2026-10-05 >> text=Not Achieved")
               .count() == 1)
+        check("public holiday marked (seed: 14 Oct)",
+              page.locator("#sales-row-2026-10-14 >> text=PH").count() == 1)
         check("basket section", "Basket" in body and "SPR" in body)
 
         # edit deep link for the 1st of the month

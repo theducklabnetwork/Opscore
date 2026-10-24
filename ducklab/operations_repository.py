@@ -71,6 +71,7 @@ class Store:
     zone_pic: Optional[str]
     branch_manager: Optional[str]
     active: bool
+    state: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,7 @@ class OperationsRepository:
             id=r["id"], code=r["code"], name=r["name"], concept=r["concept"],
             zone=r["zone"], zone_pic=r["zone_pic"],
             branch_manager=r["branch_manager"], active=bool(r["active"]),
+            state=r["state"],
         )
 
     # ------------------------------------------------------------------
@@ -190,7 +192,38 @@ class OperationsRepository:
             salary_basic_allowance_cents=r["salary_basic_allowance_cents"],
             overtime_cents=r["overtime_cents"],
             support_team_cost_cents=r["support_team_cost_cents"],
+            target_transactions=r["target_transactions"],
+            target_spr_cents=r["target_spr_cents"],
+            target_ipr=to_decimal(r["target_ipr"]),
         )
+
+    def get_public_holidays(self, store_id: int, month: str) -> list[date]:
+        """Public holidays picked for one store/month, chronological."""
+        _validate_month(month)
+        rows = self._query(
+            "SELECT date FROM public_holidays WHERE store_id = ? "
+            "AND strftime('%Y-%m', date) = ? ORDER BY date",
+            (store_id, month),
+        )
+        return [_parse_date(r["date"]) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Daily Sales Contribution (imported reference data)
+    # ------------------------------------------------------------------
+    def get_contribution_shares(self, state: Optional[str],
+                                concept: Optional[str],
+                                month: str) -> dict[str, Decimal]:
+        """Day key (Mon..Sun, PH) -> share for a State + Concept (exact
+        text) in the month's calendar month (any year). {} = no match."""
+        _validate_month(month)
+        if not state or not concept:
+            return {}
+        rows = self._query(
+            "SELECT day, share FROM contribution_shares "
+            "WHERE state = ? AND concept = ? AND month = ?",
+            (state, concept, int(month[5:7])),
+        )
+        return {r["day"]: to_decimal(r["share"]) for r in rows}
 
     # ------------------------------------------------------------------
     # Daily records

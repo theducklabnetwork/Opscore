@@ -118,6 +118,18 @@ class AppService:
         authz.require_store_access(user, store_id)
         return self.read_repo.get_month_config(store_id, month)
 
+    def get_public_holidays(self, user: User, store_id: int, month: str):
+        authz.require_store_access(user, store_id)
+        return self.read_repo.get_public_holidays(store_id, month)
+
+    def get_contribution_shares(self, user: User, store_id: int,
+                                month: str) -> dict:
+        """The store's day shares (its State + Concept) for the month."""
+        authz.require_store_access(user, store_id)
+        store = self.read_repo.get_store(store_id)
+        return self.read_repo.get_contribution_shares(
+            store.state, store.concept, month)
+
     def _store_write(self, user: User, store_id: int) -> None:
         """require_store_write with the store's active flag (deactivated
         stores are read-only; reads still work). Access is checked BEFORE
@@ -201,13 +213,15 @@ class AppService:
 
     def configure_month_with_budgets(self, user: User, store_id: int,
                                      month: str, fields: dict,
-                                     budgets: dict) -> dict:
-        """Atomic setup save (config + budgets); deactivated stores are
-        read-only. Config-manager permission required."""
+                                     budgets: dict,
+                                     holidays: Optional[list] = None) -> dict:
+        """Atomic setup save (config + budgets + public holidays);
+        deactivated stores are read-only. Config-manager permission
+        required."""
         authz.require_config_manager(user)
         self._store_write(user, store_id)
         return self.write.configure_month_with_budgets(
-            store_id, month, fields, budgets)
+            store_id, month, fields, budgets, holidays)
 
     def record_payroll(self, user: User, store_id: int, month: str,
                        salary_basic_allowance_cents, overtime_cents,

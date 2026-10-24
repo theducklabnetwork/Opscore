@@ -274,9 +274,8 @@ class CompareSelectorTests(Fixture):
         # the level reached tile and the ladder do not depend on it
         self.assertEqual(st.sp_level, "Level 2")
         self.assertEqual(len(st.sp_ladder), 4)
-        # the daily vs-budget column stays on Level 1 (budget achievement)
-        # 6,900 - 200,000 / 31 = 448.387 (truncated to the cent, as before)
-        self.assertEqual(st.sp_rows[0]["vs_budget"], "RM 448.38")
+        # daily targets stay on Level 1 (no State/Concept match here: "—")
+        self.assertEqual(st.sp_rows[0]["target"], "—")
 
     def test_select_compare_validates_and_remembers(self):
         from ducklab.ops_sales_state import SalesState

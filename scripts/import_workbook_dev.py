@@ -195,15 +195,18 @@ def do_import(db_path: Path, wb_path: Path, replace: bool) -> dict:
     admin = app.auth.get_user(1)
 
     st = data["store"]
+    # Concept is a dropdown now: a workbook value outside it is not imported
+    from ducklab.operations_write_repository import CONCEPTS
+    concept = {"concept": st["concept"]} if st["concept"] in CONCEPTS else {}
     try:
         sid = app.register_store(admin, st["code"], st["name"] or st["code"],
-                                 concept=st["concept"], zone=st["zone"],
+                                 **concept, zone=st["zone"],
                                  zone_pic=st["zone_pic"],
                                  branch_manager=st["branch_manager"])
     except DuplicateRecordError:
         sid = app.read_repo.get_store_by_code(st["code"]).id
         app.update_store_details(
-            admin, sid, name=st["name"] or st["code"], concept=st["concept"],
+            admin, sid, name=st["name"] or st["code"], **concept,
             zone=st["zone"], zone_pic=st["zone_pic"],
             branch_manager=st["branch_manager"])
     if sid not in admin.store_ids:

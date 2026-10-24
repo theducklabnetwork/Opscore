@@ -10,6 +10,7 @@ stored as NULL; an explicit 0 is stored as 0.
 from __future__ import annotations
 
 import logging
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 
@@ -26,7 +27,8 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import (
-    DuplicateRecordError, RecordNotFoundError, ValidationError,
+    CONCEPTS, STATES, DuplicateRecordError, RecordNotFoundError,
+    ValidationError,
 )
 from ducklab.ops_expenses_state import BUDGET_CLEAR_CONFLICT
 from ducklab.ops_stock_state import StockState
@@ -68,7 +70,14 @@ SETUP_PAYROLL = [
     ("s_support", "support_team_cost_cents", "money",
      "Support team cost (RM, optional)"),
 ]
-SETUP_ALL = SETUP_SALES + SETUP_MANPOWER + SETUP_STOCK + SETUP_PAYROLL
+# Daily Sales targets: monthly transactions, SPR (RM) and IPR (items)
+SETUP_DAILY = [
+    ("s_target_txn", "target_transactions", "count", "Target Transactions"),
+    ("s_target_spr", "target_spr_cents", "money", "Target SPR (RM)"),
+    ("s_target_ipr", "target_ipr", "ipr", "Target IPR"),
+]
+SETUP_ALL = (SETUP_SALES + SETUP_DAILY + SETUP_MANPOWER + SETUP_STOCK
+             + SETUP_PAYROLL)
 
 log = logging.getLogger("ducklab.ops_stores_state")
 
@@ -111,6 +120,7 @@ class StoresState(StockState):
     sf_code: str = ""
     sf_name: str = ""
     sf_concept: str = ""
+    sf_state: str = ""
     sf_zone: str = ""
     sf_zone_pic: str = ""
     sf_branch_manager: str = ""
@@ -148,6 +158,13 @@ class StoresState(StockState):
     s_salary: str = ""
     s_overtime: str = ""
     s_support: str = ""
+    s_target_txn: str = ""
+    s_target_spr: str = ""
+    s_target_ipr: str = ""
+    s_holidays: list[str] = []               # ISO dates in the month
+    s_holidays_original: list[str] = []
+    s_holiday_min: str = ""                  # date picker bounds (month)
+    s_holiday_max: str = ""
     budget_rows: list[dict[str, str]] = []   # per-category budget inputs
 
     # ------------------------------------------------------------------
@@ -158,7 +175,7 @@ class StoresState(StockState):
         self.stores_notice = ""
         self.sf_open = False
         self.sf_editing = ""
-        self.sf_code = self.sf_name = self.sf_concept = ""
+        self.sf_code = self.sf_name = self.sf_concept = self.sf_state = ""
         self.sf_zone = self.sf_zone_pic = self.sf_branch_manager = ""
         self.sf_error = ""
         self.sf_saving = False
@@ -176,6 +193,9 @@ class StoresState(StockState):
         self.setup_levels = []
         self.setup_levels_missing = False
         self.budget_rows = []
+        self.s_holidays = []
+        self.s_holidays_original = []
+        self.s_holiday_min = self.s_holiday_max = ""
         for attr, _, _, _ in SETUP_ALL:
             setattr(self, attr, "")
 
@@ -246,7 +266,8 @@ class StoresState(StockState):
             return
         self.store_rows = [
             {"id": str(s.id), "code": s.code, "name": s.name,
-             "concept": s.concept or "—", "zone": s.zone or "—",
+             "concept": s.concept or "—", "state": s.state or "—",
+             "zone": s.zone or "—",
              "zone_pic": s.zone_pic or "—",
              "branch_manager": s.branch_manager or "—",
              "active": "1" if s.active else "0",
@@ -266,6 +287,7 @@ class StoresState(StockState):
                 app_service.list_report_versions(user, store_id, month))
             cats = app_service.get_expense_categories(user, store_id)
             budgets = app_service.get_expense_budgets(user, store_id, month)
+            holidays = app_service.get_public_holidays(user, store_id, month)
         except (AuthenticationError, AuthorizationError,
                 StoreNotFoundError) as exc:
             # never show blank setup fields for an auth failure
@@ -298,6 +320,9 @@ class StoresState(StockState):
                 "s_opening_hc": _count_str(cfg.opening_headcount_ft),
                 "s_pt_factor": _factor_str(cfg.part_timer_factor),
                 "s_stock_target": _pct_str(cfg.stock_loss_target),
+                "s_target_txn": _count_str(cfg.target_transactions),
+                "s_target_spr": _money_str(cfg.target_spr_cents),
+                "s_target_ipr": _factor_str(cfg.target_ipr),
             }
             vals.update(payroll_vals)
             for attr, v in vals.items():
@@ -310,6 +335,11 @@ class StoresState(StockState):
                  "value": ds.fmt_rm(levels.get(f"level{n}"))}
                 for n in (1, 2, 3, 4)
             ]
+        self.s_holidays = [d.isoformat() for d in holidays]
+        self.s_holidays_original = list(self.s_holidays)
+        first, last, _ = kpi.month_bounds(month)
+        self.s_holiday_min, self.s_holiday_max = (first.isoformat(),
+                                                  last.isoformat())
         # expense budgets (rows always shown when categories exist)
         self.budget_rows = [
             {"id": str(c.id), "name": c.name,
@@ -344,14 +374,23 @@ class StoresState(StockState):
                 self.sf_code = row["code"]
                 self.sf_name = row["name"]
                 self.sf_concept = "" if row["concept"] == "—" else row["concept"]
+                self.sf_state = "" if row["state"] == "—" else row["state"]
                 self.sf_zone = "" if row["zone"] == "—" else row["zone"]
                 self.sf_zone_pic = ("" if row["zone_pic"] == "—"
                                     else row["zone_pic"])
                 self.sf_branch_manager = ("" if row["branch_manager"] == "—"
                                           else row["branch_manager"])
         else:
-            self.sf_code = self.sf_name = self.sf_concept = ""
+            self.sf_code = self.sf_name = self.sf_concept = self.sf_state = ""
             self.sf_zone = self.sf_zone_pic = self.sf_branch_manager = ""
+
+    @rx.var
+    def sf_concept_hint(self) -> str:
+        """A saved concept that is no longer an option stays until the
+        store is edited; then an option must be picked."""
+        if self.sf_concept in ("", *CONCEPTS):
+            return ""
+        return f"Current: {self.sf_concept}. Pick an option."
 
     @rx.event
     def close_store_form(self) -> None:
@@ -368,6 +407,7 @@ class StoresState(StockState):
             details = {
                 k: (v.strip() or None)
                 for k, v in (("concept", self.sf_concept),
+                             ("state", self.sf_state),
                              ("zone", self.sf_zone),
                              ("zone_pic", self.sf_zone_pic),
                              ("branch_manager", self.sf_branch_manager))
@@ -541,6 +581,9 @@ class StoresState(StockState):
                 elif kind == "factor":
                     out[field] = float(kpi.parse_decimal(
                         raw, label, Decimal(0), Decimal(2)))
+                elif kind == "ipr":
+                    out[field] = float(kpi.parse_decimal(
+                        raw, label, Decimal(0), Decimal(1000)))
                 else:  # pct -> fraction (repository range 0..10 = 1000%)
                     out[field] = float(kpi.parse_decimal(
                         raw, label, Decimal(0), Decimal(1000)) / 100)
@@ -548,6 +591,12 @@ class StoresState(StockState):
                 errors.append(
                     f"{label}: enter a non-negative number (or leave blank)")
         return out, errors
+
+    def _parse_holidays(self) -> Optional[list[date]]:
+        """The picked public holidays, or None when unchanged."""
+        if sorted(self.s_holidays) == sorted(self.s_holidays_original):
+            return None
+        return [date.fromisoformat(d) for d in sorted(self.s_holidays)]
 
     def _parse_budgets(self):
         """Validate every budget row before ANY write; -> (updates, errors)."""
@@ -621,6 +670,41 @@ class StoresState(StockState):
         self.s_support = value
 
     @rx.event
+    def set_s_target_txn(self, value: str) -> None:
+        self.s_target_txn = value
+
+    @rx.event
+    def set_s_target_spr(self, value: str) -> None:
+        self.s_target_spr = value
+
+    @rx.event
+    def set_s_target_ipr(self, value: str) -> None:
+        self.s_target_ipr = value
+
+    @rx.event
+    def add_holiday(self, value: str) -> None:
+        """Date picker: add one public holiday in the selected month."""
+        month = self._selected_month()
+        try:
+            day = date.fromisoformat(value)
+        except (TypeError, ValueError):
+            return
+        if month is None or day.strftime("%Y-%m") != month:
+            self.setup_error = "Public Holidays: pick a date in this month."
+            return
+        if value not in self.s_holidays:
+            self.s_holidays = sorted([*self.s_holidays, value])
+
+    @rx.event
+    def remove_holiday(self, value: str) -> None:
+        self.s_holidays = [d for d in self.s_holidays if d != value]
+
+    @rx.var
+    def holiday_chips(self) -> list[dict[str, str]]:
+        return [{"iso": d, "label": date.fromisoformat(d).strftime("%d %b")}
+                for d in self.s_holidays]
+
+    @rx.event
     def set_sf_code(self, value: str) -> None:
         self.sf_code = value
 
@@ -631,6 +715,10 @@ class StoresState(StockState):
     @rx.event
     def set_sf_concept(self, value: str) -> None:
         self.sf_concept = value
+
+    @rx.event
+    def set_sf_state(self, value: str) -> None:
+        self.sf_state = value
 
     @rx.event
     def set_sf_zone(self, value: str) -> None:
@@ -663,10 +751,11 @@ class StoresState(StockState):
             errors += budget_errors
             if errors:
                 raise ValidationError("; ".join(errors))
-            if not fields and not budgets:
+            holidays = self._parse_holidays()
+            if not fields and not budgets and holidays is None:
                 raise ValidationError("Nothing to save — no changes made.")
             result = app_service.configure_month_with_budgets(
-                user, store_id, month, fields, budgets)
+                user, store_id, month, fields, budgets, holidays)
             self.setup_notice = (
                 "Monthly setup saved."
                 + (" Note: a finalized snapshot exists — the finalized report"

@@ -197,6 +197,9 @@ class SalesState(StoresState):
                 return
             rep = app_service.preview_month(user, store_id, month)
             days = app_service.get_daily_records(user, store_id, month)
+            shares = app_service.get_contribution_shares(user, store_id,
+                                                         month)
+            holidays = app_service.get_public_holidays(user, store_id, month)
             self.sp_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
         except (AuthorizationError, AuthenticationError) as exc:
@@ -318,7 +321,8 @@ class SalesState(StoresState):
         self.sp_asp = (ds.fmt_rm(s.asp) if s.asp is not None
                        else "Not available")
 
-        self.sp_rows = self._daily_rows(days, dim, s.targets.get("level1"))
+        self.sp_rows = self._daily_rows(days, month, cfg, shares,
+                                        set(holidays))
         self.sp_rows_reported = [r for r in self.sp_rows
                                  if r["status"] != ds.DAY_NOT_REPORTED]
         self.sp_hidden_count = len(self.sp_rows) - len(self.sp_rows_reported)
@@ -378,47 +382,60 @@ class SalesState(StoresState):
         sign = "" if gap >= 0 else "−"
         return f"{sign}{ds.fmt_rm(abs(int(gap)))}"
 
-    def _daily_rows(self, days, dim: int, level1) -> list[dict[str, str]]:
-        from datetime import date as _date, timedelta
-        budget = kpi.required_daily_run_rate(level1, dim)
-        by_day = {d.date: d for d in days}
-        first = days[0].date.replace(day=1) if days else None
-        if first is None:
+    def _daily_rows(self, days, month: str, cfg, shares: dict,
+                    holidays: set) -> list[dict[str, str]]:
+        """Daily Sales table: day share, Daily / Adjusted Target and Result
+        from kpi.daily_targets; basket figures with their % vs target."""
+        from datetime import timedelta
+        if not days:
             return []
+        first, _, dim = kpi.month_bounds(month)
+        by_day = {d.date: d for d in days}
+        targets = kpi.daily_targets(
+            month, cfg.level1_base_cents, shares, holidays,
+            {d.date: d.sales_cents for d in days})
+        by_target = {t.date: t for t in targets or []}
         rows = []
         for i in range(dim):
             day = first + timedelta(days=i)
             d = by_day.get(day)
             reported = d is not None and d.sales_cents is not None
-            if d is not None:
-                spr = kpi.spr_cents(d.sales_cents, d.transactions) \
-                    if reported and d.transactions else None
-                upt = kpi.upt(d.units or 0, d.transactions) \
-                    if reported and d.transactions else None
-                asp = kpi.asp_cents(d.sales_cents, d.units) \
-                    if reported and d.units else None
-            else:
-                spr = upt = asp = None
-            vs = (kpi.daily_vs_run_rate_cents(d.sales_cents, budget)
-                  if reported else None)
-            # same day chips as Daily Operations; a day without sales is
-            # "Not reported" here (this page is about sales)
-            status = ds.day_status(d) if reported else ds.DAY_NOT_REPORTED
+            txn = d.transactions if reported else None
+            spr = (kpi.spr_cents(d.sales_cents, txn) if txn else None)
+            ipr = (kpi.upt(d.units, txn)
+                   if txn and d.units is not None else None)
+            t = by_target.get(day)
+            share = kpi.day_share(day, shares, holidays) if shares else None
+            pcts = {
+                "txn_pct": ds.fmt_variance_pct(
+                    kpi.transactions_pct(txn, cfg.target_transactions, dim)),
+                "spr_pct": ds.fmt_variance_pct(
+                    kpi.pct_vs_target(spr, cfg.target_spr_cents)),
+                "ipr_pct": ds.fmt_variance_pct(
+                    kpi.pct_vs_target(ipr, cfg.target_ipr)),
+            }
+            result = t.result if t is not None else None
             rows.append({
                 "iso": day.isoformat(),
                 "date": day.strftime("%d %b"),
                 "weekday": day.strftime("%a"),
+                "ph": "PH" if day in holidays else "",
+                "contribution": ds.fmt_share(share),
+                "target": ds.fmt_rm(t.target_cents if t else None),
+                "adjusted": ds.fmt_rm(t.adjusted_cents if t else None),
                 "sales": ds.fmt_rm(d.sales_cents) if reported else "—",
-                "transactions": ds.fmt_num(d.transactions if reported
-                                           else None),
-                "units": ds.fmt_num(d.units if reported else None),
+                "transactions": ds.fmt_num(txn),
                 "spr": ds.fmt_rm(spr) if spr is not None else "—",
-                "upt": f"{float(upt):.2f}" if upt is not None else "—",
-                "asp": ds.fmt_rm(asp) if asp is not None else "—",
-                "vs_budget": ("−" if vs is not None and vs < 0 else "")
-                    + (ds.fmt_rm(abs(int(vs))) if vs is not None else "—"),
-                "status": status,
-                "status_color": ds.status_color(status),
+                "ipr": f"{float(ipr):.2f}" if ipr is not None else "—",
+                **pcts,
+                # red when below target
+                **{k + "_neg": "1" if v.startswith(ds.MINUS) else ""
+                   for k, v in pcts.items()},
+                "result": result or "",
+                "result_color": ds.status_color(result or ""),
+                # kept for the collapsed unreported days
+                "status": (ds.day_status(d) if reported
+                           else ds.DAY_NOT_REPORTED),
             })
         return rows
 

@@ -8,7 +8,7 @@ green/amber/red), which automatically adapt to dark and light mode.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from decimal import ROUND_FLOOR, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 import reflex as rx
 
@@ -93,6 +93,24 @@ def fmt_pct(ratio, dash="—") -> str:
     if ratio is None:
         return dash
     return f"{float(ratio) * 100:,.1f}%"
+
+
+def fmt_variance_pct(ratio, dash="—") -> str:
+    """Decimal ratio vs target -> '−5.0%' / '+2.1%' / '0.0%' (1 decimal,
+    half-up; the sign follows the shown figure). None stays a dash."""
+    if ratio is None:
+        return dash
+    pct = (to_decimal(ratio) * 100).quantize(Decimal("0.1"), ROUND_HALF_UP)
+    if pct == 0:
+        return "0.0%"
+    return f"{MINUS if pct < 0 else '+'}{abs(pct)}%"
+
+
+def fmt_share(share, dash="—") -> str:
+    """Contribution share (fraction of the month) -> '2.95%'."""
+    if share is None:
+        return dash
+    return f"{float(share) * 100:.2f}%"
 
 
 def fmt_achievement(ratio, status: str, dash="—") -> str:
@@ -187,6 +205,8 @@ STATUS_COLOR: dict[str, str] = {
     # sales levels
     "Achieved": "green", "Below target": "red",
     "Awaiting data": "gray", "No target": "gray",
+    # daily targets (kpi.daily_targets Result)
+    "Not Achieved": "red",
     # expenses (total + per-category budget status)
     "Within budget": "green", "Over budget": "red", "OVER BUDGET": "red",
     "Watch": "amber", "No budget": "gray", "No payments yet": "gray",

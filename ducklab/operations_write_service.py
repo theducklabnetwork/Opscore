@@ -80,12 +80,14 @@ class OperationsWriteService:
 
     def configure_month_with_budgets(self, store_id: int, month: str,
                                      fields: dict,
-                                     budgets: dict[int, Optional[int]]
+                                     budgets: dict[int, Optional[int]],
+                                     holidays: Optional[list[date]] = None,
                                      ) -> dict:
-        """Atomic monthly setup save: config + budgets in one transaction."""
+        """Atomic monthly setup save: config + budgets (+ public
+        holidays) in one transaction."""
         self._require_four_levels(store_id, month, fields)
         return self.repo.save_month_config_with_budgets(
-            store_id, month, fields, budgets)
+            store_id, month, fields, budgets, holidays)
 
     # -- categories & budgets ---------------------------------------------
     def add_expense_category(self, store_id: int, name: str,
