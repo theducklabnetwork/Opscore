@@ -75,9 +75,9 @@ def main() -> int:
         # --- report page (live, default month = October 2026) ---------------
         page.goto(f"{BASE}/ops/report")
         page.wait_for_selector("#sales-section", timeout=15000)
-        # Backend truth: MTD = 12,000 + 11,500 = RM 23,500.00
+        # Backend truth: MTD = 12,000 + 10,000 = RM 22,000.00
         check("live sales MTD correct",
-              page.locator("text=RM 23,500.00").count() > 0)
+              page.locator("text=RM 22,000.00").count() > 0)
         check("live mode selected (switch; no LIVE chip)",
               page.locator("#report-mode [data-state='on']").inner_text()
               == "Live"
@@ -100,14 +100,14 @@ def main() -> int:
         # B02 has no October configuration -> explicit empty state,
         # and critically NO stale store-A figures remain visible.
         check("store switch clears stale data (no A01 figures)",
-              page.locator("text=RM 23,500.00").count() == 0)
+              page.locator("text=RM 22,000.00").count() == 0)
         page.screenshot(path=str(OUT / "report_empty.png"), full_page=True)
         # Switch month to September for B02: configured, no sales -> RM 0.00
         choose(page, "#month-selector", "September 2026",
                "#stock-section >> text=RM 0.00")
         check("B02 September shows RM 0.00 (zero, not missing)", True)
         choose(page, "#store-selector", "A01 — Alpha Pavilion",
-               "#sales-section >> text=RM 19,881.00")
+               "#sales-section >> text=RM 20,000.00")
         check("switching back restores store A September data", True)
 
         page.click("#report-mode >> text=Finalized")
@@ -117,13 +117,13 @@ def main() -> int:
               == "Finalized"
               and page.locator("text=FINALIZED —").count() == 0)
         check("finalized MTD correct",
-              page.locator("#sales-section >> text=RM 19,881.00").count() > 0)
+              page.locator("#sales-section >> text=RM 20,000.00").count() > 0)
         check("finalized version note shown", True)
         page.screenshot(path=str(OUT / "report_finalized.png"), full_page=True)
 
         # --- missing config empty state --------------------------------------
         page.click("#report-mode >> text=Live")
-        page.wait_for_selector("#sales-section >> text=RM 19,881.00", timeout=15000)
+        page.wait_for_selector("#sales-section >> text=RM 20,000.00", timeout=15000)
         choose(page, "#month-selector", "August 2026",
                "text=No report available")
         check("missing config shows explicit empty state", True)
@@ -131,7 +131,7 @@ def main() -> int:
 
         # --- light theme ------------------------------------------------------
         choose(page, "#month-selector", "October 2026",
-               "#sales-section >> text=RM 23,500.00")
+               "#sales-section >> text=RM 22,000.00")
         page.click("#theme-toggle")
         page.wait_for_timeout(500)
         page.screenshot(path=str(OUT / "report_light.png"), full_page=True)

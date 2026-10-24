@@ -384,16 +384,16 @@ class TestEndToEnd(AuthFixture):
         token, _ = self.login("bm@ducklab.com", PW2)
         actor = self.app.authenticate(token)
         # Authorized Branch Manager writes permitted data.
-        self.app.record_daily(actor, sid, date(2026, 9, 1), sales_cents=968100)
+        self.app.record_daily(actor, sid, date(2026, 9, 1), sales_cents=1000000)
         # Authorized report access works.
         report = self.app.preview_month(actor, sid, "2026-09",
                                         as_of=date(2026, 9, 30))
-        self.assertEqual(report.sales.sales_mtd_cents, 968100)
+        self.assertEqual(report.sales.sales_mtd_cents, 1000000)
         # Finalization by admin; then branch manager can read the snapshot.
         self.app.finalize_month(self.admin, sid, "2026-09",
                                 as_of=date(2026, 9, 30))
         snap = self.app.get_finalized_report(actor, sid, "2026-09")
-        self.assertEqual(snap["report"]["sales"]["sales_mtd_cents"], 968100)
+        self.assertEqual(snap["report"]["sales"]["sales_mtd_cents"], 1000000)
         # Logout removes protected access.
         self.auth.logout(token)
         with self.assertRaises(AuthenticationError):

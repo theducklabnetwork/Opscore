@@ -19,7 +19,7 @@ K = DailyState.day_kpis
 
 
 def _tile(label, value, id=None) -> rx.Component:
-    # plain label + full value; exact money ("RM 324,999.70") fits a
+    # plain label + full value; exact money ("RM 120,000.00") fits a
     # two-up phone tile two sizes down
     return ui.kpi_tile(label, value, id=id, size_narrow="4")
 

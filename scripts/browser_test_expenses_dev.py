@@ -108,7 +108,7 @@ def main() -> int:
         page.wait_for_timeout(2000)
         body = page.locator("body").inner_text()
 
-        check("paid card value (RM 5,205.00)", "RM 5,205.00" in body)
+        check("paid card value (RM 5,355.00)", "RM 5,355.00" in body)
         check("category statuses present",
               "OVER BUDGET" in body and "Watch" in body
               and "No budget" in body)
@@ -149,8 +149,8 @@ def main() -> int:
         page.click("#exp-save")
         page.wait_for_timeout(3500)
         body = page.locator("body").inner_text()
-        check("expense added, totals updated (RM 5,260.50)",
-              "RM 5,260.50" in body)  # 5,205 + 55.50
+        check("expense added, totals updated (RM 5,410.50)",
+              "RM 5,410.50" in body)  # 5,355 + 55.50
 
         # --- cancel it -> totals revert ---
         page.wait_for_selector("#expense-register", timeout=15000)
@@ -163,8 +163,8 @@ def main() -> int:
         page.click("#exp-save")
         page.wait_for_timeout(3500)
         body = page.locator("body").inner_text()
-        check("cancelled removes from totals (RM 5,205.00 back)",
-              "RM 5,205.00" in body)
+        check("cancelled removes from totals (RM 5,355.00 back)",
+              "RM 5,355.00" in body)
 
         # --- store switch ---
         page.goto(f"{BASE}/ops/expenses")
@@ -173,8 +173,8 @@ def main() -> int:
         choose(page, "#store-selector", "A01 — Alpha Pavilion")
         page.wait_for_timeout(2500)
         check("store switch works (X01 totals gone)",
-              "RM 5,205.00" not in page.locator("body").inner_text()
-              and "RM 5,260.50" not in page.locator("body").inner_text())
+              "RM 5,355.00" not in page.locator("body").inner_text()
+              and "RM 5,410.50" not in page.locator("body").inner_text())
 
         # screenshots
         goto_expenses(page)

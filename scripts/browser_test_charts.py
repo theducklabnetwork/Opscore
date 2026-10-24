@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Browser smoke for Task 11: Plotly charts on /ops/stock, /ops/sales,
-/ops/expenses using the seeded DEV store S01 (never ZI68 — private).
+/ops/expenses using the seeded DEV store S01 and synthetic data.
 Checks render, hover values, theme restyle, zoom/reset, mobile overflow,
 console errors, and page weight (transferred bytes) for /ops/sales.
 Screenshots -> docs/screenshots/phase2-task11/.

@@ -66,10 +66,10 @@ def main() -> int:
                               app.get_expense_categories(admin, sid)
                               if c.name == name)
 
-    # budgets: Electricity RM 3,200 (over), Water RM 500, Consumables
+    # budgets: Electricity RM 4,000 (over), Water RM 500, Consumables
     # RM 800 (watch at >=80%), Repairs blank (No budget)
     app.set_expense_budget(admin, sid, "2026-10", cats["Electricity"],
-                           rm(3200))
+                           rm(4000))
     app.set_expense_budget(admin, sid, "2026-10", cats["Water"], rm(500))
     app.set_expense_budget(admin, sid, "2026-10", cats["Consumables"],
                            rm(800))
@@ -88,42 +88,42 @@ def main() -> int:
     lines = [
         # paid, verified (electricity — drives category over budget)
         dict(incurred_date=date(2026, 10, 2), paid_date=date(2026, 10, 3),
-             category_id=E, description="TNB bill (Oct)", amount_cents=rm(2850),
+             category_id=E, description="Utility bill (Oct)", amount_cents=rm(3000),
              status="Paid", paid_by="Store Account", receipt_ref="RCP-3001",
-             verification="Verified", recorded_by="Branch Manager"),
+             verification="Verified", recorded_by="Staff A"),
         dict(incurred_date=date(2026, 10, 9), paid_date=date(2026, 10, 10),
              category_id=E, description="Generator fuel", amount_cents=rm(700),
              status="Paid", paid_by="Petty Cash", receipt_ref="RCP-3005",
-             verification="Verified", recorded_by="Branch Manager"),
+             verification="Verified", recorded_by="Staff A"),
         # water — within budget
         dict(incurred_date=date(2026, 10, 4), paid_date=date(2026, 10, 5),
              category_id=W, description="Water utility", amount_cents=rm(300),
              status="Paid", paid_by="Store Account", receipt_ref="RCP-3002",
-             verification="Verified", recorded_by="Branch Manager"),
+             verification="Verified", recorded_by="Staff A"),
         # consumables — watch band (>=80% of RM 800)
         dict(incurred_date=date(2026, 10, 6), paid_date=date(2026, 10, 7),
              category_id=C, description="Cleaning supplies",
              amount_cents=rm(650), status="Paid", paid_by="Petty Cash",
              receipt_ref="RCP-3003", verification="Verified",
-             recorded_by="Branch Manager"),
+             recorded_by="Staff A"),
         # pending item (open)
         dict(incurred_date=date(2026, 10, 8), category_id=C,
              description="Packaging (awaiting invoice)", amount_cents=rm(185),
-             status="Pending", recorded_by="Branch Manager"),
+             status="Pending", recorded_by="Staff A"),
         # cancelled (excluded from totals)
         dict(incurred_date=date(2026, 10, 8), category_id=C,
              description="Duplicate entry — cancelled", amount_cents=rm(999),
-             status="Cancelled", recorded_by="Branch Manager"),
+             status="Cancelled", recorded_by="Staff A"),
         # paid but missing paid date (data check)
         dict(incurred_date=date(2026, 10, 11), category_id=W,
              description="Water deposit", amount_cents=rm(120),
              status="Paid", paid_by="Petty Cash", receipt_ref="RCP-3006",
-             verification="Verified", recorded_by="Branch Manager"),
+             verification="Verified", recorded_by="Staff A"),
         # unverified
         dict(incurred_date=date(2026, 10, 12), paid_date=date(2026, 10, 12),
              category_id=R, description="Door hinge fix", amount_cents=rm(90),
              status="Paid", paid_by="Petty Cash", receipt_ref="RCP-3007",
-             verification="Unverified", recorded_by="Branch Manager"),
+             verification="Unverified", recorded_by="Staff A"),
         # disputed
         dict(incurred_date=date(2026, 10, 13), paid_date=date(2026, 10, 14),
              category_id=R, description="Disputed plumbing charge",
@@ -135,27 +135,27 @@ def main() -> int:
              category_id=C, description="Cash overage at count",
              amount_cents=-rm(60), status="Paid", paid_by="Store Account",
              receipt_ref="ADJ-1001", verification="Verified",
-             recorded_by="Branch Manager"),
+             recorded_by="Staff A"),
         # cross-month: incurred Sep, paid Oct (paid-date attribution)
         dict(incurred_date=date(2026, 9, 28), paid_date=date(2026, 10, 1),
              category_id=C, description="September consumables settled Oct",
              amount_cents=rm(100), status="Paid", paid_by="Other",
              receipt_ref="RCP-2990", verification="Verified",
-             recorded_by="Branch Manager"),
+             recorded_by="Staff A"),
         # a few routine paid lines to reach ~15
         dict(incurred_date=date(2026, 10, 16), paid_date=date(2026, 10, 17),
              category_id=C, description="Receipt paper rolls",
              amount_cents=rm(45), status="Paid", paid_by="Petty Cash",
              receipt_ref="RCP-3009", verification="Verified",
-             recorded_by="Branch Manager"),
+             recorded_by="Staff A"),
         dict(incurred_date=date(2026, 10, 17), paid_date=date(2026, 10, 18),
              category_id=W, description="Filter replacement",
              amount_cents=rm(80), status="Paid", paid_by="Store Account",
              receipt_ref="RCP-3010", verification="Verified",
-             recorded_by="Branch Manager"),
+             recorded_by="Staff A"),
         dict(incurred_date=date(2026, 10, 18), category_id=R,
              description="Lighting quote (pending)", amount_cents=rm(220),
-             status="Pending", recorded_by="Branch Manager"),
+             status="Pending", recorded_by="Staff A"),
     ]
     for line in lines:
         rec(admin, sid, **line)

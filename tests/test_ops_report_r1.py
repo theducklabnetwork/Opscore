@@ -27,16 +27,14 @@ class SerializerTests(unittest.TestCase):
         self.app = AppService(Path(self._tmp.name) / "r1.db")
         self.admin = self.app.auth.bootstrap_first_admin(
             "admin@ducklab.com", "Root", "Sup3rSecure!x")
-        self.sid = self.app.register_store(self.admin, "ZI68", "SLP")
-        # Level 1 = 350,819.30 (base in cents); 30 days -> 350,819.00
+        self.sid = self.app.register_store(self.admin, "S01", "Store A")
+        # Level 1 = 120,000.30; 30 days -> 120,000.00.
         self.app.configure_month(
-            self.admin, self.sid, "2026-09", level1_base_cents=35081930,
+            self.admin, self.sid, "2026-09", level1_base_cents=12000030,
             level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
-        for d in range(1, 30):
+        for d in range(1, 31):
             self.app.record_daily(self.admin, self.sid, date(2026, 9, d),
-                                  sales_cents=rm(12000))
-        self.app.record_daily(self.admin, self.sid, date(2026, 9, 30),
-                              sales_cents=rm(2819))
+                                  sales_cents=rm(4000))
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -44,12 +42,12 @@ class SerializerTests(unittest.TestCase):
     def test_live_title_money_and_achievement(self):
         out = _serialize_live(self.app.preview_month(
             self.admin, self.sid, "2026-09"), user=self.admin)
-        self.assertEqual(out["store_title"], "SLP (ZI68)")
+        self.assertEqual(out["store_title"], "Store A (S01)")
         self.assertEqual(out["month"], "September 2026")
         s = out["sales"]
-        self.assertEqual(s["mtd"], "RM 350,819.00")
-        self.assertEqual(s["projected"], "RM 350,819.00")   # full format
-        self.assertEqual(s["target_l1"], "RM 350,819.30")
+        self.assertEqual(s["mtd"], "RM 120,000.00")
+        self.assertEqual(s["projected"], "RM 120,000.00")   # full format
+        self.assertEqual(s["target_l1"], "RM 120,000.30")
         # 99.99991%: below target -> never shown as 100.0%
         self.assertEqual(s["achievement_l1"], "99.9%")
 
@@ -57,8 +55,8 @@ class SerializerTests(unittest.TestCase):
         self.app.finalize_month(self.admin, self.sid, "2026-09")
         snap = self.app.get_finalized_report(self.admin, self.sid, "2026-09")
         out = _serialize_snapshot(snap, user=self.admin)
-        self.assertEqual(out["store_title"], "SLP (ZI68)")
-        self.assertEqual(out["sales"]["projected"], "RM 350,819.00")
+        self.assertEqual(out["store_title"], "Store A (S01)")
+        self.assertEqual(out["sales"]["projected"], "RM 120,000.00")
         self.assertEqual(out["sales"]["achievement_l1"], "99.9%")
 
 
@@ -66,9 +64,9 @@ class HeadingTests(unittest.TestCase):
     def test_title_line(self):
         from ducklab.ops_state import OpsState
         st = OpsState()
-        st.report = {"store": {"label": "ZI68 — SLP", "title": "SLP (ZI68)"},
+        st.report = {"store": {"label": "S01 — Store A", "title": "Store A (S01)"},
                      "month": {"label": "September 2026"}}
-        self.assertEqual(st.report_heading, "SLP (ZI68) · September 2026")
+        self.assertEqual(st.report_heading, "Store A (S01) · September 2026")
 
 
 class PageWordingTests(unittest.TestCase):

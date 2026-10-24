@@ -61,11 +61,11 @@ class TestOpsCharts(unittest.TestCase):
     # 4 ------------------------------------------------------------------
     def test_blank_budget_produces_no_bar(self):
         fig = ops_charts.budget_vs_actual(
-            ["Water", "Electricity"], [None, 320000], [14500, 285000],
+            ["Water", "Electricity"], [None, 400000], [20000, 300000],
             dark=True)
         budget = next(t for t in fig.to_plotly_json()["data"] if t["name"] == "Budget")
         # horizontal bars (P1): values on x, categories on y
-        self.assertEqual(list(budget["x"]), [None, 3200.0])
+        self.assertEqual(list(budget["x"]), [None, 4000.0])
         self.assertEqual(list(budget["y"]), ["Water", "Electricity"])
 
     # 5 ------------------------------------------------------------------

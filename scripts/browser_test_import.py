@@ -87,38 +87,38 @@ def main() -> int:
         # --- Sales ---
         page.goto(f"{BASE}/ops/sales")
         page.wait_for_selector("#ladder-section", timeout=90000)
-        choose(page, "#store-selector", "ZI68")
+        choose(page, "#store-selector", "S01")
         choose(page, "#month-selector", "September 2026")
         page.wait_for_timeout(2500)
         body = page.locator("body").inner_text()
-        check("sales: MTD RM 350,819", "RM 350,819" in body)
+        check("sales: MTD RM 100,000", "RM 100,000" in body)
         check("sales: days 30 / 30", "30 / 30" in body)
         check("sales: Actual (complete month)", "(Actual)" in body)
         check("sales: L1-L3 Achieved", body.count("Achieved") >= 3)
-        check("sales: SPR RM 30.26", "RM 30.26" in body)
+        check("sales: SPR RM 50.00", "RM 50.00" in body)
 
         # --- Stock ---
         page.goto(f"{BASE}/ops/stock")
         page.wait_for_selector("#stock-status", timeout=90000)
-        choose(page, "#store-selector", "ZI68")
+        choose(page, "#store-selector", "S01")
         choose(page, "#month-selector", "September 2026")
         page.wait_for_timeout(2500)
         body = page.locator("body").inner_text()
-        check("stock: total loss RM 1,595.00", "RM 1,595.00" in body)
-        check("stock: ratio 0.45%", "0.45%" in body or "0.5%" in body)
+        check("stock: total loss RM 500.00", "RM 500.00" in body)
+        check("stock: ratio 0.50%", "0.50%" in body or "0.5%" in body)
         check("stock: Within target",
               page.locator("#stock-status").inner_text() == "Within target")
 
         # --- Expenses ---
         page.goto(f"{BASE}/ops/expenses")
         page.wait_for_selector("#expense-kpis", timeout=90000)
-        choose(page, "#store-selector", "ZI68")
+        choose(page, "#store-selector", "S01")
         choose(page, "#month-selector", "September 2026")
         page.wait_for_timeout(2500)
         body = page.locator("body").inner_text()
-        check("expenses: paid RM 4,819.00", "RM 4,819.00" in body)
-        check("expenses: incurred RM 5,259.00", "RM 5,259.00" in body)
-        check("expenses: open RM 440.00", "RM 440.00" in body)
+        check("expenses: paid RM 5,000.00", "RM 5,000.00" in body)
+        check("expenses: incurred RM 6,000.00", "RM 6,000.00" in body)
+        check("expenses: open RM 1,000.00", "RM 1,000.00" in body)
         check("expenses: 2 needs review",
               "Missing recorder: 2" in body or "2" in body)
 

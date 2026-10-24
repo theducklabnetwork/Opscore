@@ -6,6 +6,7 @@ assets/external/
 .states
 
 # private / local data
+tests/private/
 .devdata/
 .env
 .env.*

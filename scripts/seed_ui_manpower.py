@@ -40,8 +40,8 @@ def main() -> None:
         opening_headcount_ft=10, budget_headcount=12,
         turnover_threshold=0.45, stock_loss_target=0.015,
         salary_ratio_target=0.06818, part_timer_factor=0.5,
-        salary_basic_allowance_cents=rm(13275.75),
-        overtime_cents=rm(4198.50),
+        salary_basic_allowance_cents=rm(12000),
+        overtime_cents=rm(1000),
         support_team_cost_cents=rm(500))
     app.configure_month(
         admin, b, "2026-10", level1_base_cents=rm(180000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
@@ -65,7 +65,7 @@ def main() -> None:
                  leave_mc=1)),
         (4, dict(sales_cents=rm(9900), ft_working=7, pt_working=4,
                  resigned_ft=1, leave_unpaid=1)),
-        (5, dict(sales_cents=rm(13200), ft_working=9, pt_working=3,
+        (5, dict(sales_cents=rm(13000), ft_working=9, pt_working=3,
                  leave_other_paid=1)),
         (6, dict(sales_cents=rm(12400), ft_working=8, pt_working=2)),
         (7, dict(sales_cents=rm(11700), ft_working=8, pt_working=4)),

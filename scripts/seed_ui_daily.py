@@ -44,9 +44,9 @@ def main() -> None:
     app.record_daily(admin, a, date(2026, 10, 1), sales_cents=rm(12000),
                      transactions=350, units=1400, ft_working=8, pt_working=1,
                      stock_losses={"DMO": rm(45), "EXTRA": rm(10)})
-    # second day: report MTD baseline 12,000 + 11,500 = RM 23,500.00
+    # second day: report MTD baseline 12,000 + 10,000 = RM 22,000.00
     # (browser_test_ops.py asserts this live MTD on /ops/report).
-    app.record_daily(admin, a, date(2026, 10, 2), sales_cents=rm(11500),
+    app.record_daily(admin, a, date(2026, 10, 2), sales_cents=rm(10000),
                      transactions=340, units=1350, ft_working=8, pt_working=1,
                      stock_losses={"DMO": rm(30)})
     bm = app.create_user(admin, "manager@ducklab.com", "Branch Manager",

@@ -52,8 +52,8 @@ class DailyFixture(unittest.TestCase):
 
 class TestParsing(unittest.TestCase):
     def test_money_exact(self):
-        self.assertEqual(_parse_money("350819"), rm(350819))
-        self.assertEqual(_parse_money("9,681.00"), rm(9681))
+        self.assertEqual(_parse_money("100000"), rm(100000))
+        self.assertEqual(_parse_money("10,000.00"), rm(10000))
         self.assertEqual(_parse_money("RM 12.34"), rm(12.34))
 
     def test_money_rejects_sub_cent(self):
@@ -77,17 +77,17 @@ class TestParsing(unittest.TestCase):
 class TestDailyWrites(DailyFixture):
     def test_create_then_read_after_write(self):
         self.app.record_daily(self.admin, self.sa, date(2026, 9, 1),
-                              sales_cents=rm(9681), transactions=321,
+                              sales_cents=rm(10000), transactions=321,
                               units=1298, ft_working=7, pt_working=1,
                               stock_losses={"DMO": rm(70), "EXTRA": rm(5)})
         days = self.app.get_daily_records(self.admin, self.sa, "2026-09")
         self.assertEqual(len(days), 1)
         d = days[0]
-        self.assertEqual(d.sales_cents, rm(9681))
+        self.assertEqual(d.sales_cents, rm(10000))
         self.assertEqual(d.stock_losses, {"DMO": rm(70), "EXTRA": rm(5)})
         # KPI derivation from persisted values
         self.assertEqual(int(kpi.spr_cents(d.sales_cents, d.transactions)),
-                         rm(30.15))
+                         rm(31.15))
         signs = self.app.read_repo.get_contribution_signs()
         self.assertEqual(kpi.total_loss_cents(d.stock_losses, signs), rm(65))
 

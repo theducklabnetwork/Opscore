@@ -122,7 +122,7 @@ def main() -> int:
 
         # payroll visible for admin
         check("payroll section shows salary for admin",
-              "13,275.75" in page.locator("#payroll-section").inner_text())
+              "12,000.00" in page.locator("#payroll-section").inner_text())
         check("salary section titled Salary, no header chip (P1)",
               "Salary" in page.locator("#payroll-section").inner_text()
               and page.locator("#ratio-status").count() == 0)

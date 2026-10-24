@@ -29,7 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEV_DB = ROOT / ".devdata" / "dev.db"
 
-KEEP_STORE_CODES = ("ZI68", "A01", "B02", "S01", "X01")
+KEEP_STORE_CODES = ("A01", "B02", "S01", "X01")
 QA_EMAIL_DOMAIN = "@ducklab.dev"
 QA_EMAILS = ("viewer@ducklab.com",)   # earlier test accounts
 

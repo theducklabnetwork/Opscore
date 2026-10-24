@@ -63,7 +63,7 @@ def seed(app, admin, label=""):
     rec(a, 2026, 10, 2, sales=12100, DMC=32)
     rec(a, 2026, 10, 3, sales=10800, DMP=28, DPI=15)          # DPI info-only
     rec(a, 2026, 10, 4, sales=9900, MISSING=120, DMW=40)      # high loss day
-    rec(a, 2026, 10, 5, sales=13200, EXTRA=85)                # net negative
+    rec(a, 2026, 10, 5, sales=13000, EXTRA=85)                # net negative
     rec(a, 2026, 10, 6, sales=12400)                          # zero day
     rec(a, 2026, 10, 7, sales=11700, DMO=210, MISSING=95)     # high loss day
     rec(a, 2026, 10, 8, sales=10200, DMO=0)                   # explicit zero

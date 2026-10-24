@@ -83,7 +83,7 @@ class DashboardDataTests(Fixture):
                 paid_date=paid, category_id=cat, description="Bill",
                 amount_cents=rm(1234), paid_by="Petty Cash"
                 if paid else None, status=status, verification="Verified",
-                recorded_by="ABM")
+                recorded_by="Staff A")
         ov = self.overview("2026-10")
         self.assertEqual(ov["pill_expenses"]["value"], "RM 1,234")
         self.assertEqual([g["label"] for g in ov["glance"]],

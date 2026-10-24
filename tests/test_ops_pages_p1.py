@@ -124,7 +124,7 @@ class ExpensesTests(Fixture):
                                                  sort_order=1)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10",
                                     self.cat, rm(1000))
-        common = dict(category_id=self.cat, recorded_by="ABM")
+        common = dict(category_id=self.cat, recorded_by="Staff A")
         # OK, Unverified (needs review), Missing paid date (needs review)
         self.app.record_expense(
             self.admin, self.sid, incurred_date=date(2026, 10, 2),

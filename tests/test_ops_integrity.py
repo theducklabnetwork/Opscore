@@ -167,7 +167,7 @@ class Fixture(unittest.TestCase):
         for bad in ("10.005", "inf", "-inf", "nan"):
             with self.assertRaises(ValueError):
                 kpi.parse_money_cents(bad)
-        self.assertEqual(kpi.parse_money_cents("350,819.00"), 35081900)
+        self.assertEqual(kpi.parse_money_cents("100,000.00"), 10000000)
 
     # 5/6 ----------------------------------------------------------------
     def test_daily_clears_manpower_and_stock(self):

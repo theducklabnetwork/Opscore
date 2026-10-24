@@ -166,9 +166,9 @@ def main() -> int:
         page.wait_for_selector("#daily-table >> text=RM 15,000.00",
                                timeout=25000)
         check("table refreshes with new sales value", True)
-        # KPI MTD after the edit: 15,000 (Oct 1, edited) + 11,500 (Oct 2,
-        # seeded) = RM 26,500.00 — see seed_ui_daily.py data contract.
-        page.wait_for_selector("#daily-kpis >> text=RM 26,500.00",
+        # KPI MTD after the edit: 15,000 (Oct 1, edited) + 10,000 (Oct 2,
+        # seeded) = RM 25,000.00 — see seed_ui_daily.py data contract.
+        page.wait_for_selector("#daily-kpis >> text=RM 25,000.00",
                                timeout=25000)
         check("KPI cards refresh after write (MTD 26,500)", True)
 

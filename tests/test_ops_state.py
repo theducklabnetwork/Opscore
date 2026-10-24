@@ -39,7 +39,7 @@ class OpsFixture(unittest.TestCase):
                 salary_basic_allowance_cents=rm(10000),
                 overtime_cents=rm(1000))
         self.app.record_daily(self.admin, self.store_a, date(2026, 9, 1),
-                              sales_cents=rm(9681), transactions=321,
+                              sales_cents=rm(10000), transactions=321,
                               units=1298, stock_losses={"DMO": rm(70)})
         self.app.record_daily(self.admin, self.store_b, date(2026, 9, 1),
                               sales_cents=rm(111))
@@ -86,7 +86,7 @@ class TestLiveSerialization(OpsFixture):
                                      as_of=date(2026, 9, 30))
         out = _serialize_live(rep, user=self.admin)
         self.assertEqual(out["mode"], "live")
-        self.assertEqual(out["sales"]["mtd"], "RM 9,681.00")
+        self.assertEqual(out["sales"]["mtd"], "RM 10,000.00")
         self.assertEqual(out["sales"]["target_l1"], "RM 200,000.00")
         self.assertEqual(out["sales"]["completeness"], "1 of 30 days reported")
         self.assertFalse(out["sales"]["complete"])
@@ -126,7 +126,7 @@ class TestFinalizedSerialization(OpsFixture):
                                              "2026-09")
         out = _serialize_snapshot(snap, user=self.admin)
         self.assertEqual(out["mode"], "finalized")
-        self.assertEqual(out["sales"]["mtd"], "RM 9,681.00")
+        self.assertEqual(out["sales"]["mtd"], "RM 10,000.00")
         self.assertEqual(out["stock"]["total_loss"], "RM 70.00")
         self.assertEqual(snap["version"], 1)
 
@@ -143,7 +143,7 @@ class TestFinalizedSerialization(OpsFixture):
         v1 = self.app.get_finalized_report(self.admin, self.store_a,
                                            "2026-09", version=1)
         self.assertEqual(
-            _serialize_snapshot(v1, user=self.admin)["sales"]["mtd"], "RM 9,681.00")
+            _serialize_snapshot(v1, user=self.admin)["sales"]["mtd"], "RM 10,000.00")
         v2 = self.app.get_finalized_report(self.admin, self.store_a, "2026-09")
         self.assertEqual(_serialize_snapshot(v2, user=self.admin)["sales"]["mtd"], "RM 500.00")
 

@@ -106,7 +106,7 @@ class OpsState(AuthState):
 
     @rx.var
     def report_heading(self) -> str:
-        """Title line: "SLP (ZI68) · September 2026"."""
+        """Title line: "Store A (S01) · September 2026"."""
         s = self.report.get("store", {})
         title = s.get("title") or s.get("label", "")
         m = self.report.get("month", {}).get("label", "")

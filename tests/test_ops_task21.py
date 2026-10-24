@@ -52,16 +52,14 @@ class Fixture(unittest.TestCase):
         return self.app.auth.get_user(v.id)
 
     def complete_september(self):
-        """30/30 days, MTD 350,819.00; Level 1 RM 100,000; Level 4 floor
-        RM 350,819.30 (September parity case)."""
+        """Synthetic complete month; Level 4 is exactly 30 sen above sales."""
         self.app.configure_month(
-            self.admin, self.sid, "2026-09", level1_base_cents=rm(100000),
-            level2_pct=0.1, level3_pct=0.2, level4_pct=0.3, min_rtm_target_cents=rm(350819.30))
-        for d in range(1, 30):
+            self.admin, self.sid, "2026-09", level1_base_cents=rm(90000),
+            level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+            min_rtm_target_cents=rm(120000.30))
+        for d in range(1, 31):
             self.app.record_daily(self.admin, self.sid, date(2026, 9, d),
-                                  sales_cents=rm(10000))
-        self.app.record_daily(self.admin, self.sid, date(2026, 9, 30),
-                              sales_cents=rm(60819))  # 29x10,000 + 60,819
+                                  sales_cents=rm(4000))
 
 
 # 1 ---------------------------------------------------------------------------
@@ -95,12 +93,12 @@ class ProjectionPrecisionTests(Fixture):
                          Decimal("0.000000276496982"))
         self.assertEqual(s.growth_status_last_month, "Growth")
 
-    def test_september_level4_stays_below_target(self):
+    def test_complete_month_level4_stays_below_target(self):
         self.complete_september()
         rep = self.app.preview_month(self.admin, self.sid, "2026-09",
                                      as_of=date(2026, 9, 30))
-        self.assertEqual(rep.sales.month_end_sales_cents, Decimal(35081900))
-        self.assertEqual(rep.sales.targets["level4"], Decimal(35081930))
+        self.assertEqual(rep.sales.month_end_sales_cents, Decimal(12000000))
+        self.assertEqual(rep.sales.targets["level4"], Decimal(12000030))
         self.assertEqual(rep.sales.status_by_level["level4"], "Below target")
         self.assertEqual(rep.sales.status_by_level["level1"], "Achieved")
 
@@ -343,10 +341,10 @@ class ClearBudgetTests(Fixture):
         from ducklab.ops_expenses_state import _budget_save_value
         self.assertIsNone(_budget_save_value("", True))
         with self.assertRaises(ValueError) as clash:
-            _budget_save_value("3200.00", True)
+            _budget_save_value("4000.00", True)
         self.assertEqual(str(clash.exception),
                          "Enter an amount, or use × to clear")
-        self.assertEqual(_budget_save_value("3200.00", False), 320000)
+        self.assertEqual(_budget_save_value("4000.00", False), 400000)
         with self.assertRaises(ValueError) as ctx:
             _budget_save_value("  ", False)
         self.assertEqual(
