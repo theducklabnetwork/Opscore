@@ -2,7 +2,7 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **3** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **4** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -18,6 +18,12 @@ application schema version: **3** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
   existing store concepts are kept until the store is edited. The two
   reference tables are filled once with `scripts/import_dsc.py <xlsx>`
   (requires `DUCKLAB_DB_PATH`; replaces both tables in one transaction).
+- **v4** — `basket_benchmarks` becomes monthly: (concept, state, month,
+  avg_spr, avg_ipr), matching the workbook's November..October SPR / IPR
+  columns. The v3 single-value table was never read by the app and holds
+  only re-importable reference data, so it is dropped and recreated (the
+  one sanctioned exception to rule 1); no other table changes. Re-run
+  `scripts/import_dsc.py <xlsx>` after this migration to fill it.
 
 ## Rules
 

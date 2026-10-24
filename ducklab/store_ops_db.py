@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -225,6 +225,10 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 3 and current >= 2:
             _apply_v3(conn)
             conn.execute("PRAGMA user_version = 3")
+            current = 3
+        if current < 4 and current >= 3:
+            _apply_v4(conn)
+            conn.execute("PRAGMA user_version = 4")
         conn.commit()
     finally:
         conn.close()
@@ -291,4 +295,29 @@ def _apply_v3(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA_V3)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (3,)
+    )
+
+
+_SCHEMA_V4 = """
+-- v4: SPR / IPR benchmarks are monthly in the DSC workbook. The v3
+-- single-value table was never read by the app (reference data only,
+-- refilled by scripts/import_dsc.py), so it is replaced, not altered.
+DROP TABLE IF EXISTS basket_benchmarks;
+
+-- Average SPR (RM) / IPR per Concept + State + calendar month (1-12).
+CREATE TABLE basket_benchmarks (
+    concept TEXT NOT NULL,
+    state TEXT NOT NULL,
+    month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+    avg_spr REAL,
+    avg_ipr REAL,
+    PRIMARY KEY (concept, state, month)
+);
+"""
+
+
+def _apply_v4(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA_V4)
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (4,)
     )

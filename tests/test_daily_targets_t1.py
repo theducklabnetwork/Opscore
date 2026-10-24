@@ -1,6 +1,6 @@
 """T1 tests: daily targets from the Daily Sales Contribution — store State /
 Concept dropdowns, Monthly Setup basket targets + public holidays, the
-schema v3 migration, the scripts/import_dsc.py import and the Sales
+schema v3/v4 migrations, the scripts/import_dsc.py import and the Sales
 Performance "Daily Sales" table. Expected values are hand-computed
 literals from a synthetic case (no company figures). Disposable temp DBs
 and a synthetic workbook built in a temp dir only.
@@ -167,7 +167,7 @@ class MigrationTests(unittest.TestCase):
             conn = store_ops_db.connect(db)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 3)
+                    conn.execute("PRAGMA user_version").fetchone()[0], 4)
                 row = conn.execute(
                     "SELECT concept, state FROM stores").fetchone()
                 self.assertEqual(tuple(row), ("Kiosk", None))
@@ -180,6 +180,42 @@ class MigrationTests(unittest.TestCase):
                     "SELECT name FROM sqlite_master WHERE type='table'")}
                 self.assertTrue({"public_holidays", "contribution_shares",
                                  "basket_benchmarks"} <= tables)
+                cols = [r[1] for r in conn.execute(
+                    "PRAGMA table_info(basket_benchmarks)")]
+                self.assertEqual(cols, ["concept", "state", "month",
+                                        "avg_spr", "avg_ipr"])
+            finally:
+                conn.close()
+
+    def test_v3_benchmarks_replaced_by_monthly_table(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "v3.db"
+            conn = sqlite3.connect(db)
+            for script in (store_ops_db._SCHEMA_V1, store_ops_db._SCHEMA_V2,
+                           store_ops_db._SCHEMA_V3):
+                conn.executescript(script)
+            conn.execute("PRAGMA user_version = 3")
+            conn.execute("INSERT INTO basket_benchmarks VALUES "
+                         "('Mall', 'Johor', 25.5, 3.2)")
+            conn.execute("INSERT INTO contribution_shares VALUES "
+                         "('Johor', 'Mall', 'Mon', 7, 0.03)")
+            conn.commit()
+            conn.close()
+            store_ops_db.init_db(db)
+            conn = store_ops_db.connect(db)
+            try:
+                self.assertEqual(
+                    conn.execute("PRAGMA user_version").fetchone()[0], 4)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM basket_benchmarks").fetchone()[0], 0)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM contribution_shares").fetchone()[0],
+                    1)
+                conn.execute("INSERT INTO basket_benchmarks VALUES "
+                             "('Mall', 'Johor', 9, 25.5, 3.2)")
+                with self.assertRaises(sqlite3.IntegrityError):
+                    conn.execute("INSERT INTO basket_benchmarks VALUES "
+                                 "('Mall', 'Johor', 13, 25.5, 3.2)")
             finally:
                 conn.close()
 
@@ -413,8 +449,11 @@ class SalesTableTests(Fixture):
 
 
 # 5 ---------------------------------------------------------------------------
-def build_workbook(path: Path, dsc_rows, spr_rows, extra_header=True):
-    """Synthetic DSC workbook (layout per the import contract)."""
+def build_workbook(path: Path, dsc_rows, spr_rows):
+    """Synthetic DSC workbook in the real layout (positions per the import
+    contract): DSC header row 4 with A4 left blank; SPR group labels in
+    row 2 (C2, P2), header row 3 with a misspelled Concept header, SPR in
+    C..N, blank O, IPR in P..AA."""
     import openpyxl
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -422,17 +461,25 @@ def build_workbook(path: Path, dsc_rows, spr_rows, extra_header=True):
     ws["A1"] = "Daily Sales Contribution"
     ws.append([])
     ws.append([])
-    ws.append(["State", "Concept", "Day", *MONTH_NAMES])     # row 4
+    ws.append([None, "Concept", "Day", *MONTH_NAMES])        # row 4
     for row in dsc_rows:
         ws.append(row)
     sp = wb.create_sheet("SPR")
     sp.append(["SPR / IPR"])
-    sp.append([])
-    sp.append(["Concept", "State", "12 Months Average SPR", None,
-               "12 Months Average IPR"])                    # row 3
+    sp.append([None, None, "Average SPR", *[None] * 12,
+               "Average IPR"])                               # row 2
+    sp.append(["Conept", "State", *MONTH_NAMES, None,
+               *MONTH_NAMES])                                # row 3
     for row in spr_rows:
         sp.append(row)
     wb.save(path)
+
+
+def spr_row(concept, state, spr=None, ipr=None):
+    """SPR sheet row; spr / ipr map month name -> value."""
+    spr, ipr = spr or {}, ipr or {}
+    return [concept, state, *[spr.get(m) for m in MONTH_NAMES], None,
+            *[ipr.get(m) for m in MONTH_NAMES]]
 
 
 def july_dsc_rows(state="Johor", concept="Mall", ph=None):
@@ -487,13 +534,16 @@ class ImportScriptTests(unittest.TestCase):
         build_workbook(
             self.xlsx,
             july_dsc_rows(ph=0.05) + july_dsc_rows("Kedah", "Toys"),
-            [["Mall", "Johor", 25.5, None, 3.2],
-             [None, "Kedah", 24, None, None],
-             ["Kiosk", "Johor", "26.10", None, 3.0]])
+            [spr_row("Mall", "Johor", {"July": 25.5, "August": 26},
+                     {"July": 3.2}),
+             spr_row(None, "Kedah", {"July": 24}),
+             spr_row("Kiosk", "Johor", {"November": "26.10"},
+                     {"November": 3.0})])
         r = self.run_script(str(self.xlsx))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("Imported 29 day shares (2 State/Concept pairs) and 3 "
-                      "SPR/IPR benchmarks.", r.stdout)
+                      "SPR/IPR benchmarks (4 Concept/State months).",
+                      r.stdout)
         self.assertIn("Warning: Concept 'Kiosk' is not a store Concept "
                       "option", r.stdout)
         repo = AppService(self.db).read_repo
@@ -509,10 +559,74 @@ class ImportScriptTests(unittest.TestCase):
         self.assertEqual(repo.get_contribution_shares("Johor", "Mall",
                                                       "2026-09"), {})
         self.assertEqual(
-            self.rows("SELECT concept, state, avg_spr, avg_ipr FROM "
-                      "basket_benchmarks ORDER BY concept, state"),
-            [("Kiosk", "Johor", 26.1, 3.0), ("Mall", "Johor", 25.5, 3.2),
-             ("Mall", "Kedah", 24.0, None)])
+            self.rows("SELECT concept, state, month, avg_spr, avg_ipr FROM "
+                      "basket_benchmarks ORDER BY concept, state, month"),
+            [("Kiosk", "Johor", 11, 26.1, 3.0),
+             ("Mall", "Johor", 7, 25.5, 3.2),
+             ("Mall", "Johor", 8, 26.0, None),
+             ("Mall", "Kedah", 7, 24.0, None)])
+
+    def test_real_layout_two_concepts_two_states(self):
+        """2 concepts x 2 states, every month filled; blank A4 in DSC and a
+        misspelled SPR Concept header must not matter."""
+        dsc, spr = [], []
+        for c_i, concept in enumerate(("Mall", "Toys")):
+            for s_i, state in enumerate(("Johor", "Kedah")):
+                base = 0.02 + c_i * 0.002 + s_i * 0.001
+                for d_i, day in enumerate(kpi.DSC_WEEKDAYS):
+                    shares = [round(base + d_i * 0.0001 + m * 0.00001, 6)
+                              for m in range(12)]
+                    dsc.append([state if d_i == 0 else None,
+                                concept if d_i == 0 else None, day,
+                                *shares])
+                spr.append(spr_row(
+                    concept if s_i == 0 else None, state,
+                    {m: 20 + c_i * 2 + s_i + i / 10
+                     for i, m in enumerate(MONTH_NAMES)},
+                    {m: 3 + c_i * 0.2 + s_i * 0.1 + i / 100
+                     for i, m in enumerate(MONTH_NAMES)}))
+        build_workbook(self.xlsx, dsc, spr)
+        r = self.run_script(str(self.xlsx))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Imported 336 day shares (4 State/Concept pairs) and 4 "
+                      "SPR/IPR benchmarks (48 Concept/State months).",
+                      r.stdout)
+        # Toys / Kedah, Wed, September (11th fiscal column, index 10):
+        # 0.02 + 0.002 + 0.001 + 2 * 0.0001 + 10 * 0.00001 = 0.0233
+        repo = AppService(self.db).read_repo
+        self.assertEqual(
+            repo.get_contribution_shares("Kedah", "Toys", "2026-09")["Wed"],
+            D("0.0233"))
+        # September SPR / IPR, Toys / Kedah: 20 + 2 + 1 + 1.0 = 24.0,
+        # 3 + 0.2 + 0.1 + 0.10 = 3.4 (the Concept came from the row above)
+        ((spr_v, ipr_v),) = self.rows(
+            "SELECT avg_spr, avg_ipr FROM basket_benchmarks WHERE "
+            "concept = 'Toys' AND state = 'Kedah' AND month = 9")
+        self.assertAlmostEqual(spr_v, 24.0)
+        self.assertAlmostEqual(ipr_v, 3.4)
+        self.assertEqual(self.rows(
+            "SELECT DISTINCT concept, state FROM basket_benchmarks "
+            "ORDER BY 1, 2"),
+            [("Mall", "Johor"), ("Mall", "Kedah"), ("Toys", "Johor"),
+             ("Toys", "Kedah")])
+
+    def test_shifted_spr_layout_refused(self):
+        import openpyxl
+        build_workbook(self.xlsx, july_dsc_rows(),
+                       [spr_row("Mall", "Johor", {"July": 25})])
+        wb = openpyxl.load_workbook(self.xlsx)
+        wb["SPR"]["P2"] = None
+        wb["SPR"]["Q3"] = "January"
+        wb.save(self.xlsx)
+        r = self.run_script(str(self.xlsx))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("P2 is '', expected Average IPR", r.stderr)
+        wb["SPR"]["P2"] = "Average IPR"
+        wb.save(self.xlsx)
+        r = self.run_script(str(self.xlsx))
+        self.assertIn("Q3 is 'January', expected December", r.stderr)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM basket_benchmarks"),
+                         [(0,)])
 
     def test_reimport_replaces(self):
         build_workbook(self.xlsx, july_dsc_rows(), [])
@@ -543,13 +657,13 @@ class ImportScriptTests(unittest.TestCase):
         import openpyxl
         build_workbook(self.xlsx, july_dsc_rows(), [])
         wb = openpyxl.load_workbook(self.xlsx)
-        wb["DSC"]["N4"] = "Sept"
+        wb["DSC"]["N4"] = "Total"
         wb.save(self.xlsx)
         r = self.run_script(str(self.xlsx))
         self.assertEqual(r.returncode, 1)
-        self.assertIn("missing header(s) September", r.stderr)
+        self.assertIn("N4 is 'Total', expected September", r.stderr)
         del wb["SPR"]
-        wb["DSC"]["N4"] = "September"
+        wb["DSC"]["N4"] = "Sept"
         wb.save(self.xlsx)
         r = self.run_script(str(self.xlsx))
         self.assertIn("Sheet 'SPR' not found", r.stderr)
@@ -558,13 +672,13 @@ class ImportScriptTests(unittest.TestCase):
         build_workbook(self.xlsx, july_dsc_rows(), [])
         with self.assertRaises(import_dsc.DscImportError):
             import_dsc.import_workbook(self.xlsx, self.tmp / "none.db")
-        old = self.tmp / "v2.db"
+        old = self.tmp / "v3.db"
         conn = sqlite3.connect(old)
-        conn.execute("PRAGMA user_version = 2")
+        conn.execute("PRAGMA user_version = 3")
         conn.close()
         with self.assertRaises(import_dsc.DscImportError) as ctx:
             import_dsc.import_workbook(self.xlsx, old)
-        self.assertIn("schema is v2", str(ctx.exception))
+        self.assertIn("schema is v3", str(ctx.exception))
 
     def test_day_names_and_percent_text(self):
         self.assertEqual([import_dsc._day_key(v) for v in
@@ -574,6 +688,10 @@ class ImportScriptTests(unittest.TestCase):
             import_dsc._day_key("Mo")
         self.assertEqual(import_dsc._number("2.95%"), D("0.0295"))
         self.assertEqual(import_dsc._number(0.0295), D("0.0295"))
+        self.assertEqual([import_dsc._month_number(v) for v in
+                          ("November", "sep", "Sept", "Oc", None)],
+                         [11, 9, 9, None, None])
+        self.assertEqual(import_dsc._col_letters(27), "AA")
 
 
 if __name__ == "__main__":
