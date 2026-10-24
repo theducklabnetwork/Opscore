@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """One-time import of the Daily Sales Contribution (DSC) workbook.
 
-Reads sheet "DSC" (header row 4: State, Concept, Day, then the month names
-November..October; data from row 5; Day is Mon..Sun or PH; each value is
-one day's share of that calendar month) and sheet "SPR" (header row 3:
-Concept, State, 12-month average SPR, a blank column, 12-month average
-IPR; data from row 4). State / Concept cells left blank under a merged
-group take the value above them; rows without a Day (headings, totals)
-are skipped.
+Columns are read by position, not header text:
+
+  DSC  col A State (header may be blank), B Concept, C Day (Mon..Sun or
+       PH), D..O = November..October (month names in row 4); data from
+       row 5. Each value is one day's share of that calendar month.
+  SPR  row 2: "Average SPR" above col C, "Average IPR" above col P;
+       row 3: Concept, State, month names; C..N = average SPR
+       November..October, O blank, P..AA = average IPR
+       November..October; data from row 4.
+
+State / Concept cells left blank under a merged group take the value
+above them; DSC rows without a Day (headings, totals) are skipped.
 
 Both tables are replaced in one transaction: either the whole workbook is
 imported or nothing changes. Stdlib only (zipfile + XML), so the
@@ -38,12 +43,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from ducklab import kpi, store_ops_db  # noqa: E402
 from ducklab.operations_write_repository import CONCEPTS, STATES  # noqa: E402
 
+# Columns are fixed by position (1-based; A = 1). Header text is not used
+# to find them: the State header may be blank and the SPR Concept header
+# misspelled. Only the month names are checked, to catch a shifted layout.
 DSC_SHEET, DSC_HEADER_ROW = "DSC", 4
-SPR_SHEET, SPR_HEADER_ROW = "SPR", 3
-# November..October -> calendar month number
+DSC_STATE, DSC_CONCEPT, DSC_DAY, DSC_FIRST_MONTH = 1, 2, 3, 4    # A B C D..O
+SPR_SHEET, SPR_GROUP_ROW, SPR_HEADER_ROW = "SPR", 2, 3
+SPR_CONCEPT, SPR_STATE = 1, 2                                    # A B
+SPR_FIRST_SPR, SPR_FIRST_IPR = 3, 16                    # C..N, (O), P..AA
 MONTHS = {name: n for n, name in enumerate(
     ("January", "February", "March", "April", "May", "June", "July",
      "August", "September", "October", "November", "December"), start=1)}
+FISCAL_MONTHS = (11, 12, *range(1, 11))                # November..October
 
 _NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
        "r": "http://schemas.openxmlformats.org/officeDocument/2006/"
@@ -157,26 +168,48 @@ def _number(value) -> Decimal:
     return d
 
 
-def _header(cells, row: int) -> dict[str, int]:
-    """Lower-case header text -> column."""
-    return {_label(v).lower(): c for (r, c), v in cells.items()
-            if r == row and _label(v)}
-
-
 def _max_row(cells) -> int:
     return max((r for r, _ in cells), default=0)
 
 
+def _col_letters(col: int) -> str:
+    letters = ""
+    while col:
+        col, rem = divmod(col - 1, 26)
+        letters = chr(ord("A") + rem) + letters
+    return letters
+
+
+def _month_number(value) -> int | None:
+    """'September' / 'Sep' / 'sept' -> 9; anything else -> None."""
+    text = _label(value).lower()
+    if len(text) < 3:
+        return None
+    return next((n for name, n in MONTHS.items()
+                 if name.lower().startswith(text)), None)
+
+
+def _check_months(cells, sheet: str, row: int, first_col: int) -> dict:
+    """{calendar month: column} for November..October in row `row` from
+    `first_col` on. The columns are fixed; the names only confirm them."""
+    cols, errors = {}, []
+    for i, month in enumerate(FISCAL_MONTHS):
+        col = first_col + i
+        found = cells.get((row, col))
+        if _month_number(found) != month:
+            expected = next(n for n, m in MONTHS.items() if m == month)
+            errors.append(f"{_col_letters(col)}{row} is "
+                          f"{_label(found)!r}, expected {expected}")
+        cols[month] = col
+    if errors:
+        raise DscImportError(f"{sheet} row {row}: month headers must be "
+                             "November..October: " + "; ".join(errors))
+    return cols
+
+
 def parse_dsc(cells) -> list[tuple[str, str, str, int, float]]:
     """(state, concept, day, month, share) rows from sheet DSC."""
-    head = _header(cells, DSC_HEADER_ROW)
-    missing = [h for h in ("state", "concept", "day") if h not in head]
-    month_cols = {MONTHS[name]: head[name.lower()] for name in MONTHS
-                  if name.lower() in head}
-    missing += [n for n in MONTHS if MONTHS[n] not in month_cols]
-    if missing:
-        raise DscImportError(f"DSC row {DSC_HEADER_ROW}: missing header(s) "
-                           + ", ".join(missing))
+    month_cols = _check_months(cells, "DSC", DSC_HEADER_ROW, DSC_FIRST_MONTH)
     out, errors, seen = [], [], set()
     state = concept = ""
     for r in range(DSC_HEADER_ROW + 1, _max_row(cells) + 1):
@@ -184,12 +217,12 @@ def parse_dsc(cells) -> list[tuple[str, str, str, int, float]]:
         if not row:
             continue
         # merged State / Concept groups: blank cells repeat the one above
-        state = _label(row.get(head["state"])) or state
-        concept = _label(row.get(head["concept"])) or concept
-        if not _label(row.get(head["day"])):
+        state = _label(row.get(DSC_STATE)) or state
+        concept = _label(row.get(DSC_CONCEPT)) or concept
+        if not _label(row.get(DSC_DAY)):
             continue  # group heading / total row: no Day, no share
         try:
-            day = _day_key(row.get(head["day"]))
+            day = _day_key(row.get(DSC_DAY))
         except ValueError as exc:
             errors.append(f"DSC row {r}: Day {str(exc)!r} is not Mon–Sun "
                           "or PH")
@@ -221,24 +254,28 @@ def parse_dsc(cells) -> list[tuple[str, str, str, int, float]]:
     return out
 
 
-def parse_spr(cells) -> list[tuple[str, str, float | None, float | None]]:
-    """(concept, state, avg SPR, avg IPR) rows from sheet SPR."""
-    head = _header(cells, SPR_HEADER_ROW)
-    cols = {"concept": head.get("concept"), "state": head.get("state"),
-            "spr": next((c for h, c in head.items() if "spr" in h), None),
-            "ipr": next((c for h, c in head.items() if "ipr" in h), None)}
-    missing = [k for k, c in cols.items() if c is None]
-    if missing:
-        raise DscImportError(f"SPR row {SPR_HEADER_ROW}: missing header(s) "
-                           + ", ".join(missing))
-    out, errors, seen = [], [], set()
+def parse_spr(cells) -> list[tuple[str, str, int, float | None,
+                                   float | None]]:
+    """(concept, state, month, avg SPR, avg IPR) rows from sheet SPR."""
+    errors = []
+    for col, key in ((SPR_FIRST_SPR, "spr"), (SPR_FIRST_IPR, "ipr")):
+        found = _label(cells.get((SPR_GROUP_ROW, col)))
+        if key not in found.lower():
+            errors.append(f"{_col_letters(col)}{SPR_GROUP_ROW} is "
+                          f"{found!r}, expected Average {key.upper()}")
+    if errors:
+        raise DscImportError(f"SPR row {SPR_GROUP_ROW}: "
+                             + "; ".join(errors))
+    spr_cols = _check_months(cells, "SPR", SPR_HEADER_ROW, SPR_FIRST_SPR)
+    ipr_cols = _check_months(cells, "SPR", SPR_HEADER_ROW, SPR_FIRST_IPR)
+    out, seen = [], set()
     state = concept = ""
     for r in range(SPR_HEADER_ROW + 1, _max_row(cells) + 1):
         row = {c: v for (rr, c), v in cells.items() if rr == r}
         if not row:
             continue
-        concept = _label(row.get(cols["concept"])) or concept
-        state = _label(row.get(cols["state"])) or state
+        concept = _label(row.get(SPR_CONCEPT)) or concept
+        state = _label(row.get(SPR_STATE)) or state
         if not state or not concept:
             errors.append(f"SPR row {r}: Concept and State are required")
             continue
@@ -246,15 +283,18 @@ def parse_spr(cells) -> list[tuple[str, str, float | None, float | None]]:
             errors.append(f"SPR row {r}: {concept} / {state} appears twice")
             continue
         seen.add((concept, state))
-        values = []
-        for key in ("spr", "ipr"):
-            v = row.get(cols[key])
-            try:
-                values.append(None if v is None else float(_number(v)))
-            except ValueError as exc:
-                errors.append(f"SPR row {r}: {str(exc)!r} is not a number")
-                values.append(None)
-        out.append((concept, state, *values))
+        for month in FISCAL_MONTHS:
+            values = []
+            for col in (spr_cols[month], ipr_cols[month]):
+                v = row.get(col)
+                try:
+                    values.append(None if v is None else float(_number(v)))
+                except ValueError as exc:
+                    errors.append(f"SPR {_col_letters(col)}{r}: "
+                                  f"{str(exc)!r} is not a number")
+                    values.append(None)
+            if values != [None, None]:
+                out.append((concept, state, month, *values))
     if errors:
         raise DscImportError("\n".join(errors))
     return out
@@ -273,10 +313,10 @@ def import_workbook(xlsx: Path, db_path: Path) -> dict:
     conn = store_ops_db.connect(db_path)
     try:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version < 3:
+        if version < 4:
             raise DscImportError(
                 f"Database schema is v{version}; start this release once "
-                "so it migrates to v3, then import")
+                "so it migrates to v4, then import")
         with conn:
             conn.execute("DELETE FROM contribution_shares")
             conn.execute("DELETE FROM basket_benchmarks")
@@ -284,8 +324,8 @@ def import_workbook(xlsx: Path, db_path: Path) -> dict:
                 "INSERT INTO contribution_shares (state, concept, day, "
                 "month, share) VALUES (?,?,?,?,?)", shares)
             conn.executemany(
-                "INSERT INTO basket_benchmarks (concept, state, avg_spr, "
-                "avg_ipr) VALUES (?,?,?,?)", benchmarks)
+                "INSERT INTO basket_benchmarks (concept, state, month, "
+                "avg_spr, avg_ipr) VALUES (?,?,?,?,?)", benchmarks)
     finally:
         conn.close()
     pairs = {(s, c) for s, c, *_ in shares} | {(s, c)
@@ -295,7 +335,9 @@ def import_workbook(xlsx: Path, db_path: Path) -> dict:
          if s not in STATES}
         | {f"Concept {c!r} is not a store Concept option" for _, c in pairs
            if c not in CONCEPTS})
-    return {"shares": len(shares), "benchmarks": len(benchmarks),
+    return {"shares": len(shares),
+            "benchmarks": len({(c, s) for c, s, *_ in benchmarks}),
+            "benchmark_months": len(benchmarks),
             "pairs": len({(s, c) for s, c, *_ in shares}),
             "warnings": warnings}
 
@@ -318,7 +360,8 @@ def main(argv: list[str]) -> int:
     print(f"Database: {db}\n"
           f"Imported {result['shares']} day shares "
           f"({result['pairs']} State/Concept pairs) and "
-          f"{result['benchmarks']} SPR/IPR benchmarks.")
+          f"{result['benchmarks']} SPR/IPR benchmarks "
+          f"({result['benchmark_months']} Concept/State months).")
     for w in result["warnings"]:
         print(f"Warning: {w} (stores cannot match it)")
     return 0
