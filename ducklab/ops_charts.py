@@ -45,6 +45,14 @@ _DARK = dict(
     amber="#FFC53D",
     red="#E5484D",
     info="#6E6BD8",        # info-only categories
+    # categorical (Expense Mix), fixed order; green/red stay status-only
+    series=("#3987E5", "#D95926", "#199E70", "#C98500", "#D55181",
+            "#9085E9"),
+    other="#696E77",       # slate-9, the folded "Other" slice
+    # sequential (Sales Calendar): one hue, low -> high
+    seq=("#2B2A5E", "#8D8BF0"),
+    seq_text=("#EDEEF0", "#111113"),
+    surface="#18191B",     # slice / cell gaps
 )
 _LIGHT = dict(
     bg="rgba(0,0,0,0)",
@@ -60,6 +68,12 @@ _LIGHT = dict(
     amber="#B26A00",
     red="#CD2B31",
     info="#5B5BD6",
+    series=("#2A78D6", "#EB6834", "#1BAF7A", "#EDA100", "#E87BA4",
+            "#6250D6"),
+    other="#8B8D98",
+    seq=("#E6E6FB", "#3E3EA8"),
+    seq_text=("#1C2024", "#FFFFFF"),
+    surface="#FFFFFF",
 )
 
 _CONFIG = dict(
@@ -357,6 +371,164 @@ def composition(items: Sequence[dict], dark: bool,
     layout = _base_layout(pal, y_title, x_title="")
     fig.update_layout(**layout)
     fig.update_xaxes(type="category")
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 5. daily sales vs adjusted target (one bar per reported day)
+# ---------------------------------------------------------------------------
+def daily_vs_target(days: Sequence[int],
+                    sales_cents: Sequence[Optional[float]],
+                    adjusted_cents: Sequence[Optional[float]],
+                    results: Sequence[Optional[str]],
+                    dark: bool) -> go.Figure:
+    """Bars per reported day, green "Achieved" / red "Not Achieved" (the
+    engine's daily result); the Adjusted Target as a line. Unreported days
+    (None sales) are gaps: no bar, and the line breaks there."""
+    from ducklab.kpi import RESULT_ACHIEVED, RESULT_NOT_ACHIEVED
+    pal = _pal(dark)
+    x = list(days)
+    fig = go.Figure()
+    for result, color in ((RESULT_ACHIEVED, pal["green"]),
+                          (RESULT_NOT_ACHIEVED, pal["red"])):
+        y = [v / 100 if v is not None and r == result else None
+             for v, r in zip(sales_cents, results)]
+        if not any(v is not None for v in y):
+            continue
+        fig.add_trace(go.Bar(
+            x=x, y=y, name=result, marker_color=color,
+            marker_line_width=0, opacity=0.9,
+            hovertemplate=f"{result}: RM %{{y:,.2f}}<extra></extra>",
+        ))
+    fig.add_trace(go.Scatter(
+        x=x, y=[None if v is None else v / 100 for v in adjusted_cents],
+        mode="lines+markers", connectgaps=False, name="Adjusted Target",
+        line=dict(color=pal["budget"], width=2, dash="dot"),
+        marker=dict(size=5, color=pal["budget"]),
+        hovertemplate="Adjusted Target: RM %{y:,.2f}<extra></extra>",
+    ))
+    layout = _base_layout(pal, "", x_title="Day")
+    layout["barmode"] = "overlay"
+    layout["bargap"] = 0.25
+    layout["xaxis"]["range"] = [0.5, (max(x) if x else 1) + 0.5]
+    layout["hoverlabel"] = dict(namelength=-1)
+    fig.update_layout(**layout)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 6. average sales per weekday
+# ---------------------------------------------------------------------------
+def weekday_bars(labels: Sequence[str],
+                 avg_cents: Sequence[Optional[float]],
+                 dark: bool) -> go.Figure:
+    """One bar per weekday (Mon..Sun); None = no reported day, no bar."""
+    pal = _pal(dark)
+    fig = go.Figure(go.Bar(
+        x=list(labels),
+        y=[None if v is None else float(v) / 100 for v in avg_cents],
+        name="Average Sales", marker_color=pal["accent"],
+        marker_line_width=0,
+        hovertemplate="%{x}<br>Average Sales: RM %{y:,.2f}<extra></extra>",
+    ))
+    layout = _base_layout(pal, "")
+    layout["bargap"] = 0.35
+    layout["hovermode"] = "closest"
+    layout["showlegend"] = False
+    layout["xaxis"]["fixedrange"] = True
+    layout["yaxis"]["fixedrange"] = True
+    fig.update_layout(**layout)
+    fig.update_xaxes(type="category")
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 7. sales calendar (month grid shaded by sales)
+# ---------------------------------------------------------------------------
+_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def sales_calendar(weeks: Sequence[Sequence[Optional[tuple]]],
+                   dark: bool) -> go.Figure:
+    """weeks: rows of 7 cells (kpi.month_weeks), each None (outside the
+    month) or (day number, hover label, sales cents or None).
+
+    Reported days are shaded by sales (zero = the lightest step) with the
+    value on hover; unreported days stay blank (no fill, no hover). Every
+    day of the month carries its day number."""
+    pal = _pal(dark)
+    z, hover = [], []
+    reported = [c[2] for row in weeks for c in row
+                if c is not None and c[2] is not None]
+    top = max(reported) if reported else 0
+    for row in weeks:
+        z.append([None if c is None or c[2] is None else c[2] / 100
+                  for c in row])
+        hover.append(["" if c is None or c[2] is None
+                      else f"{c[1]}<br>Sales: {fmt_rm(c[2])}" for c in row])
+    y = list(range(len(weeks)))
+    fig = go.Figure(go.Heatmap(
+        z=z, x=list(_WEEKDAYS), y=y, xgap=3, ygap=3,
+        colorscale=[[0, pal["seq"][0]], [1, pal["seq"][1]]],
+        zmin=0, zmax=max(top / 100, 1), showscale=False,
+        hoverongaps=False, customdata=hover,
+        hovertemplate="%{customdata}<extra></extra>",
+    ))
+    for r, row in enumerate(weeks):
+        for col, c in enumerate(row):
+            if c is None:
+                continue
+            if c[2] is None:
+                color = pal["muted"]
+            else:  # ink for the low / high end of the ramp
+                share = c[2] / top if top else 0
+                color = pal["seq_text"][0 if share < 0.55 else 1]
+            fig.add_annotation(x=_WEEKDAYS[col], y=r, text=str(c[0]),
+                               showarrow=False, font=dict(size=12,
+                                                          color=color))
+    layout = _base_layout(pal, "")
+    layout["margin"] = dict(l=4, r=4, t=4, b=4)
+    layout["xaxis"] = dict(layout["xaxis"], side="top", fixedrange=True,
+                           type="category")
+    layout["yaxis"] = dict(visible=False, autorange="reversed",
+                           fixedrange=True)
+    layout["hovermode"] = "closest"
+    fig.update_layout(**layout)
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 8. expense mix donut
+# ---------------------------------------------------------------------------
+def expense_donut(items: Sequence[tuple[str, int]],
+                  dark: bool) -> go.Figure:
+    """items: (category, paid cents) from kpi.expense_mix, largest first;
+    the folded "Other" slice is gray. Slices keep the given order."""
+    from ducklab.kpi import EXPENSE_MIX_OTHER
+    pal = _pal(dark)
+    colors, slot = [], 0
+    for name, _ in items:
+        if name == EXPENSE_MIX_OTHER:
+            colors.append(pal["other"])
+        else:
+            colors.append(pal["series"][slot % len(pal["series"])])
+            slot += 1
+    fig = go.Figure(go.Pie(
+        labels=[n for n, _ in items], values=[c / 100 for _, c in items],
+        hole=0.6, sort=False, direction="clockwise",
+        marker=dict(colors=colors, line=dict(color=pal["surface"], width=2)),
+        textinfo="percent", textposition="outside",
+        textfont=dict(color=pal["text"], size=11),
+        customdata=[fmt_rm(c) for _, c in items],
+        hovertemplate="%{label}<br>%{customdata} (%{percent})"
+                      "<extra></extra>",
+    ))
+    layout = _base_layout(pal, "")
+    layout["margin"] = dict(l=8, r=8, t=8, b=8)
+    layout["legend"] = dict(orientation="h", yanchor="top", y=-0.02,
+                            xanchor="center", x=0.5, font=dict(size=11))
+    layout["hovermode"] = "closest"
+    fig.update_layout(**layout)
     return fig
 
 

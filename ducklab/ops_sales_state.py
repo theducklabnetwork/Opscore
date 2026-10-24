@@ -87,6 +87,14 @@ class SalesState(StoresState):
     sp_spr: str = "Not available"
     sp_upt: str = "Not available"
     sp_asp: str = "Not available"
+    # State Average (imported benchmark for the store's State + Concept +
+    # month) and the store's difference vs it; "—" without a benchmark
+    sp_spr_state: str = "—"
+    sp_spr_state_pct: str = "—"
+    sp_spr_state_neg: bool = False
+    sp_ipr_state: str = "—"
+    sp_ipr_state_pct: str = "—"
+    sp_ipr_state_neg: bool = False
 
     # daily table (reported days + one collapsed row) + pace chart
     sp_rows: list[dict[str, str]] = []
@@ -98,6 +106,17 @@ class SalesState(StoresState):
     sp_chart_ready: bool = False            # >= 3 reported days
     sp_fig_dark: go.Figure = go.Figure()                    # Plotly pace (dark theme)
     sp_fig_light: go.Figure = go.Figure()                   # Plotly pace (light theme)
+    # Daily Sales vs Target (hidden without daily targets), Sales by Day,
+    # Sales Calendar
+    sp_dvt_ready: bool = False
+    sp_dvt_dark: go.Figure = go.Figure()
+    sp_dvt_light: go.Figure = go.Figure()
+    sp_weekday_ready: bool = False
+    sp_weekday_dark: go.Figure = go.Figure()
+    sp_weekday_light: go.Figure = go.Figure()
+    sp_cal_ready: bool = False
+    sp_cal_dark: go.Figure = go.Figure()
+    sp_cal_light: go.Figure = go.Figure()
 
     def _clear_sales(self) -> None:
         self.sp_error = ""
@@ -131,6 +150,9 @@ class SalesState(StoresState):
         self.sp_ladder = []
         self.sp_comparisons = []
         self.sp_spr = self.sp_upt = self.sp_asp = "Not available"
+        self.sp_spr_state = self.sp_spr_state_pct = "—"
+        self.sp_ipr_state = self.sp_ipr_state_pct = "—"
+        self.sp_spr_state_neg = self.sp_ipr_state_neg = False
         self.sp_rows = []
         self.sp_rows_reported = []
         self.sp_hidden_count = 0
@@ -139,6 +161,10 @@ class SalesState(StoresState):
         self.sp_chart_ready = False
         self.sp_fig_dark = go.Figure()
         self.sp_fig_light = go.Figure()
+        self.sp_dvt_ready = self.sp_weekday_ready = self.sp_cal_ready = False
+        for name in ("dvt", "weekday", "cal"):
+            setattr(self, f"sp_{name}_dark", go.Figure())
+            setattr(self, f"sp_{name}_light", go.Figure())
 
     @rx.event
     def select_compare(self, value: str | list[str]):
@@ -200,6 +226,8 @@ class SalesState(StoresState):
             shares = app_service.get_contribution_shares(user, store_id,
                                                          month)
             holidays = app_service.get_public_holidays(user, store_id, month)
+            bench_spr, bench_ipr = app_service.get_basket_benchmark(
+                user, store_id, month)
             self.sp_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
         except (AuthorizationError, AuthenticationError) as exc:
@@ -320,9 +348,23 @@ class SalesState(StoresState):
                        else "Not available")
         self.sp_asp = (ds.fmt_rm(s.asp) if s.asp is not None
                        else "Not available")
+        state_spr = kpi.benchmark_spr_cents(bench_spr)
+        self.sp_spr_state = ds.fmt_rm(state_spr)
+        self.sp_spr_state_pct = ds.fmt_variance_pct(
+            kpi.pct_vs_target(s.spr, state_spr))
+        self.sp_spr_state_neg = self.sp_spr_state_pct.startswith(ds.MINUS)
+        self.sp_ipr_state = ("—" if bench_ipr is None
+                             else f"{float(bench_ipr):.2f}")
+        self.sp_ipr_state_pct = ds.fmt_variance_pct(
+            kpi.pct_vs_target(s.upt, bench_ipr))
+        self.sp_ipr_state_neg = self.sp_ipr_state_pct.startswith(ds.MINUS)
 
+        holidays = set(holidays)
+        targets = (kpi.daily_targets(
+            month, cfg.level1_base_cents, shares, holidays,
+            {d.date: d.sales_cents for d in days}) if days else None)
         self.sp_rows = self._daily_rows(days, month, cfg, shares,
-                                        set(holidays))
+                                        holidays, targets)
         self.sp_rows_reported = [r for r in self.sp_rows
                                  if r["status"] != ds.DAY_NOT_REPORTED]
         self.sp_hidden_count = len(self.sp_rows) - len(self.sp_rows_reported)
@@ -343,6 +385,38 @@ class SalesState(StoresState):
         self.sp_fig_light = ops_charts.pace_chart(p_days, p_actual, p_budget,
                                                   dark=False, y_title="",
                                                   levels=levels, highlight=hl)
+        self._extra_charts(days, month, holidays, targets)
+
+    def _extra_charts(self, days, month: str, holidays: set,
+                      targets) -> None:
+        """Daily Sales vs Target, Sales by Day and Sales Calendar, from the
+        saved records and kpi.daily_targets (no figures recomputed)."""
+        sales = {d.date: d.sales_cents for d in days
+                 if d.sales_cents is not None}
+        if not sales:
+            return
+        if targets:
+            args = ([t.date.day for t in targets],
+                    [sales.get(t.date) for t in targets],
+                    [t.adjusted_cents if t.date in sales else None
+                     for t in targets],
+                    [t.result for t in targets])
+            self.sp_dvt_ready = True
+            self.sp_dvt_dark = ops_charts.daily_vs_target(*args, dark=True)
+            self.sp_dvt_light = ops_charts.daily_vs_target(*args, dark=False)
+        avgs = kpi.average_sales_by_weekday(days, holidays)
+        self.sp_weekday_ready = any(v is not None for v in avgs)
+        if self.sp_weekday_ready:
+            self.sp_weekday_dark = ops_charts.weekday_bars(
+                kpi.DSC_WEEKDAYS, avgs, dark=True)
+            self.sp_weekday_light = ops_charts.weekday_bars(
+                kpi.DSC_WEEKDAYS, avgs, dark=False)
+        weeks = [[None if d is None else
+                  (d.day, d.strftime("%a %d %b"), sales.get(d))
+                  for d in week] for week in kpi.month_weeks(month)]
+        self.sp_cal_ready = True
+        self.sp_cal_dark = ops_charts.sales_calendar(weeks, dark=True)
+        self.sp_cal_light = ops_charts.sales_calendar(weeks, dark=False)
 
     def _set_level(self, level, nxt, gap, total: int, pstate: str,
                    entered: int, no_target: bool) -> None:
@@ -383,7 +457,7 @@ class SalesState(StoresState):
         return f"{sign}{ds.fmt_rm(abs(int(gap)))}"
 
     def _daily_rows(self, days, month: str, cfg, shares: dict,
-                    holidays: set) -> list[dict[str, str]]:
+                    holidays: set, targets) -> list[dict[str, str]]:
         """Daily Sales table: day share, Daily / Adjusted Target and Result
         from kpi.daily_targets; basket figures with their % vs target."""
         from datetime import timedelta
@@ -391,9 +465,6 @@ class SalesState(StoresState):
             return []
         first, _, dim = kpi.month_bounds(month)
         by_day = {d.date: d for d in days}
-        targets = kpi.daily_targets(
-            month, cfg.level1_base_cents, shares, holidays,
-            {d.date: d.sales_cents for d in days})
         by_target = {t.date: t for t in targets or []}
         rows = []
         for i in range(dim):

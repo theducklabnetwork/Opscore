@@ -103,11 +103,38 @@ def _kpi_tiles() -> rx.Component:
     return rx.cond(S.sp_complete, complete, incomplete)
 
 
+def _state_average(value, pct, neg, id: str) -> rx.Component:
+    # the imported State benchmark beside the store's own figure, with the
+    # difference in % (red when below); "—" when there is no benchmark
+    return rx.vstack(
+        rx.text("State Average", size="2", color=ds.TEXT_MUTED,
+                weight="medium"),
+        rx.hstack(
+            rx.text(value, size="4", weight="medium", color=ds.TEXT,
+                    white_space="nowrap"),
+            rx.cond(pct != "—",
+                    rx.text(pct, size="2", white_space="nowrap",
+                            color=rx.cond(neg, ds.ERROR, ds.TEXT_MUTED))),
+            spacing="2", align="baseline", wrap="wrap"),
+        spacing="1", align="start", min_width="0", id=id,
+    )
+
+
+def _basket_pair(label, value, avg, pct, neg, id: str) -> rx.Component:
+    return rx.vstack(
+        ui.stat(label, value, size="6"),
+        _state_average(avg, pct, neg, id),
+        spacing="3", align="start", min_width="0", width="100%",
+    )
+
+
 def _basket() -> rx.Component:
     return ui.section_card(
         rx.grid(
-            ui.stat("SPR", S.sp_spr, size="6"),
-            ui.stat("UPT", S.sp_upt, size="6"),
+            _basket_pair("SPR", S.sp_spr, S.sp_spr_state, S.sp_spr_state_pct,
+                         S.sp_spr_state_neg, "basket-spr-state"),
+            _basket_pair("IPR", S.sp_upt, S.sp_ipr_state, S.sp_ipr_state_pct,
+                         S.sp_ipr_state_neg, "basket-ipr-state"),
             ui.stat("ASP", S.sp_asp, size="6"),
             columns="3", spacing="5", width="100%",
         ),
@@ -115,13 +142,47 @@ def _basket() -> rx.Component:
     )
 
 
+def _themed(dark, light, height: str = "340px") -> rx.Component:
+    return rx.cond(S.is_dark, ops_charts.chart(dark, height),
+                   ops_charts.chart(light, height))
+
+
 def _pace_chart() -> rx.Component:
     return ui.chart_card(
         "Sales Trend",
-        rx.cond(S.is_dark, ops_charts.chart(S.sp_fig_dark),
-                ops_charts.chart(S.sp_fig_light)),
+        _themed(S.sp_fig_dark, S.sp_fig_light),
         ready=S.sp_chart_ready,
         id="pace-section",
+    )
+
+
+def _daily_vs_target() -> rx.Component:
+    # hidden when daily targets are unavailable (no Level 1 / no DSC match)
+    return rx.cond(S.sp_dvt_ready, ui.section_card(
+        _themed(S.sp_dvt_dark, S.sp_dvt_light),
+        title="Daily Sales vs Target", id="dvt-section"))
+
+
+def _sales_by_day() -> rx.Component:
+    return ui.chart_card(
+        "Sales by Day",
+        _themed(S.sp_weekday_dark, S.sp_weekday_light, "280px"),
+        ready=S.sp_weekday_ready, id="weekday-section")
+
+
+def _sales_calendar() -> rx.Component:
+    return ui.chart_card(
+        "Sales Calendar",
+        _themed(S.sp_cal_dark, S.sp_cal_light, "300px"),
+        ready=S.sp_cal_ready, id="calendar-section")
+
+
+def _day_charts() -> rx.Component:
+    # side by side from desktop up, stacked on phones / tablets
+    return rx.grid(
+        _sales_by_day(), _sales_calendar(),
+        columns=rx.breakpoints(initial="1", lg="2"),
+        spacing=ui.GAP, width="100%",
     )
 
 
@@ -255,6 +316,8 @@ def sales_page() -> rx.Component:
             _kpi_tiles(),
             _basket(),
             _pace_chart(),
+            _daily_vs_target(),
+            _day_charts(),
             _target_ladder(),
             _daily_table(),
             spacing=ui.GAP, width="100%",

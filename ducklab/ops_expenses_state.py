@@ -65,6 +65,10 @@ class ExpensesState(DailyState):
     budget_rows: list[dict[str, str]] = []
     budget_fig_dark: go.Figure = go.Figure()                 # Plotly budget-vs-actual (dark)
     budget_fig_light: go.Figure = go.Figure()                # Plotly budget-vs-actual (light)
+    # Expense Mix donut: paid by category (hidden when nothing is paid)
+    mix_ready: bool = False
+    mix_fig_dark: go.Figure = go.Figure()
+    mix_fig_light: go.Figure = go.Figure()
     validation_summary: str = ""
 
     # register
@@ -269,6 +273,7 @@ class ExpensesState(DailyState):
         self.budget_rows = []
         self.budget_fig_dark = go.Figure()
         self.budget_fig_light = go.Figure()
+        self._clear_mix()
         self.validation_summary = ""
         self.needs_review_count = 0
         self.filter_review = False   # a fresh load shows the period view
@@ -379,6 +384,12 @@ class ExpensesState(DailyState):
                 names, budgets, paid, dark=True)
             self.budget_fig_light = ops_charts.budget_vs_actual(
                 names, budgets, paid, dark=False)
+            mix = kpi.expense_mix(list(zip(names, paid)))
+            self.mix_ready = e.paid_count > 0 and bool(mix)
+            if self.mix_ready:
+                self.mix_fig_dark = ops_charts.expense_donut(mix, dark=True)
+                self.mix_fig_light = ops_charts.expense_donut(mix,
+                                                              dark=False)
         except (AuthenticationError, AuthorizationError,
                 StoreNotFoundError) as exc:
             self.error_message = auth_message(exc)
@@ -392,6 +403,11 @@ class ExpensesState(DailyState):
             self.budget_rows = []
             self.budget_fig_dark = go.Figure()
             self.budget_fig_light = go.Figure()
+
+    def _clear_mix(self) -> None:
+        self.mix_ready = False
+        self.mix_fig_dark = go.Figure()
+        self.mix_fig_light = go.Figure()
 
     def _expense_row(self, rec, cat_names, known_ids) -> dict[str, str]:
         e = rec.input
