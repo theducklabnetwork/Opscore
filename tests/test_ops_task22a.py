@@ -397,7 +397,7 @@ class OverviewProjectionTests(Fixture):
                                    "budget": 640002})  # 640,001.81
         ov = self._overview()
         self.assertTrue(ov["pace_has_data"])
-        budget_trace, actual_trace = ov["pace_fig_dark"].data[:2]
+        actual_trace, budget_trace = ov["pace_fig_dark"].data[:2]
         self.assertEqual(budget_trace.y[0], 800.0)      # RM, cents / 100
         self.assertEqual(actual_trace.y[6], 7000.02)
         self.assertIsNone(actual_trace.y[7])

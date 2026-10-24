@@ -87,7 +87,7 @@ class SalesTests(Fixture):
         self.assertEqual([r["label"] for r in st.sp_comparisons],
                          ["SSSG/Year", "SSSG/Month"])
         names = [t.name for t in st.sp_fig_dark.data]
-        self.assertEqual(names[:2], ["Target", "Actual"])
+        self.assertEqual(names[:2], ["Actual", "Target"])
         self.assertEqual(st.sp_fig_dark.layout.xaxis.title.text, "Day")
 
 

@@ -91,11 +91,11 @@ class LevelRuleTests(unittest.TestCase):
         fig = ops_charts.pace_chart(list(range(1, 31)), [None] * 30,
                                     lines[0][1], dark=True, levels=lines)
         self.assertEqual([trace.name for trace in fig.data],
-                         ["Target", "Actual", "Level 2", "Level 3", "Level 4"])
-        self.assertEqual(fig.data[0].line.dash, "dash")
+                         ["Actual", "Target", "Level 2", "Level 3", "Level 4"])
+        self.assertEqual(fig.data[1].line.dash, "dash")
         self.assertEqual(fig.data[2].line.dash, "dash")
-        self.assertGreater(fig.data[0].line.width, fig.data[2].line.width)
-        self.assertLess(fig.data[2].opacity, fig.data[0].opacity)
+        self.assertGreater(fig.data[1].line.width, fig.data[2].line.width)
+        self.assertLess(fig.data[2].opacity, fig.data[1].opacity)
         self.assertFalse(fig.data[2].showlegend)
         self.assertEqual([a.text for a in fig.layout.annotations],
                          ["Level 1", "Level 2", "Level 3", "Level 4"])
@@ -405,7 +405,7 @@ class SalesLevelAndComparisonTests(Fixture):
         self.assertEqual(state.sp_level_sub, "RM 83,000.00 short of Level 4")
         self.assertEqual(len(state.sp_ladder), 4)
         self.assertEqual([trace.name for trace in state.sp_fig_dark.data],
-                         ["Target", "Actual", "Level 4"])
+                         ["Actual", "Target", "Level 4"])
 
     def test_selector_validation_and_browser_default(self):
         import reflex as rx

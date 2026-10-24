@@ -9,6 +9,30 @@ import unittest
 from ducklab import ops_charts
 
 
+CHART_BUILDERS = {
+    "daily_line": lambda dark: ops_charts.daily_line(
+        ["01 Oct", "02 Oct"], [10.0, None], dark),
+    "sparkline": lambda dark: ops_charts.sparkline(
+        [1, 2], [10.0, None], dark),
+    "pace_chart": lambda dark: ops_charts.pace_chart(
+        [1, 2], [1000, 2000], [500, 1000], dark,
+        levels=[(2, [600, 1200]), (3, [700, 1400]), (4, [800, 1600])]),
+    "budget_vs_actual": lambda dark: ops_charts.budget_vs_actual(
+        ["Water"], [40000], [30000], dark),
+    "composition": lambda dark: ops_charts.composition(
+        [{"code": "DMO", "name": "Damaged", "total_cents": 500, "sign": 1}],
+        dark),
+    "daily_vs_target": lambda dark: ops_charts.daily_vs_target(
+        [1], [1000], [900], ["Achieved"], dark),
+    "weekday_bars": lambda dark: ops_charts.weekday_bars(
+        ["Mon"], [1000], dark),
+    "sales_calendar": lambda dark: ops_charts.sales_calendar(
+        [[(1, "Thu 01 Oct", 1000)] + [None] * 6], dark),
+    "expense_donut": lambda dark: ops_charts.expense_donut(
+        [("Rent", 30000)], dark),
+}
+
+
 class TestOpsCharts(unittest.TestCase):
     # 1 ------------------------------------------------------------------
     def test_unreported_days_are_gaps_zero_is_a_point(self):
@@ -75,7 +99,8 @@ class TestOpsCharts(unittest.TestCase):
         self.assertEqual(ops_charts.fmt_pct(0.004547), "0.45%")
         self.assertEqual(ops_charts.fmt_rm(None), "—")
         fig = ops_charts.daily_line(["01 Oct"], [1234.50], dark=True)
-        self.assertIn("RM 1,234.50", fig.to_plotly_json()["data"][0]["hovertext"][0])
+        self.assertIn("RM 1,234.50",
+                      fig.to_plotly_json()["data"][0]["customdata"][0])
 
     # 6 ------------------------------------------------------------------
     def test_dark_and_light_differ_only_in_styling(self):
@@ -95,6 +120,53 @@ class TestOpsCharts(unittest.TestCase):
         # transparent background in both
         self.assertEqual(dj["layout"]["paper_bgcolor"], "rgba(0,0,0,0)")
         self.assertEqual(lj["layout"]["paper_bgcolor"], "rgba(0,0,0,0)")
+
+    def test_every_interactive_chart_uses_theme_hover_tokens(self):
+        self.assertEqual(set(CHART_BUILDERS), {
+            "daily_line", "sparkline", "pace_chart", "budget_vs_actual",
+            "composition", "daily_vs_target", "weekday_bars",
+            "sales_calendar", "expense_donut",
+        })
+        for name, build in CHART_BUILDERS.items():
+            if name == "sparkline":
+                continue
+            for dark in (True, False):
+                with self.subTest(chart=name, dark=dark):
+                    fig = build(dark).to_plotly_json()
+                    pal = ops_charts._pal(dark)
+                    hover = fig["layout"]["hoverlabel"]
+                    self.assertEqual(hover["bgcolor"], pal["surface_hover"])
+                    self.assertEqual(hover["bordercolor"], pal["border"])
+                    self.assertEqual(hover["font"]["color"], pal["text"])
+                    for axis in ("xaxis", "yaxis"):
+                        self.assertEqual(fig["layout"][axis]["spikecolor"],
+                                         pal["border"])
+                        self.assertEqual(fig["layout"][axis]["spikethickness"], 1)
+
+    def test_sparklines_remain_static_in_both_themes(self):
+        for dark in (True, False):
+            fig = CHART_BUILDERS["sparkline"](dark).to_plotly_json()
+            self.assertFalse(fig["layout"]["hovermode"])
+            self.assertEqual(fig["data"][0]["hoverinfo"], "skip")
+            self.assertNotIn("hoverlabel", fig["layout"])
+
+    def test_unified_hovers_use_one_title_and_ordered_rows(self):
+        fig = CHART_BUILDERS["pace_chart"](True).to_plotly_json()
+        self.assertEqual(fig["layout"]["hovermode"], "x unified")
+        self.assertEqual([t["name"] for t in fig["data"]],
+                         ["Actual", "Target", "Level 2", "Level 3", "Level 4"])
+        for trace in fig["data"]:
+            self.assertNotIn("Day", trace["hovertemplate"])
+            self.assertNotIn("%{x}", trace["hovertemplate"])
+
+        fig = CHART_BUILDERS["daily_line"](True).to_plotly_json()
+        self.assertEqual(fig["layout"]["hovermode"], "x unified")
+        self.assertNotIn("01 Oct", fig["data"][0]["customdata"][0])
+
+        fig = CHART_BUILDERS["budget_vs_actual"](True).to_plotly_json()
+        self.assertEqual(fig["layout"]["hovermode"], "y unified")
+        for trace in fig["data"]:
+            self.assertNotIn("%{y}", trace["hovertemplate"])
 
     # 7 ------------------------------------------------------------------
     def test_figure_matches_table_data_from_kpi(self):

@@ -37,6 +37,8 @@ _DARK = dict(
     text="#EDEEF0",        # slate-12
     muted="#B0B4BA",       # slate-11
     grid="#272A2D",        # slate-4 (subtle)
+    border="#363A3F",      # slate-6
+    surface_hover="#212225",  # slate-3
     accent="#6E6BD8",      # indigo-9
     accent_fill="rgba(110,107,216,0.18)",
     pace_fill="rgba(110,107,216,0.07)",
@@ -60,6 +62,8 @@ _LIGHT = dict(
     text="#1C2024",
     muted="#60646C",
     grid="#E8E8EC",        # slate-5 (subtle)
+    border="#B9BBC6",      # slate-6
+    surface_hover="#F0F0F3",  # slate-3
     accent="#5B5BD6",
     accent_fill="rgba(91,91,214,0.14)",
     pace_fill="rgba(91,91,214,0.06)",
@@ -127,14 +131,21 @@ def _base_layout(pal: dict, y_title: str, x_title: str = "") -> dict:
         margin=dict(l=8, r=8, t=12, b=8),
         # quiet axes: horizontal gridlines only, no zero line / axis line
         xaxis=dict(title=x_title, showgrid=False, zeroline=False,
-                   showline=False, color=pal["muted"], automargin=True),
+                   showline=False, color=pal["muted"], automargin=True,
+                   showspikes=True, spikecolor=pal["border"],
+                   spikethickness=1, spikedash="solid", spikemode="across"),
         yaxis=dict(title=y_title, gridcolor=pal["grid"], zeroline=False,
-                   showline=False, color=pal["muted"], automargin=True),
+                   showline=False, color=pal["muted"], automargin=True,
+                   showspikes=True, spikecolor=pal["border"],
+                   spikethickness=1, spikedash="solid", spikemode="across"),
         # above the plot: x-axis labels (which may rotate on narrow
         # screens) can never run into it
         legend=dict(orientation="h", yanchor="bottom", y=1.02,
                     xanchor="left", x=0, font=dict(size=11)),
         hovermode="x unified",
+        hoverlabel=dict(bgcolor=pal["surface_hover"],
+                        bordercolor=pal["border"],
+                        font=dict(color=pal["text"])),
         autosize=True,
     )
 
@@ -152,10 +163,10 @@ def daily_line(day_labels: Sequence[str],
     """One value per calendar day; None -> gap (no interpolation).
 
     With ``day_numbers`` the x axis is numeric day-of-month (a few clean
-    ticks, never 31 rotated labels); ``day_labels`` then only feed hover."""
+    ticks, never 31 rotated labels); unified hover uses that day as its title."""
     pal = _pal(dark)
-    hover = [f"{lbl}<br>{name}: {fmt_rm(v * 100 if v is not None else None)}"
-             for lbl, v in zip(day_labels, values_rm)]
+    hover = [f"{name}: {fmt_rm(v * 100 if v is not None else None)}"
+             for v in values_rm]
     x = list(day_numbers) if day_numbers is not None else list(day_labels)
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -164,7 +175,7 @@ def daily_line(day_labels: Sequence[str],
         line=dict(color=pal["accent"], width=2),
         marker=dict(size=5, color=pal["accent"]),
         fill="tozeroy", fillcolor=pal["accent_fill"],
-        hoverinfo="text", hovertext=hover,
+        hovertemplate="%{customdata}<extra></extra>", customdata=hover,
     ))
     if target_rm is not None:
         fig.add_hline(y=target_rm, line_dash="dot",
@@ -240,6 +251,16 @@ def pace_chart(days: Sequence[int],
     fig = go.Figure()
     x = list(days)
     upper = [(n, p) for n, p in levels if n != 1]
+    ordered_levels = [(1, budget_cum_cents)] + upper
+
+    def _actual_line() -> None:
+        fig.add_trace(go.Scatter(
+            x=x, y=[None if v is None else v / 100 for v in actual_cum_cents],
+            mode="lines", connectgaps=False, name="Actual",
+            line=dict(color=pal["accent"], width=2.5),
+            fill="tozeroy", fillcolor=pal["pace_fill"],
+            hovertemplate="Actual: RM %{y:,.0f}<extra></extra>",
+        ))
     labelled = bool(upper)
 
     def _target_line(n: int, pace) -> None:
@@ -254,7 +275,7 @@ def pace_chart(days: Sequence[int],
             opacity=1.0 if strong else 0.55,
             line=dict(color=pal["budget"], dash="dash",
                       width=1.75 if strong else 1),
-            hovertemplate=(f"Day %{{x}}<br>Level {n}: RM %{{y:,.0f}}"
+            hovertemplate=(f"Level {n}: RM %{{y:,.0f}}"
                            "<extra></extra>"),
         ))
         if labelled and x and y and y[-1] is not None:
@@ -264,15 +285,8 @@ def pace_chart(days: Sequence[int],
                 font=dict(size=10, color=pal["muted"]),
                 opacity=1.0 if strong else 0.7)
 
-    _target_line(1, budget_cum_cents)
-    fig.add_trace(go.Scatter(
-        x=x, y=[None if v is None else v / 100 for v in actual_cum_cents],
-        mode="lines", connectgaps=False, name="Actual",
-        line=dict(color=pal["accent"], width=2.5),
-        fill="tozeroy", fillcolor=pal["pace_fill"],
-        hovertemplate="Day %{x}<br>Actual: RM %{y:,.0f}<extra></extra>",
-    ))
-    for n, pace in upper:  # lighter lines after the two main traces
+    _actual_line()
+    for n, pace in ordered_levels:
         _target_line(n, pace)
     layout = _base_layout(pal, y_title, x_title="Day")
     if labelled:
@@ -311,12 +325,12 @@ def budget_vs_actual(categories: Sequence[str],
         y=names, x=[None if b is None else b / 100 for b in budgets_cents],
         orientation="h", name="Budget", marker_color=pal["budget"],
         opacity=0.55,
-        hovertemplate="%{y}<br>Budget: RM %{x:,.2f}<extra></extra>",
+        hovertemplate="Budget: RM %{x:,.2f}<extra></extra>",
     ))
     fig.add_trace(go.Bar(
         y=names, x=[a / 100 for a in actuals_cents],
         orientation="h", name="Paid", marker_color=pal["accent"],
-        hovertemplate="%{y}<br>Paid: RM %{x:,.2f}<extra></extra>",
+        hovertemplate="Paid: RM %{x:,.2f}<extra></extra>",
     ))
     layout = _base_layout(pal, y_title)
     layout["barmode"] = "group"
@@ -411,7 +425,7 @@ def daily_vs_target(days: Sequence[int],
     layout["barmode"] = "overlay"
     layout["bargap"] = 0.25
     layout["xaxis"]["range"] = [0.5, (max(x) if x else 1) + 0.5]
-    layout["hoverlabel"] = dict(namelength=-1)
+    layout["hoverlabel"] = dict(layout["hoverlabel"], namelength=-1)
     fig.update_layout(**layout)
     return fig
 
@@ -490,8 +504,8 @@ def sales_calendar(weeks: Sequence[Sequence[Optional[tuple]]],
     layout["margin"] = dict(l=4, r=4, t=4, b=4)
     layout["xaxis"] = dict(layout["xaxis"], side="top", fixedrange=True,
                            type="category")
-    layout["yaxis"] = dict(visible=False, autorange="reversed",
-                           fixedrange=True)
+    layout["yaxis"] = dict(layout["yaxis"], visible=False,
+                           autorange="reversed", fixedrange=True)
     layout["hovermode"] = "closest"
     fig.update_layout(**layout)
     return fig
