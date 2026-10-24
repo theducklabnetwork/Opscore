@@ -130,6 +130,13 @@ class AppService:
         return self.read_repo.get_contribution_shares(
             store.state, store.concept, month)
 
+    def get_basket_benchmark(self, user: User, store_id: int, month: str):
+        """The store's State average SPR (RM) / IPR for the month."""
+        authz.require_store_access(user, store_id)
+        store = self.read_repo.get_store(store_id)
+        return self.read_repo.get_basket_benchmark(
+            store.state, store.concept, month)
+
     def _store_write(self, user: User, store_id: int) -> None:
         """require_store_write with the store's active flag (deactivated
         stores are read-only; reads still work). Access is checked BEFORE

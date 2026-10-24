@@ -225,6 +225,23 @@ class OperationsRepository:
         )
         return {r["day"]: to_decimal(r["share"]) for r in rows}
 
+    def get_basket_benchmark(self, state: Optional[str],
+                             concept: Optional[str], month: str
+                             ) -> tuple[Optional[Decimal], Optional[Decimal]]:
+        """(average SPR in RM, average IPR) for a State + Concept (exact
+        text) in the month's calendar month; (None, None) = no match."""
+        _validate_month(month)
+        if not state or not concept:
+            return None, None
+        rows = self._query(
+            "SELECT avg_spr, avg_ipr FROM basket_benchmarks "
+            "WHERE state = ? AND concept = ? AND month = ?",
+            (state, concept, int(month[5:7])),
+        )
+        if not rows:
+            return None, None
+        return to_decimal(rows[0]["avg_spr"]), to_decimal(rows[0]["avg_ipr"])
+
     # ------------------------------------------------------------------
     # Daily records
     # ------------------------------------------------------------------

@@ -11,7 +11,8 @@ Dataset: store S01 with
 - September 2026: complete month (all 30 days)
 - State / Concept Selangor / Mall with a synthetic Daily Sales
   Contribution for both months (illustrative shares, not real data),
-  October basket targets and one public holiday
+  October basket targets, one public holiday and State Average
+  SPR / IPR benchmarks (illustrative)
 """
 
 import argparse
@@ -81,6 +82,11 @@ def main() -> int:
             "INSERT OR REPLACE INTO contribution_shares (state, concept, "
             "day, month, share) VALUES ('Selangor', 'Mall', ?, ?, ?)",
             [(k, m, v) for m in (9, 10) for k, v in shares.items()])
+        # State Average SPR (RM) / IPR for the Basket (illustrative only)
+        conn.executemany(
+            "INSERT OR REPLACE INTO basket_benchmarks (concept, state, "
+            "month, avg_spr, avg_ipr) VALUES ('Mall', 'Selangor', ?, ?, ?)",
+            [(9, 20.50, 2.05), (10, 21.00, 1.85)])
     conn.close()
     app.configure_month_with_budgets(
         admin, sid, "2026-10",

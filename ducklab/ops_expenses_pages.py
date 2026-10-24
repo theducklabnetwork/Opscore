@@ -154,6 +154,14 @@ def _budget_monitor() -> rx.Component:
     )
 
 
+def _expense_mix() -> rx.Component:
+    # paid expenses by category for the month; hidden when nothing is paid
+    return rx.cond(E.mix_ready, ui.section_card(
+        rx.cond(E.is_dark, ops_charts.chart(E.mix_fig_dark, "360px"),
+                ops_charts.chart(E.mix_fig_light, "360px")),
+        title="Expense Mix", id="expense-mix"))
+
+
 # ---------------------------------------------------------------------------
 # 3. Transaction register: filters in one row + kit table
 # ---------------------------------------------------------------------------
@@ -385,6 +393,7 @@ def expenses_page() -> rx.Component:
                 rx.vstack(
                     _kpi_cards(),
                     _budget_monitor(),
+                    _expense_mix(),
                     _register(),
                     spacing=ui.GAP, width="100%",
                 ),

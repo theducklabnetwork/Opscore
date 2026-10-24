@@ -615,6 +615,36 @@ def transactions_pct(transactions: Optional[int],
                          Decimal(target_transactions) / days_in_month)
 
 
+def average_sales_by_weekday(days: list[DailyInput], holidays
+                             ) -> list[Optional[Decimal]]:
+    """Average sales (cents) per weekday, Mon..Sun, over reported days only
+    (an explicit zero counts); public holidays are left out. None for a
+    weekday with no reported day."""
+    totals, counts = [0] * 7, [0] * 7
+    for d in days:
+        if d.sales_cents is None or d.date in holidays:
+            continue
+        totals[d.date.weekday()] += d.sales_cents
+        counts[d.date.weekday()] += 1
+    return [Decimal(t) / c if c else None for t, c in zip(totals, counts)]
+
+
+def month_weeks(month: str) -> list[list[Optional[date]]]:
+    """Calendar grid for the month: one row per week (Mon..Sun), days
+    outside the month None."""
+    start, _, dim = month_bounds(month)
+    cells: list[Optional[date]] = [None] * start.weekday()
+    cells += [date(start.year, start.month, n) for n in range(1, dim + 1)]
+    cells += [None] * (-len(cells) % 7)
+    return [cells[i:i + 7] for i in range(0, len(cells), 7)]
+
+
+def benchmark_spr_cents(avg_spr_rm) -> Optional[Decimal]:
+    """Imported State average SPR (RM) -> cents; None when blank."""
+    value = to_decimal(avg_spr_rm)
+    return None if value is None else value * 100
+
+
 # --------------------------------------------------------------------------
 # 5. EXPENSES MANAGEMENT
 # --------------------------------------------------------------------------
@@ -830,6 +860,22 @@ def category_paid_mtd_cents(
         if pv and _in_month(e.paid_date, month):
             total += pv
     return total
+
+
+EXPENSE_MIX_OTHER = "Other"
+
+
+def expense_mix(paid_by_category: list[tuple[str, int]], limit: int = 6
+                ) -> list[tuple[str, int]]:
+    """Expense Mix: categories with a paid amount this month, largest
+    first (ties keep their order); past ``limit`` the rest sum into one
+    "Other" slice. [] when nothing is paid."""
+    items = sorted(((n, c) for n, c in paid_by_category if c and c > 0),
+                   key=lambda item: -item[1])
+    if len(items) <= limit:
+        return items
+    return items[:limit] + [(EXPENSE_MIX_OTHER,
+                             sum(c for _, c in items[limit:]))]
 
 
 def budget_status(paid_cents: int, budget_cents: Optional[int]) -> str:
