@@ -14,3 +14,4 @@
 # Python: 3.14 (see pyproject-independent note in deploy/RELEASES.md).
 reflex==0.10.0
 argon2-cffi==25.1.0
+openpyxl==3.1.5
