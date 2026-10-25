@@ -62,6 +62,8 @@ class TestLoad(SettingsFixture):
             st = self.state(actor)
             expected = ["account", "about"] if roles not in (
                 ("super_admin",), ("administrator",)) else \
+                ["account", "reference", "data", "about"] \
+                if roles == ("super_admin",) else \
                 ["account", "reference", "about"]
             self.assertEqual(st.visible_tabs, expected)
 

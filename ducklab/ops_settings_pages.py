@@ -1,10 +1,12 @@
-"""Settings page (/ops/settings): Account, Reference Data and About tabs.
+"""Settings page (/ops/settings): Account, Reference Data, Data and About
+tabs.
 
 Tab visibility is role-driven: TABS lists every tab with the roles that
 may see it, so later tabs plug in by adding one entry. Account and About
 are for every authenticated user; Reference Data (expense categories +
 Daily Sales Contribution import) is for configuration managers
-(Super Admin and Administrator).
+(Super Admin and Administrator); Data (backup & restore) is Super Admin
+only.
 """
 
 from __future__ import annotations
@@ -12,10 +14,12 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 
 import reflex as rx
 
 from ducklab import authz
+from ducklab import backup
 from ducklab import design as ds
 from ducklab import dsc_import
 from ducklab import store_ops_db, ui
@@ -40,6 +44,7 @@ APP_NAME = "Opscore"
 TABS = (
     ("account", "Account", None),
     ("reference", "Reference Data", authz.CONFIG_MANAGERS),
+    ("data", "Data", authz.USER_MANAGERS),
     ("about", "About", None),
 )
 
@@ -47,6 +52,8 @@ PASSWORD_RULES = ("At least 10 characters, with letters and digits. "
                   "Changing your password signs out all other sessions.")
 
 DSC_UPLOAD_ID = "dsc-upload"
+DB_UPLOAD_ID = "db-upload"
+DB_MAX_BYTES = 512 * 1024 * 1024  # generous cap; a store-ops DB is small
 DSC_DESCRIPTION = (
     "The workbook's DSC and SPR sheets replace the Daily Sales "
     "Contribution shares and SPR/IPR benchmarks for every store. The "
@@ -117,6 +124,15 @@ class SettingsState(OpsState):
     dsc_importing: bool = False
     _dsc_pending_path: str = ""      # server-side temp file (never client)
 
+    # --- Data: backup & restore (Super Admin only) ----------------------
+    data_error: str = ""
+    data_notice: str = ""
+    data_backups: list[dict[str, str]] = []  # name, date, size
+    data_pending_name: str = ""
+    data_confirm_open: bool = False
+    data_restoring: bool = False
+    _db_pending_path: str = ""       # server-side temp file (never client)
+
     @rx.event
     def load_settings(self) -> rx.event.EventSpec | None:
         try:
@@ -139,6 +155,8 @@ class SettingsState(OpsState):
         self.pw_error = self.pw_notice = ""
         if self.can_manage_reference:
             self._load_reference(user)
+        if user.is_super_admin:
+            self._load_data_tab()
 
     @rx.event
     def set_pw_current(self, v: str) -> None:
@@ -440,8 +458,146 @@ class SettingsState(OpsState):
             self._discard_pending()
             self.dsc_pending_name = ""
 
+    # --- Data: backup & restore -----------------------------------------
+    def _load_data_tab(self) -> None:
+        self.data_error = self.data_notice = ""
+        self.data_backups = [
+            {"name": b.name,
+             "date": ds.fmt_kl_datetime(b.created_at.isoformat()),
+             "size": _fmt_size(b.size_bytes)}
+            for b in backup.list_pre_restore_backups(DB_PATH)
+        ]
+
+    @rx.event
+    def download_backup(self) -> rx.event.EventSpec | None:
+        """Consistent database copy (SQLite backup API) as a download."""
+        self.data_error = self.data_notice = ""
+        try:
+            user = self._actor()
+            authz.require_user_manager(user)
+        except AuthenticationError:
+            return rx.redirect("/login")
+        except AuthorizationError:
+            self.data_error = "You do not have access."
+            return None
+        fd, path = tempfile.mkstemp(suffix=".db", prefix="ducklab-backup-")
+        os.close(fd)
+        try:
+            backup.create_backup(DB_PATH, path)
+            data = Path(path).read_bytes()
+        except (backup.BackupError, OSError) as exc:
+            self.data_error = f"Backup failed: {exc}"
+            return None
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        return rx.download(data=data, filename=backup.download_name())
+
+    @rx.event
+    async def handle_db_upload(self, files: list[rx.UploadFile]) -> None:
+        """Stage and validate the uploaded .db; restore asks for
+        confirmation before anything is replaced."""
+        self.data_error = self.data_notice = ""
+        if not files:
+            return
+        upload = files[0]
+        try:
+            user = self._actor()
+            authz.require_user_manager(user)
+        except AuthenticationError:
+            self.data_error = SESSION_EXPIRED
+            return
+        except AuthorizationError:
+            self.data_error = "You do not have access."
+            return
+        self._discard_db_pending()
+        data = await upload.read()
+        if len(data) > DB_MAX_BYTES:
+            self.data_error = "File is too large."
+            return
+        fd, path = tempfile.mkstemp(suffix=".db", prefix="ducklab-restore-")
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        try:
+            backup.validate_restore(path)
+        except backup.BackupError as exc:
+            os.unlink(path)
+            self.data_error = str(exc)
+            return
+        self._db_pending_path = path
+        self.data_pending_name = upload.filename or "database.db"
+        self.data_confirm_open = True
+
+    def _discard_db_pending(self) -> None:
+        if self._db_pending_path:
+            try:
+                os.unlink(self._db_pending_path)
+            except OSError:
+                pass
+        self._db_pending_path = ""
+
+    @rx.event
+    def cancel_db_restore(self) -> None:
+        self._discard_db_pending()
+        self.data_pending_name = ""
+        self.data_confirm_open = False
+
+    @rx.event
+    def set_data_confirm_open(self, v: bool) -> None:
+        if not v:
+            self.cancel_db_restore()
+
+    @rx.event
+    def confirm_db_restore(self) -> rx.event.EventSpec | None:
+        """Restore: pre-restore copy, replace via the backup API, sign out.
+
+        Logins and passwords come from the restored file, so the current
+        session is revoked and the user is sent back to the sign-in page.
+        """
+        self.data_error = self.data_notice = ""
+        self.data_confirm_open = False
+        path = self._db_pending_path
+        if not path:
+            self.data_error = "Choose a database file first."
+            return None
+        self.data_restoring = True
+        try:
+            user = self._actor()
+            authz.require_user_manager(user)
+            backup.save_pre_restore_backup(DB_PATH)
+            backup.restore(DB_PATH, path)
+        except AuthenticationError:
+            self.data_error = SESSION_EXPIRED
+            return None
+        except AuthorizationError:
+            self.data_error = "You do not have access."
+            return None
+        except backup.BackupError as exc:
+            self.data_error = f"Restore failed; the database was not "\
+                f"replaced.\n{exc}"
+            return None
+        except OSError as exc:
+            self.data_error = f"Restore failed.\n{exc}"
+            return None
+        finally:
+            self.data_restoring = False
+            self._discard_db_pending()
+            self.data_pending_name = ""
+        return SettingsState.sign_out
+
+
 
 S = SettingsState
+
+
+def _fmt_size(n: int) -> str:
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
 
 
 def _password_field(label, value, setter, fid) -> rx.Component:
@@ -665,6 +821,116 @@ def _rename_dialog() -> rx.Component:
     )
 
 
+# ---------------------------------------------------------------------------
+# Data tab (backup & restore)
+# ---------------------------------------------------------------------------
+
+def _backup_row(item) -> rx.Component:
+    return rx.hstack(
+        rx.text(item["name"], size="2", color=ds.TEXT),
+        rx.spacer(),
+        rx.text(item["date"], size="2", color=ds.TEXT_MUTED),
+        rx.text(item["size"], size="2", color=ds.TEXT_MUTED),
+        width="100%", align="center", spacing="4",
+        padding_y="0.4em", border_bottom=f"1px solid {ui.ROW_BORDER}",
+    )
+
+
+def _data_tab() -> rx.Component:
+    return ui.section_card(
+        rx.cond(S.data_error != "",
+                rx.callout(S.data_error, icon="triangle-alert",
+                           color_scheme="red", variant="soft",
+                           width="100%", id="data-error",
+                           white_space="pre-wrap")),
+        rx.cond(S.data_notice != "",
+                rx.callout(S.data_notice, icon="circle-check",
+                           color_scheme="green", variant="soft",
+                           width="100%", id="data-notice")),
+        ui.form_stack(
+            ui.form_section(
+                "Backup",
+                rx.button(rx.icon("download", size=14), "Download Backup",
+                          color_scheme="indigo", on_click=S.download_backup,
+                          id="data-backup"),
+                hint="A consistent copy of the database taken with the "
+                     "SQLite backup API, safe while the app is running.",
+                id="data-backup-section"),
+            ui.form_section(
+                "Restore",
+                rx.upload(
+                    rx.vstack(
+                        rx.button("Choose Database File (.db)",
+                                  variant="soft", color_scheme="gray",
+                                  type="button", id="db-choose"),
+                        rx.text("… or drop it here", size="1",
+                                color=ds.TEXT_FAINT),
+                        spacing="1", align="center"),
+                    id=DB_UPLOAD_ID, multiple=False,
+                    accept={".db": ["application/octet-stream",
+                                    "application/vnd.sqlite3",
+                                    "application/x-sqlite3"]},
+                    max_files=1, no_keyboard=True,
+                    border=f"1px dashed {ui.CARD_BORDER}",
+                    border_radius=ui.RADIUS, padding="1em", width="100%"),
+                rx.hstack(
+                    rx.button(
+                        rx.cond(S.data_restoring, rx.spinner(size="1"),
+                                rx.icon("upload", size=14)),
+                        "Restore Database", color_scheme="red",
+                        on_click=S.handle_db_upload(
+                            rx.upload_files(upload_id=DB_UPLOAD_ID)),
+                        disabled=S.data_restoring, id="db-restore"),
+                    rx.cond(S.data_pending_name != "",
+                            rx.text(S.data_pending_name, size="2",
+                                    color=ds.TEXT_MUTED)),
+                    spacing="3", align="center"),
+                hint="The file must be a valid Opscore database. Restoring "
+                     "replaces everything, including logins and passwords; "
+                     "you will be signed out.",
+                id="data-restore-section"),
+            ui.form_section(
+                "Automatic Pre-Restore Backups",
+                rx.cond(S.data_backups.length() > 0,
+                        rx.vstack(rx.foreach(S.data_backups, _backup_row),
+                                  spacing="0", width="100%"),
+                        ui.note("No automatic backups yet.")),
+                hint="Before every restore the current database is copied "
+                     "to the backups folder next to it. The last 5 are "
+                     "listed here.",
+                id="data-backups-section"),
+        ),
+        _db_confirm_dialog(),
+        title="Data",
+        subtitle="Back up and restore the application database.",
+        id="settings-data",
+    )
+
+
+def _db_confirm_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title("Restore Database?"),
+            rx.alert_dialog.description(
+                "The current database will be replaced by the uploaded "
+                "file. Everything changes, including logins and "
+                "passwords — they come from the restored file. A copy of "
+                "the current database is saved first, and you will be "
+                "signed out."),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button("Cancel", variant="soft",
+                              color_scheme="gray", id="db-cancel")),
+                rx.alert_dialog.action(
+                    rx.button("Restore Database", color_scheme="red",
+                              on_click=S.confirm_db_restore,
+                              id="db-confirm")),
+                justify="end", spacing="3"),
+        ),
+        open=S.data_confirm_open, on_open_change=S.set_data_confirm_open,
+    )
+
+
 def _reference_tab() -> rx.Component:
     return ui.section_card(
         rx.cond(S.ref_error != "", ds.error_callout(S.ref_error)),
@@ -714,12 +980,14 @@ def settings_page() -> rx.Component:
                             key,
                             ("account", "Account"),
                             ("reference", "Reference Data"),
+                            ("data", "Data"),
                             "About"),
                         value=key,
                         id=f"settings-tab-{key}")),
             ),
             rx.tabs.content(_account_tab(), value="account"),
             rx.tabs.content(_reference_tab(), value="reference"),
+            rx.tabs.content(_data_tab(), value="data"),
             rx.tabs.content(_about_tab(), value="about"),
             default_value="account",
             width="100%",
