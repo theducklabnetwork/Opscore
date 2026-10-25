@@ -1,0 +1,3 @@
+#!/bin/sh
+# Run the exported production frontend and backend without a JS toolchain.
+exec /opt/opscore/.venv/bin/python /opt/opscore/packaging/opscore_backend.py "$@"

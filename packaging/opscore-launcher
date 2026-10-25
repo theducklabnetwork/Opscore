@@ -1,0 +1,3 @@
+#!/bin/sh
+# The desktop entry uses an absolute path; do not depend on PATH at runtime.
+exec /opt/opscore/.venv/bin/python3.14 /opt/opscore/packaging/opscore_desktop.py "$@"

@@ -19,3 +19,10 @@ tests/private/
 .venv/
 node_modules/
 .pytest_cache/
+
+# Agent tooling and desktop package output
+.agents/
+.claude/
+agent/
+skills-lock.json
+dist/

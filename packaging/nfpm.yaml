@@ -1,0 +1,23 @@
+name: opscore
+arch: amd64
+platform: linux
+version: ${OPSCORE_VERSION}
+release: 1
+section: utils
+priority: optional
+maintainer: DuckLab
+description: Offline desktop store operations monitoring
+license: Proprietary
+contents:
+  - src: ${OPSCORE_ROOT}/app
+    dst: /opt/opscore
+    type: tree
+  - src: ${OPSCORE_ROOT}/desktop
+    dst: /usr/share/applications
+    type: tree
+  - src: ${OPSCORE_ROOT}/icons/hicolor
+    dst: /usr/share/icons/hicolor
+    type: tree
+scripts:
+  postinstall: ${OPSCORE_ROOT}/postinst
+  preremove: ${OPSCORE_ROOT}/prerm
