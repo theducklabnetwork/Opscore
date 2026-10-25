@@ -153,7 +153,10 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
     """Replace db_path content with the validated upload (backup API).
 
     Returns the restored schema version. The caller must already have
-    saved a pre-restore backup and obtained user confirmation.
+    saved a pre-restore backup and obtained user confirmation. Pending
+    schema migrations are applied immediately (init_db is idempotent and
+    non-destructive), so an older backup works without a restart; the
+    return value is the pre-migration version of the uploaded file.
     """
     db_path, upload_path = Path(db_path), Path(upload_path)
     version = validate_restore(upload_path)
@@ -166,6 +169,7 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
             dst.close()
     finally:
         src.close()
+    store_ops_db.init_db(db_path)
     return version
 
 

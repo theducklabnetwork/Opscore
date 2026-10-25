@@ -108,6 +108,31 @@ class BackupModuleTest(unittest.TestCase):
         conn.close()
         self.assertEqual(backup.validate_restore(older), 3)
 
+    def test_restore_v4_backup_migrates_to_current_schema(self):
+        """A v4 backup is restored and migrated immediately — no restart."""
+        v4 = self.dir / "v4.db"
+        shutil.copy(self.db, v4)
+        conn = sqlite3.connect(v4)
+        conn.execute("DROP TABLE reference_data_info")   # v5's table
+        conn.execute("DELETE FROM schema_migrations WHERE version >= 5")
+        conn.execute("PRAGMA user_version = 4")
+        conn.commit()
+        conn.close()
+        self.assertEqual(backup.validate_restore(v4), 4)
+        pre_version = backup.restore(self.db, v4)
+        self.assertEqual(pre_version, 4)
+        conn = sqlite3.connect(self.db)
+        try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(version, store_ops_db.SCHEMA_VERSION)
+        self.assertIn("reference_data_info", tables)
+        self.assertEqual(ok, "ok")
+
     def test_pre_restore_copy_created(self):
         saved = backup.save_pre_restore_backup(
             self.db, now=datetime(2026, 10, 25, 9, 15, 0))
