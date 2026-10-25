@@ -136,7 +136,7 @@
         element: "#at-a-glance",
         popover: {
           title: "Summary",
-          description: "Review additional monthly figures in one place."
+          description: "See average daily sales, incurred and unpaid expenses, and open actions."
         }
       }
     ],
@@ -166,7 +166,7 @@
         element: "#stock-section",
         popover: {
           title: "Stock",
-          description: "Review stock loss totals, ratios and category treatments."
+          description: "Review stock loss totals, ratios and loss by category."
         }
       },
       {
@@ -286,7 +286,7 @@
         element: "#trend-section",
         popover: {
           title: "Daily Loss",
-          description: "Track stock loss across reported days."
+          description: "Chart of stock loss for each reported day."
         }
       },
       {
@@ -300,7 +300,7 @@
         element: "#daily-section",
         popover: {
           title: "Daily Stock Loss",
-          description: "Review daily stock loss figures and statuses."
+          description: "Each day's loss by code, with its status."
         }
       },
       {
@@ -320,13 +320,6 @@
         }
       },
       {
-        element: "#action-filters",
-        popover: {
-          title: "Action Filters",
-          description: "Narrow actions by status, pillar, priority and overdue state."
-        }
-      },
-      {
         element: "#actions-table",
         popover: {
           title: "Actions",
@@ -336,10 +329,19 @@
     ],
     settings: [
       {
-        element: "#settings-account",
+        element: "#settings-reference",
+        roles: ["super_admin", "administrator"],
         popover: {
-          title: "Account",
-          description: "Review your account details and security settings."
+          title: "Reference Data",
+          description: "Expense categories and the Daily Sales Contribution file."
+        }
+      },
+      {
+        element: "#settings-data",
+        roles: ["super_admin"],
+        popover: {
+          title: "Data",
+          description: "Back up and restore your data."
         }
       },
       {
@@ -427,13 +429,15 @@
     if (btn) btn.click();
   }
 
-  function start(pageKey) {
+  function start(pageKey, role) {
     loadDriver(function (err) {
       if (err) return;
       var mobile = isMobile();
       var sourceSteps = pageKey ? PAGE_TOURS[pageKey] : WELCOME_STEPS;
       if (!sourceSteps) return;
-      var steps = sourceSteps.map(function (step) {
+      var steps = sourceSteps.filter(function (step) {
+        return !step.roles || step.roles.indexOf(role) !== -1;
+      }).map(function (step) {
         if (mobile) {
           // Phones: centred dialog, no highlight.
           return { popover: step.popover };

@@ -14,6 +14,7 @@ from typing import Optional
 
 import reflex as rx
 
+from ducklab import authz
 from ducklab import design as ds
 from ducklab import kpi
 from ducklab import store_ops_db
@@ -35,6 +36,22 @@ def auth_message(exc: Exception) -> str:
     if isinstance(exc, AuthenticationError):
         return SESSION_EXPIRED
     return ACCESS_DENIED
+
+
+def _page_tour_script(page_key: str, user: User) -> rx.event.EventSpec:
+    """Launch a page tour with only the Settings tabs this role may see."""
+    if page_key == "settings":
+        if authz.can_manage_users(user):
+            role = "super_admin"
+        elif authz.can_manage_config(user):
+            role = "administrator"
+        else:
+            role = "limited"
+        return rx.call_script(
+            f"window.ducklabTour && window.ducklabTour.start('settings', "
+            f"'{role}')")
+    return rx.call_script(
+        f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
 
 
 def parse_client_id(raw, what: str, required: bool = False) -> Optional[int]:
@@ -128,20 +145,18 @@ class OpsState(AuthState):
         if (not user.tour_done or page_key not in app_service.auth.PAGE_TOUR_KEYS
                 or app_service.auth.is_page_tour_done(user.id, page_key)):
             return None
-        return rx.call_script(
-            f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
+        return _page_tour_script(page_key, user)
 
     @rx.event
     def replay_page_tour(self, page_key: str) -> rx.event.EventSpec | None:
         """Replay on demand without changing the stored completion flag."""
         try:
-            self._actor()
+            user = self._actor()
         except AuthenticationError:
             return rx.redirect("/login")
         if page_key not in app_service.auth.PAGE_TOUR_KEYS:
             return None
-        return rx.call_script(
-            f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
+        return _page_tour_script(page_key, user)
 
     @rx.event
     def page_tour_finished(self, page_key: str, _result=None) -> None:

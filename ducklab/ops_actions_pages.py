@@ -44,23 +44,19 @@ def _cards() -> rx.Component:
 # ---------------------------------------------------------------------------
 
 def _filters() -> rx.Component:
-    return rx.vstack(
-        rx.heading("Action Filters", size="4", weight="medium", color=ds.TEXT),
+    return rx.hstack(
+        rx.select(FILTER_STATUSES, value=A.f_status,
+                  on_change=A.set_f_status, size="2", id="f-status"),
+        rx.select(FILTER_PILLARS, value=A.f_pillar,
+                  on_change=A.set_f_pillar, size="2", id="f-pillar"),
+        rx.select(FILTER_PRIORITIES, value=A.f_priority,
+                  on_change=A.set_f_priority, size="2", id="f-priority"),
         rx.hstack(
-            rx.select(FILTER_STATUSES, value=A.f_status,
-                      on_change=A.set_f_status, size="2", id="f-status"),
-            rx.select(FILTER_PILLARS, value=A.f_pillar,
-                      on_change=A.set_f_pillar, size="2", id="f-pillar"),
-            rx.select(FILTER_PRIORITIES, value=A.f_priority,
-                      on_change=A.set_f_priority, size="2", id="f-priority"),
-            rx.hstack(
-                rx.checkbox(checked=A.f_overdue_only,
-                            on_change=A.set_f_overdue_only, id="f-overdue"),
-                rx.text("Overdue Only", size="2"),
-                spacing="2", align="center"),
-            wrap="wrap", spacing="3", width="100%", align="center",
-        ),
-        spacing="3", width="100%", align="start", id="action-filters",
+            rx.checkbox(checked=A.f_overdue_only,
+                        on_change=A.set_f_overdue_only, id="f-overdue"),
+            rx.text("Overdue Only", size="2"),
+            spacing="2", align="center"),
+        wrap="wrap", spacing="3", width="100%", align="center",
     )
 
 

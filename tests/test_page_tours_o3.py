@@ -3,6 +3,8 @@
 Temp DBs only. Run: python -m pytest tests/test_page_tours_o3.py -v
 """
 
+from unittest import mock
+
 from ducklab.app_service import AppService
 from ducklab.ops_overview_state import OverviewState
 from ducklab.ops_state import OpsState
@@ -19,7 +21,8 @@ EXPECTED_STEPS = {
          "Compare sales with each target level."),
         ("#attention-panel", "Alerts", "Find items that need attention."),
         ("#at-a-glance", "Summary",
-         "Review additional monthly figures in one place."),
+         "See average daily sales, incurred and unpaid expenses, and open "
+         "actions."),
     ],
     "report": [
         ("#sales-section", "Sales",
@@ -29,7 +32,7 @@ EXPECTED_STEPS = {
         ("#manpower-section", "Manpower",
          "Review headcount, payroll ratios, turnover and leave."),
         ("#stock-section", "Stock",
-         "Review stock loss totals, ratios and category treatments."),
+         "Review stock loss totals, ratios and loss by category."),
         ("#actions-section", "Actions", "Review action totals by status."),
     ],
     "sales": [
@@ -67,25 +70,24 @@ EXPECTED_STEPS = {
         ("#stock-kpi-section", "Stock Summary",
          "See total loss, loss ratio, missing stock and extra stock."),
         ("#trend-section", "Daily Loss",
-         "Track stock loss across reported days."),
+         "Chart of stock loss for each reported day."),
         ("#category-section", "Categories",
          "Review loss by category and inspect individual entries."),
         ("#daily-section", "Daily Stock Loss",
-         "Review daily stock loss figures and statuses."),
+         "Each day's loss by code, with its status."),
         ("#comparison-section", "Comparison",
          "Compare this month's stock figures with the previous month."),
     ],
     "actions": [
         ("#action-cards", "Action Summary",
          "See open, overdue and completed action totals."),
-        ("#action-filters", "Action Filters",
-         "Narrow actions by status, pillar, priority and overdue state."),
         ("#actions-table", "Actions",
          "Filter, review and edit actions and their follow-up details."),
     ],
     "settings": [
-        ("#settings-account", "Account",
-         "Review your account details and security settings."),
+        ("#settings-reference", "Reference Data",
+         "Expense categories and the Daily Sales Contribution file."),
+        ("#settings-data", "Data", "Back up and restore your data."),
         ("#pw-section", "Change Password",
          "Update your password and sign out other sessions."),
         ("#tour-section", "Guided Tour",
@@ -116,10 +118,12 @@ class TestRemainingPageTours(PageTourFixture):
         for page_key in EXPECTED_STEPS:
             with self.subTest(page=page_key, welcome="done"):
                 event = OpsState.maybe_start_page_tour.fn(self.state, page_key)
-                self.assertEqual(
-                    script(event),
+                expected = (
                     "window.ducklabTour && window.ducklabTour.start("
+                    "'settings', 'super_admin')" if page_key == "settings"
+                    else "window.ducklabTour && window.ducklabTour.start("
                     f"'{page_key}')")
+                self.assertEqual(script(event), expected)
 
     def test_dashboard_waits_for_a_visit_after_welcome(self):
         welcome = OverviewState.maybe_start_tour.fn(self.state)
@@ -131,6 +135,32 @@ class TestRemainingPageTours(PageTourFixture):
         self.admin = self.app.auth.get_user(self.admin.id)
         next_visit = OpsState.maybe_start_page_tour.fn(self.state, "dashboard")
         self.assertIn("start('dashboard')", script(next_visit))
+
+    def test_settings_launch_matches_role_visibility(self):
+        for role, expected in (
+                ("super_admin", "super_admin"),
+                ("administrator", "administrator"),
+                ("zone_manager", "limited"),
+                ("branch_manager", "limited"),
+                ("viewer", "limited")):
+            if role == "super_admin":
+                actor = self.admin
+            else:
+                user = self.app.create_user(
+                    self.admin, f"{role}@ducklab.com", role, "An0therGood42")
+                actor = self.app.assign_role(self.admin, user.id, role)
+            self.app.auth.mark_tour_done(actor.id)
+            actor = self.app.auth.get_user(actor.id)
+            with self.subTest(role=role, launch="automatic"):
+                with mock.patch.object(OpsState, "_actor", lambda _: actor):
+                    event = OpsState.maybe_start_page_tour.fn(
+                        self.state, "settings")
+                self.assertIn(f"'settings', '{expected}'", script(event))
+            self.app.auth.mark_page_tour_done(actor.id, "settings")
+            with self.subTest(role=role, launch="replay"):
+                with mock.patch.object(OpsState, "_actor", lambda _: actor):
+                    event = OpsState.replay_page_tour.fn(self.state, "settings")
+                self.assertIn(f"'settings', '{expected}'", script(event))
 
     def test_new_page_completion_is_persistent(self):
         for page_key in EXPECTED_STEPS:
@@ -148,12 +178,14 @@ class TestRemainingPageTourAssets(PageTourFixture):
         tour_js = (root / "assets" / "tour.js").read_text()
         keys = [*EXPECTED_STEPS, "stores", "daily"]
         for index, (page_key, steps) in enumerate(EXPECTED_STEPS.items()):
-            self.assertGreaterEqual(len(steps), 3)
+            minimum = 2 if page_key == "actions" else 3
+            self.assertGreaterEqual(len(steps), minimum)
             self.assertLessEqual(len(steps), 5)
             start = tour_js.index(f"    {page_key}: [")
             end = tour_js.index(f"    {keys[index + 1]}: [")
             block = tour_js[start:end]
-            self.assertEqual(block.count("description:"), len(steps))
+            expected_count = len(steps) if page_key != "settings" else 4
+            self.assertEqual(block.count("description:"), expected_count)
             source = (root / "ducklab" / PAGE_SOURCES[page_key]).read_text()
             self.assertIn(f'tour_key="{page_key}"', source)
             for target, title, description in steps:
