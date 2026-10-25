@@ -119,21 +119,34 @@ class TestPageTourAssets(unittest.TestCase):
         self.assertIn('return { popover: step.popover };', tour_js)
         for target, title, description in [
             ("#stores-table", "Stores",
-             "Add stores and manage their access and status."),
-            ("#setup-section", "Monthly setup",
-             "Set monthly targets, budgets and month-end inputs."),
-            ("#setup-save", "Save Setup",
-             "Save the monthly setup for the selected store and month."),
+             "Add your store and keep its details up to date."),
+            ("#setup-section", "Monthly Setup",
+             "Set the month's targets, levels, budgets and month-end inputs."),
+            ("#setup-holidays-field", "Public Holidays",
+             "Mark holidays so daily targets use the right share."),
             ("#record-day", "New Entry",
              "Record a day's sales, manpower and stock loss."),
-            ("#daily-kpis", "Sales",
-             "Review sales and other key figures for the month."),
+            ("#daily-kpis", "Monthly Summary",
+             "See sales, achievement, transactions, units, loss and expenses "
+             "for the month."),
             ("#daily-table", "Daily Records",
              "Review and edit each day's recorded figures."),
         ]:
             self.assertIn(target, tour_js)
             self.assertIn(title, tour_js)
             self.assertIn(description, tour_js)
+
+    def test_section_titles_and_holiday_target(self):
+        root = Path(__file__).resolve().parent.parent
+        stores = (root / "ducklab" / "ops_stores_pages.py").read_text()
+        for title in ("Stores", "User Assignment", "Area & People",
+                      "Monthly Setup", "Sales Targets", "Daily Sales",
+                      "Manpower", "Stock", "Expense Budgets (RM)",
+                      "Month-End Inputs"):
+            self.assertIn(title, stores)
+        self.assertIn('id="setup-holidays-field"', stores)
+        daily = (root / "ducklab" / "ops_daily_pages.py").read_text()
+        self.assertIn('rx.heading("Monthly Summary"', daily)
 
     def test_headers_have_replay_buttons(self):
         root = Path(__file__).resolve().parent.parent

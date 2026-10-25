@@ -100,7 +100,7 @@ def _store_form_dialog() -> rx.Component:
             ),
         ),
         ui.form_section(
-            "Area & people",
+            "Area & People",
             ui.form_grid(
                 _sf_field("Zone", S.sf_zone, S.set_sf_zone, "sf-zone"),
                 _sf_field("Zone PIC", S.sf_zone_pic, S.set_sf_zone_pic,
@@ -159,7 +159,7 @@ def _assign_panel() -> rx.Component:
                           disabled=S.assign_selected == "",
                           id="assign-submit"),
                 spacing="3", align="center", wrap="wrap"),
-            title="User assignment",
+            title="User Assignment",
             subtitle="Assign existing users to this store. User creation is "
                      "handled by an administrator elsewhere.",
             id="assign-panel",
@@ -215,16 +215,19 @@ def _holidays_field() -> rx.Component:
     # pick a date to add it; × removes it (saved with Save Setup)
     return ui.form_field(
         "Public Holidays",
-        rx.vstack(
-            rx.input(type="date", value="", min=S.s_holiday_min,
-                     max=S.s_holiday_max, on_change=S.add_holiday,
-                     id="setup-public-holidays",
-                     disabled=~S.can_edit_setup),
-            rx.cond(S.holiday_chips.length() > 0,
-                    rx.hstack(rx.foreach(S.holiday_chips, _holiday_chip),
-                              spacing="2", wrap="wrap"),
-                    ui.note("None")),
-            spacing="2", width="100%"),
+        rx.box(
+            rx.vstack(
+                rx.input(type="date", value="", min=S.s_holiday_min,
+                         max=S.s_holiday_max, on_change=S.add_holiday,
+                         id="setup-public-holidays",
+                         disabled=~S.can_edit_setup),
+                rx.cond(S.holiday_chips.length() > 0,
+                        rx.hstack(rx.foreach(S.holiday_chips, _holiday_chip),
+                                  spacing="2", wrap="wrap"),
+                        ui.note("None")),
+                spacing="2", width="100%"),
+            id="setup-holidays-field",
+        ),
     )
 
 
@@ -261,7 +264,7 @@ def _setup_section() -> rx.Component:
         rx.cond(S.setup_error != "", ds.error_callout(S.setup_error)),
         ui.form_stack(
             ui.form_section(
-                "Sales targets",
+                "Sales Targets",
                 _setup_grid(SETUP_SALES[:2]),
                 _setup_grid(SETUP_SALES[2:5]),
                 rx.hstack(
@@ -290,7 +293,7 @@ def _setup_section() -> rx.Component:
             ui.form_section("Manpower", _setup_grid(SETUP_MANPOWER)),
             ui.form_section("Stock", _setup_grid(SETUP_STOCK)),
             ui.form_section(
-                "Expense budgets (RM)",
+                "Expense Budgets (RM)",
                 rx.cond(
                     S.budget_rows.length() > 0,
                     rx.grid(rx.foreach(S.budget_rows, _budget_row),
@@ -299,7 +302,7 @@ def _setup_section() -> rx.Component:
                     ui.note("No expense categories configured for this "
                             "store.")),
             ),
-            ui.form_section("Month-end inputs", _setup_grid(SETUP_PAYROLL),
+            ui.form_section("Month-End Inputs", _setup_grid(SETUP_PAYROLL),
                             hint="Leave blank until payroll closes: it then "
                                  "shows as awaiting payroll, never RM 0."),
         ),
@@ -314,7 +317,7 @@ def _setup_section() -> rx.Component:
             spacing="3", align="center", width="100%",
             border_top=f"1px solid {ui.CARD_BORDER}", padding_top="1em",
         ),
-        title="Monthly setup",
+        title="Monthly Setup",
         subtitle="Leave a field blank if it is not set; enter 0 only for a "
                  "genuine zero. Targets and budgets feed the Stock, "
                  "Manpower, Expenses and Monthly Report pages.",

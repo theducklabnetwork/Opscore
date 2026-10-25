@@ -108,21 +108,21 @@
         element: "#stores-table",
         popover: {
           title: "Stores",
-          description: "Add stores and manage their access and status."
+          description: "Add your store and keep its details up to date."
         }
       },
       {
         element: "#setup-section",
         popover: {
-          title: "Monthly setup",
-          description: "Set monthly targets, budgets and month-end inputs."
+          title: "Monthly Setup",
+          description: "Set the month's targets, levels, budgets and month-end inputs."
         }
       },
       {
-        element: "#setup-save",
+        element: "#setup-holidays-field",
         popover: {
-          title: "Save Setup",
-          description: "Save the monthly setup for the selected store and month."
+          title: "Public Holidays",
+          description: "Mark holidays so daily targets use the right share."
         }
       }
     ],
@@ -137,8 +137,8 @@
       {
         element: "#daily-kpis",
         popover: {
-          title: "Sales",
-          description: "Review sales and other key figures for the month."
+          title: "Monthly Summary",
+          description: "See sales, achievement, transactions, units, loss and expenses for the month."
         }
       },
       {

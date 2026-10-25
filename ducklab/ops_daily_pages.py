@@ -37,6 +37,8 @@ def _kpi_summary() -> rx.Component:
             _tile("Total Loss", K["loss"]),
             _tile("Expenses", K["expenses"], id="kpi-expenses")]
     return rx.vstack(
+        rx.heading("Monthly Summary", size="4", weight="medium",
+                   color=ds.TEXT),
         rx.cond(
             DailyState.month_finalized,
             rx.callout(
