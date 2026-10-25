@@ -296,6 +296,34 @@ class OpsState(AuthState):
         yield OpsState.refresh_report()
 
     @rx.event
+    def export_report(self) -> rx.event.EventSpec | None:
+        """Download the selected live report as an Excel workbook."""
+        self.error_message = ""
+        store_id = self._selected_store_id()
+        month = self._selected_month()
+        if store_id is None or month is None:
+            self.error_message = "Select a store and month before exporting."
+            return None
+        try:
+            from ducklab import report_export
+            user = self._actor()
+            if self.report_mode != "live":
+                self.error_message = "Switch to Live to export the report."
+                return None
+            report = app_service.preview_month(user, store_id, month)
+            data = report_export.export_bytes(
+                report, app_service.read_repo,
+                include_payroll=authz.can_manage_config(user))
+            return rx.download(
+                data=data, filename=report_export.export_filename(report))
+        except AuthenticationError:
+            return rx.redirect("/login")
+        except (AuthorizationError, ConfigNotFoundError, StoreNotFoundError,
+                InvalidMonthError, SnapshotNotFoundError, RepositoryError) as exc:
+            self.error_message = str(exc)
+            return None
+
+    @rx.event
     def refresh_report(self) -> None:
         # Keep the chosen version across the reset (store/month/mode
         # changes clear it before calling here).

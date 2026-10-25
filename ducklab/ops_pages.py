@@ -316,7 +316,11 @@ def _mode_controls() -> rx.Component:
                 size="2", id="version-selector",
             ),
         ),
-        spacing="3", align="center", wrap="wrap",
+        rx.spacer(),
+        rx.button(rx.icon("download", size=14), "Export",
+                  variant="outline", on_click=R.export_report,
+                  disabled=R.report_status != "ok", id="export-report"),
+        spacing="3", align="center", wrap="wrap", width="100%",
     )
 
 
