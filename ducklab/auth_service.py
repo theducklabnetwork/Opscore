@@ -308,7 +308,10 @@ class AuthService:
     # ------------------------------------------------------------------
     # page tours (completion is per user and stable page key)
     # ------------------------------------------------------------------
-    PAGE_TOUR_KEYS = frozenset({"stores", "daily"})
+    PAGE_TOUR_KEYS = frozenset({
+        "dashboard", "report", "sales", "expenses", "manpower", "stock",
+        "actions", "settings", "stores", "daily",
+    })
 
     def is_page_tour_done(self, user_id: int, page_key: str) -> bool:
         if page_key not in self.PAGE_TOUR_KEYS:

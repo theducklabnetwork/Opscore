@@ -628,7 +628,7 @@ def _account_tab() -> rx.Component:
                                             read_only=True, id="acct-email")),
             columns="2"),
         ui.form_section(
-            "Change password",
+            "Change Password",
             _password_field("Current password", S.pw_current,
                             S.set_pw_current, "pw-current"),
             _password_field("New password", S.pw_new, S.set_pw_new, "pw-new"),
@@ -649,7 +649,7 @@ def _account_tab() -> rx.Component:
                 spacing="3", align="center"),
             hint=PASSWORD_RULES, id="pw-section"),
         ui.form_section(
-            "Guided tour",
+            "Guided Tour",
             rx.hstack(
                 rx.button(
                     rx.icon("route", size=14),
@@ -817,7 +817,7 @@ def _dsc_confirm_dialog() -> rx.Component:
 def _rename_dialog() -> rx.Component:
     return ui.form_dialog(
         ui.form_section(
-            "Category name",
+            "Category Name",
             ui.form_field(
                 "Name",
                 rx.input(value=S.rename_name, on_change=S.set_rename_name,
@@ -1014,4 +1014,5 @@ def settings_page() -> rx.Component:
             width="100%",
         ),
         description="Your account and application information.",
+        tour_key="settings",
     )

@@ -34,6 +34,7 @@ def _tile(label, value, id=None, **kw) -> rx.Component:
 
 def _kpi_section() -> rx.Component:
     return rx.vstack(
+        rx.heading("Stock Summary", size="4", weight="medium", color=ds.TEXT),
         ui.kpi_grid(
             _tile("Total Loss", S.kpi_total_loss),
             _tile("Loss Ratio", S.kpi_ratio, id="stock-ratio",
@@ -50,7 +51,7 @@ def _kpi_section() -> rx.Component:
                 icon="info", color_scheme="amber", variant="soft",
                 width="100%", id="finalized-warning"),
         ),
-        spacing="3", width="100%", id="stock-kpi-section",
+        spacing="3", width="100%", align="start", id="stock-kpi-section",
     )
 
 
@@ -246,4 +247,5 @@ def stock_page() -> rx.Component:
         ),
         on_store=S.select_store,
         on_month=S.select_month,
+        tour_key="stock",
     )

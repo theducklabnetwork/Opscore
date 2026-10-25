@@ -82,23 +82,30 @@ def _avg_day(span_md: str) -> rx.Component:
 def _kpi_tiles() -> rx.Component:
     # complete month: 4 tiles (4 across; 2 + 2 on phones);
     # incomplete: 5 tiles with Projected Sales (5 across; 2 + 2 + 1 wide)
-    complete = ui.kpi_grid(
-        _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
-        _achievement(),
-        _level_reached(),
-        rx.box(_tile("Daily Sales (Avg.)", S.sp_avg_day_exact),
-               min_width="0", id="sales-avg-day"),
-        columns=rx.breakpoints(initial="2", md="4"),
-        id="sales-kpis",
+    complete = rx.vstack(
+        rx.heading("Sales Summary", size="4", weight="medium", color=ds.TEXT),
+        ui.kpi_grid(
+            _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
+            _achievement(),
+            _level_reached(),
+            rx.box(_tile("Daily Sales (Avg.)", S.sp_avg_day_exact),
+                   min_width="0", id="sales-avg-day"),
+            columns=rx.breakpoints(initial="2", md="4"),
+        ),
+        spacing="3", width="100%", align="start", id="sales-kpis",
     )
-    incomplete = ui.kpi_grid(
-        _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
-        _tile("Projected Sales", S.sp_month_end_exact, id="sales-projected"),
-        _achievement(),
-        _level_reached(),
-        _avg_day("auto"),
-        columns=rx.breakpoints(initial="2", md="5"),
-        id="sales-kpis",
+    incomplete = rx.vstack(
+        rx.heading("Sales Summary", size="4", weight="medium", color=ds.TEXT),
+        ui.kpi_grid(
+            _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
+            _tile("Projected Sales", S.sp_month_end_exact,
+                  id="sales-projected"),
+            _achievement(),
+            _level_reached(),
+            _avg_day("auto"),
+            columns=rx.breakpoints(initial="2", md="5"),
+        ),
+        spacing="3", width="100%", align="start", id="sales-kpis",
     )
     return rx.cond(S.sp_complete, complete, incomplete)
 
@@ -323,4 +330,5 @@ def sales_page() -> rx.Component:
         ),
         on_store=S.select_store,
         on_month=S.select_month,
+        tour_key="sales",
     )

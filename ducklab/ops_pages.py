@@ -58,6 +58,7 @@ def dashboard_page() -> rx.Component:
         ),
         on_store=O.select_store,
         on_month=O.select_month,
+        tour_key="dashboard",
     )
 
 
@@ -144,18 +145,22 @@ def _spark(ready, dark_fig, light_fig) -> rx.Component:
 
 
 def _hero_row() -> rx.Component:
-    return rx.grid(
-        _hero_card("Sales", O.pill_sales, "/ops/sales",
-                   spark=_spark(O.spark_sales_ready, O.spark_sales_dark,
-                                O.spark_sales_light),
-                   bar=_sales_bar(O.pill_sales)),
-        _hero_card("Expenses", O.pill_expenses, "/ops/expenses"),
-        _hero_card("Salary Ratio", O.pill_manpower, "/ops/manpower"),
-        _hero_card("Stock Loss", O.pill_stock, "/ops/stock",
-                   spark=_spark(O.spark_stock_ready, O.spark_stock_dark,
-                                O.spark_stock_light)),
-        columns=rx.breakpoints(initial="1", sm="2", lg="4"),
-        spacing="4", width="100%", id="pillar-strip",
+    return rx.vstack(
+        rx.heading("Monthly Overview", size="4", weight="medium", color=ds.TEXT),
+        rx.grid(
+            _hero_card("Sales", O.pill_sales, "/ops/sales",
+                       spark=_spark(O.spark_sales_ready, O.spark_sales_dark,
+                                    O.spark_sales_light),
+                       bar=_sales_bar(O.pill_sales)),
+            _hero_card("Expenses", O.pill_expenses, "/ops/expenses"),
+            _hero_card("Salary Ratio", O.pill_manpower, "/ops/manpower"),
+            _hero_card("Stock Loss", O.pill_stock, "/ops/stock",
+                       spark=_spark(O.spark_stock_ready, O.spark_stock_dark,
+                                    O.spark_stock_light)),
+            columns=rx.breakpoints(initial="1", sm="2", lg="4"),
+            spacing="4", width="100%",
+        ),
+        spacing="3", width="100%", align="start", id="pillar-strip",
     )
 
 
@@ -498,4 +503,5 @@ def report_page() -> rx.Component:
             ),
             spacing=ui.GAP, width="100%",
         ),
+        tour_key="report",
     )

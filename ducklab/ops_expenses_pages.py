@@ -31,6 +31,7 @@ def _tile(label, value, **kw) -> rx.Component:
 
 def _kpi_cards() -> rx.Component:
     return rx.vstack(
+        rx.heading("Expense Summary", size="4", weight="medium", color=ds.TEXT),
         rx.cond(
             E.exp_month_finalized,
             rx.callout(
@@ -59,7 +60,7 @@ def _kpi_cards() -> rx.Component:
                 size="1", variant="soft", color_scheme="amber",
                 on_click=E.show_needs_review, id="needs-review"),
         ),
-        spacing="3", width="100%", id="expense-kpis",
+        spacing="3", width="100%", align="start", id="expense-kpis",
     )
 
 
@@ -403,4 +404,5 @@ def expenses_page() -> rx.Component:
         ),
         on_store=E.select_store,
         on_month=E.select_month,
+        tour_key="expenses",
     )

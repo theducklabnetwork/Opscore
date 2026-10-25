@@ -22,17 +22,20 @@ A = ActionsState
 
 def _cards() -> rx.Component:
     # keep the open count the first number in #action-cards (suite parses it)
-    return ui.kpi_grid(
-        ui.kpi_tile("Open", A.n_open),
-        rx.box(
-            ui.kpi_tile("Overdue", A.n_overdue,
-                        chip=(rx.cond(A.n_overdue != "0", "Needs Attention",
-                                      ""), "red"),
-                        chip_id="overdue-attention"),
-            id="card-overdue", height="100%"),
-        ui.kpi_tile("Completed", A.n_done),
-        columns=rx.breakpoints(initial="3"),
-        id="action-cards",
+    return rx.vstack(
+        rx.heading("Action Summary", size="4", weight="medium", color=ds.TEXT),
+        ui.kpi_grid(
+            ui.kpi_tile("Open", A.n_open),
+            rx.box(
+                ui.kpi_tile("Overdue", A.n_overdue,
+                            chip=(rx.cond(A.n_overdue != "0", "Needs Attention",
+                                          ""), "red"),
+                            chip_id="overdue-attention"),
+                id="card-overdue", height="100%"),
+            ui.kpi_tile("Completed", A.n_done),
+            columns=rx.breakpoints(initial="3"),
+        ),
+        spacing="3", width="100%", align="start", id="action-cards",
     )
 
 
@@ -216,4 +219,5 @@ def actions_page() -> rx.Component:
         ),
         on_store=A.select_store,
         on_month=A.select_month,
+        tour_key="actions",
     )
