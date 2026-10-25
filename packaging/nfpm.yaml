@@ -5,13 +5,30 @@ version: ${OPSCORE_VERSION}
 release: 1
 section: utils
 priority: optional
+depends:
+  - gir1.2-gtk-3.0
+  - gir1.2-webkit2-4.1
+  - libgtk-3-0t64 | libgtk-3-0
+  - libwebkit2gtk-4.1-0
+  - xdg-utils
 maintainer: DuckLab
 description: Offline desktop store operations monitoring
 license: Proprietary
 contents:
-  - src: ${OPSCORE_ROOT}/app
-    dst: /opt/opscore
-    type: tree
+  - src: ${OPSCORE_ROOT}/app/python/**/*
+    dst: /opt/opscore/python
+  - src: ${OPSCORE_ROOT}/app/ducklab/*
+    dst: /opt/opscore/ducklab
+  - src: ${OPSCORE_ROOT}/app/assets/*
+    dst: /opt/opscore/assets
+  - src: ${OPSCORE_ROOT}/app/packaging/*
+    dst: /opt/opscore/packaging
+  - src: ${OPSCORE_ROOT}/app/frontend/**/*
+    dst: /opt/opscore/.web/build
+  - src: ${OPSCORE_ROOT}/app/RELEASE
+    dst: /opt/opscore/RELEASE
+  - src: ${OPSCORE_ROOT}/app/rxconfig.py
+    dst: /opt/opscore/rxconfig.py
   - src: ${OPSCORE_ROOT}/desktop
     dst: /usr/share/applications
     type: tree

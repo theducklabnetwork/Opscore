@@ -101,6 +101,8 @@ def start_backend() -> tuple[subprocess.Popen, str]:
         "REFLEX_CHECK_LATEST_VERSION": "false",
         "REFLEX_SKIP_COMPILE": "true",
         "REFLEX_ENV_MODE": "prod",
+        "REFLEX_STATES_WORKDIR": str(DATA_DIR / "states"),
+        "REFLEX_UPLOADED_FILES_DIR": str(DATA_DIR / "uploaded_files"),
         "REFLEX_TELEMETRY_DISABLED": "1",
         "NO_COLOR": "1",
     }
@@ -161,10 +163,7 @@ def chromium_window(url: str) -> int:
         None,
     )
     if browser is None:
-        raise RuntimeError(
-            "Opscore needs Python GTK + WebKitGTK for its native window, or Chromium. "
-            f"Backend logs are in {LOG_PATH}"
-        )
+        return None
     flags = [
         f"--app={url}",
         "--class=opscore",
@@ -226,12 +225,25 @@ def native_window(url: str) -> int:
 
 def open_window(url: str, force_chromium: bool = False) -> int:
     if force_chromium:
-        return chromium_window(url)
+        return chromium_window(url) or 0
     try:
+        # Explicit GTK selection avoids pywebview trying unavailable Qt bindings.
+        os.environ["PYWEBVIEW_GUI"] = "gtk"
         return native_window(url)
     except Exception as error:
-        print(f"Native window unavailable ({error}); trying Chromium.", file=sys.stderr)
-        return chromium_window(url)
+        print(f"GTK window unavailable ({error}); trying Chromium/Chrome.", file=sys.stderr)
+        result = chromium_window(url)
+        if result is not None:
+            return result
+    opener = shutil.which("xdg-open")
+    if opener is None:
+        raise RuntimeError(f"No GTK, Chromium/Chrome, or xdg-open available; see {LOG_PATH}")
+    print(f"Opening Opscore with xdg-open: {url}", file=sys.stderr)
+    process = subprocess.Popen([opener, url])
+    try:
+        return process.wait()
+    finally:
+        stop_backend()
 
 
 def main() -> int:
