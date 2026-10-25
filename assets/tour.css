@@ -1,0 +1,76 @@
+/* Guided tour (driver.js) — Opscore theme tokens, light + dark.
+   Colours mirror ducklab/design.py: slate greys, indigo accent. */
+
+.driver-popover {
+  background-color: var(--slate-2);
+  color: var(--slate-12);
+  border: 1px solid var(--slate-6);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.driver-popover-title {
+  color: var(--slate-12);
+  font-size: 16px;
+}
+
+.driver-popover-description {
+  color: var(--slate-11);
+  font-size: 14px;
+}
+
+.driver-popover-progress-text {
+  color: var(--slate-10);
+  font-size: 12px;
+}
+
+.driver-popover-navigation-btns button,
+.driver-popover-close-btn {
+  border-radius: 8px;
+}
+
+.driver-popover-navigation-btns .driver-popover-next-btn {
+  background-color: var(--indigo-9);
+  border-color: var(--indigo-9);
+  color: #fff;
+}
+
+.driver-popover-navigation-btns .driver-popover-next-btn:hover {
+  background-color: var(--indigo-10);
+  border-color: var(--indigo-10);
+}
+
+.driver-popover-navigation-btns .driver-popover-prev-btn {
+  background-color: transparent;
+  border: 1px solid var(--slate-6);
+  color: var(--slate-12);
+}
+
+.driver-popover-navigation-btns .driver-popover-prev-btn:hover {
+  background-color: var(--slate-3);
+}
+
+.driver-popover-close-btn {
+  color: var(--slate-11);
+}
+
+.driver-popover-close-btn:hover {
+  color: var(--slate-12);
+}
+
+.driver-popover-arrow {
+  border-color: var(--slate-2);
+}
+
+/* Phone mode (<=480px): centred dialog, no element highlighting. */
+.ducklab-tour-mobile .driver-popover {
+  position: fixed !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  margin: 0 !important;
+}
+.ducklab-tour-mobile .driver-popover-arrow {
+  display: none !important;
+}

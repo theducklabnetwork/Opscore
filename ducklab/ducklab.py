@@ -365,8 +365,11 @@ app = rx.App(
                    href=rx.asset("icon-192.png")),
         rx.el.link(rel="icon", type="image/png", sizes="512x512",
                    href=rx.asset("icon-512.png")),
+        # Guided tour (driver.js 1.3.1, bundled locally): tour.js loads
+        # driver.js on demand from /driver.js.
+        rx.el.script(src="/tour.js", defer=True),
     ],
-    stylesheets=["/drawer_fixes.css"],
+    stylesheets=["/drawer_fixes.css", "/driver.css", "/tour.css"],
     # page language: screen readers, and CSS hyphenation of long words in
     # narrow phone table columns
     html_lang="en",
@@ -413,7 +416,8 @@ from ducklab.ops_sales_pages import sales_page  # noqa: E402
 from ducklab.ops_sales_state import SalesState  # noqa: E402
 from ducklab.ops_settings_pages import SettingsState, settings_page  # noqa: E402
 
-app.add_page(auth_pages.login_page, route="/login", title="Sign In — Opscore")
+app.add_page(auth_pages.login_page, route="/login", title="Sign In — Opscore",
+             on_load=auth_pages.AuthState.check_bootstrap)
 app.add_page(
     auth_pages.root_page,
     route="/",
@@ -424,7 +428,7 @@ app.add_page(
     ops_pages.dashboard_page,
     route="/ops",
     title="Dashboard — Opscore Operations",
-    on_load=OverviewState.load_overview,
+    on_load=[OverviewState.load_overview, OverviewState.maybe_start_tour],
 )
 app.add_page(
     ops_pages.report_page,

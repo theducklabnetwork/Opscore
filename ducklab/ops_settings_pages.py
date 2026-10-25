@@ -134,6 +134,17 @@ class SettingsState(OpsState):
     _db_pending_path: str = ""       # server-side temp file (never client)
 
     @rx.event
+    def replay_tour(self) -> rx.event.EventSpec | None:
+        """Settings → Account: reset the guided-tour flag and return to the
+        dashboard, where the tour starts automatically."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            return rx.redirect("/login")
+        app_service.auth.reset_tour(user.id)
+        return rx.redirect("/ops")
+
+    @rx.event
     def load_settings(self) -> rx.event.EventSpec | None:
         try:
             user = self._actor()
@@ -637,6 +648,16 @@ def _account_tab() -> rx.Component:
                     id="pw-save"),
                 spacing="3", align="center"),
             hint=PASSWORD_RULES, id="pw-section"),
+        ui.form_section(
+            "Guided tour",
+            rx.hstack(
+                rx.button(
+                    rx.icon("route", size=14),
+                    "Replay Tour", color_scheme="indigo", variant="soft",
+                    on_click=S.replay_tour, id="tour-replay"),
+                spacing="3", align="center"),
+            hint="Replay the welcome tour. It starts on the Dashboard.",
+            id="tour-section"),
         title="Account",
         subtitle="Your sign-in identity. Name and email are managed by "
                  "an administrator.",
