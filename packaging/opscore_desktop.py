@@ -9,11 +9,13 @@ import os
 from pathlib import Path
 import shutil
 import signal
-import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
+
+os.environ["OPSCORE_DESKTOP"] = "1"
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path.home() / ".local" / "share" / "opscore"
@@ -22,6 +24,8 @@ LOCK_PATH = DATA_DIR / "launcher.lock"
 URL_PATH = DATA_DIR / "current.json"
 LOG_PATH = DATA_DIR / "opscore.log"
 STARTUP_TIMEOUT = 90
+APP_URL = "http://127.0.0.1:47811/"
+HEALTH_URL = APP_URL + "api/health"
 BACKEND: subprocess.Popen | None = None
 
 
@@ -53,24 +57,21 @@ def acquire_lock():
     return lock_file
 
 
-def read_url() -> str | None:
+def active_app() -> tuple[str, str] | None:
+    """Return the fixed app URL and optional focus endpoint for our instance."""
     try:
-        state = json.loads(URL_PATH.read_text())
-        url = state["url"]
-        focus_url = state.get("focus_url", "")
-        if url.startswith("http://127.0.0.1:"):
-            with urllib.request.urlopen(url + "api/health", timeout=2) as response:
-                if response.status == 200:
-                    return url, focus_url
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
-    return None
-
-
-def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+        with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
+            health = json.load(response)
+        if response.status != 200 or health.get("status") != "ok" or not health.get("release"):
+            return None
+        try:
+            state = json.loads(URL_PATH.read_text())
+            focus_url = state.get("focus_url", "")
+        except (OSError, ValueError, AttributeError):
+            focus_url = ""
+        return APP_URL, focus_url
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 def wait_until_ready(process: subprocess.Popen, url: str) -> None:
@@ -89,9 +90,32 @@ def wait_until_ready(process: subprocess.Popen, url: str) -> None:
     raise RuntimeError(f"Opscore did not become ready; see {LOG_PATH}")
 
 
+def show_error(message: str) -> None:
+    """Show a desktop-visible fatal error even when no app window exists."""
+    print(f"Unable to start Opscore: {message}", file=sys.stderr)
+    try:
+        import gi
+
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+
+        dialog = Gtk.MessageDialog(
+            transient_for=None,
+            flags=0,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            title="Opscore cannot start",
+            text=message,
+        )
+        dialog.run()
+        dialog.destroy()
+    except Exception:
+        if opener := shutil.which("zenity"):
+            subprocess.run([opener, "--error", "--title=Opscore cannot start", f"--text={message}"])
+
+
 def start_backend() -> tuple[subprocess.Popen, str]:
-    port = free_port()
-    url = f"http://127.0.0.1:{port}/"
+    url = APP_URL
     release = (APP_ROOT / "RELEASE").read_text().strip()
     environment = {
         **os.environ,
@@ -108,7 +132,7 @@ def start_backend() -> tuple[subprocess.Popen, str]:
     }
     with LOG_PATH.open("ab") as log:
         process = subprocess.Popen(
-            [str(APP_ROOT / "packaging" / "opscore-backend"), "--port", str(port)],
+            [str(APP_ROOT / "packaging" / "opscore-backend")],
             cwd=APP_ROOT,
             env=environment,
             stdin=subprocess.DEVNULL,
@@ -246,46 +270,69 @@ def open_window(url: str, force_chromium: bool = False) -> int:
         stop_backend()
 
 
+def focus_existing() -> None:
+    active = active_app()
+    if active:
+        focus_native_window(active[1])
+    focus_chromium()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Open Opscore in a native desktop window")
     parser.add_argument("--backend-only", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--port", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--chromium", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     DATA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     DATA_DIR.chmod(0o700)
     lock = acquire_lock()
-    if lock is not None and args.port is not None:
-        if not 0 < args.port < 65536:
-            parser.error("--port must be between 1 and 65535")
-        print(f"http://127.0.0.1:{args.port}/", flush=True)
-        return 0
     if lock is None:
-        active = read_url()
-        if active and focus_native_window(active[1]):
-            return 0
-        if focus_chromium():
-            return 0
-        # Never open a second backend or window when the app is already active.
+        focus_existing()
         return 0
 
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
     try:
-        active = read_url()
-        url = active[0] if active else None
-        if url is None:
-            process, url = start_backend()
-            if args.backend_only:
-                print(url, flush=True)
-                try:
-                    return process.wait()
-                finally:
-                    stop_backend()
+        active = active_app()
+        if active:
+            focus_existing()
+            return 0
+        # A live service that does not answer our health API owns the fixed
+        # port; never replace it or silently choose a different API endpoint.
+        try:
+            with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
+                response.read(1)
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(
+                "Port 47811 is already used by another application. "
+                "Close that application, then open Opscore again."
+            ) from error
+        except urllib.error.URLError as error:
+            if getattr(error.reason, "errno", None) not in (111, 104, 101):
+                raise RuntimeError(
+                    "Port 47811 is already used by another application. "
+                    "Close that application, then open Opscore again."
+                ) from error
+        except OSError as error:
+            raise RuntimeError(
+                "Port 47811 is already used by another application. "
+                "Close that application, then open Opscore again."
+            ) from error
+        else:
+            raise RuntimeError(
+                "Port 47811 is already used by another application. "
+                "Close that application, then open Opscore again."
+            )
+        process, url = start_backend()
+        if args.backend_only:
+            print(url, flush=True)
+            try:
+                return process.wait()
+            finally:
+                stop_backend()
         return open_window(url, force_chromium=args.chromium)
     except Exception as error:
-        print(f"Unable to start Opscore: {error}", file=sys.stderr)
+        show_error(str(error))
         return 1
     finally:
         stop_backend()

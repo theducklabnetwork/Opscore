@@ -101,12 +101,14 @@ printf '==> Building the frontend once\n'
 # locked frontend dependencies. An existing checkout can reuse its toolchain.
 if [[ -d "$ROOT/.web" ]]; then
     cp -a "$ROOT/.web" "$APP/.web"
+    rm -f "$APP/.web/env.json"
 fi
 if [[ -d "$ROOT/reflex.lock" ]]; then
     cp -a "$ROOT/reflex.lock" "$APP/reflex.lock"
 fi
 (
     cd "$APP"
+    OPSCORE_DESKTOP=1 \
     DUCKLAB_DB_PATH="$WORK/build.db" \
     DUCKLAB_RELEASE_ID="$VERSION" \
     REFLEX_CHECK_LATEST_VERSION=false \
@@ -114,6 +116,10 @@ fi
 )
 [[ -f "$APP/.web/build/client/index.html" ]] || { printf 'Frontend export missing.\n' >&2; exit 1; }
 [[ -f "$APP/.web/build/client/login.html" ]] || { printf 'Login frontend export missing.\n' >&2; exit 1; }
+"$APP/python/bin/python3" -c 'import json, pathlib, sys; raw = pathlib.Path(sys.argv[1]).read_text(); endpoints = json.loads(raw); assert endpoints["EVENT"] == "ws://127.0.0.1:47811/_event", endpoints; assert all("127.0.0.1:47811" in url for url in endpoints.values() if isinstance(url, str) and url.startswith(("http://", "ws://"))), endpoints; assert "8000" not in raw, endpoints' "$APP/.web/env.json" || {
+    printf 'Frontend was not exported for the fixed desktop port.\n' >&2
+    exit 1
+}
 # Runtime needs only the compiled output; package.json and node_modules are omitted.
 find "$APP/.web" -mindepth 1 -maxdepth 1 ! -name build -exec rm -rf -- {} +
 mv "$APP/.web/build" "$APP/frontend"

@@ -1,3 +1,5 @@
+import os
+
 import reflex as rx
 
 config = rx.Config(
@@ -15,4 +17,9 @@ config = rx.Config(
         ),
     ],
     show_built_with_reflex=False,
+    **(
+        {"backend_port": 47811, "api_url": "http://127.0.0.1:47811"}
+        if os.environ.get("OPSCORE_DESKTOP") == "1"
+        else {}
+    ),
 )

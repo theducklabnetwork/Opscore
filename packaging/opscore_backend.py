@@ -6,6 +6,7 @@ from pathlib import Path
 
 os.environ.pop("REFLEX_SKIP_COMPILE", None)
 os.environ.update(
+    OPSCORE_DESKTOP="1",
     REFLEX_ENV_MODE="prod",
     REFLEX_CHECK_LATEST_VERSION="false",
     REFLEX_MOUNT_FRONTEND_COMPILED_APP="true",
@@ -47,15 +48,11 @@ from reflex.utils.exec import run_backend_prod  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the packaged Opscore backend")
-    parser.add_argument("--port", type=int, required=True)
-    args = parser.parse_args()
-    if not 0 < args.port < 65536:
-        parser.error("--port must be between 1 and 65535")
+    argparse.ArgumentParser(description="Run the packaged Opscore backend").parse_args()
     from reflex_base.constants.base import LogLevel
 
     run_backend_prod(
-        "127.0.0.1", args.port, LogLevel.INFO, mount_frontend_compiled_app=True
+        "127.0.0.1", 47811, LogLevel.INFO, mount_frontend_compiled_app=True
     )
 
 
