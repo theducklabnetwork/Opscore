@@ -334,4 +334,5 @@ def daily_page() -> rx.Component:
         on_store=DailyState.select_store,
         on_month=DailyState.select_month,
         actions=_record_day_button(),
+        tour_key="daily",
     )

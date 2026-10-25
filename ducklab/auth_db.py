@@ -4,7 +4,8 @@ Additive, idempotent migration on top of store_ops_db. New tables only —
 no existing operational tables or records are touched.
 
 Entities: auth_users, auth_roles, auth_user_roles,
-auth_user_store_assignments, auth_sessions, auth_audit_events.
+auth_user_store_assignments, auth_sessions, auth_audit_events,
+auth_page_tours.
 
 Security notes:
 - Sessions are stored as SHA-256 hashes of the bearer token; raw tokens
@@ -72,6 +73,13 @@ CREATE TABLE IF NOT EXISTS auth_audit_events (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_auth_audit_user ON auth_audit_events(user_id);
+
+CREATE TABLE IF NOT EXISTS auth_page_tours (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    page_key TEXT NOT NULL,
+    completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, page_key)
+);
 """
 
 ROLES = (

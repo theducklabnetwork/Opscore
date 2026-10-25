@@ -348,4 +348,5 @@ def stores_page() -> rx.Component:
         on_month=S.select_month,
         description="Stores, who can access them, and each store's monthly "
                     "targets, budgets and month-end inputs.",
+        tour_key="stores",
     )

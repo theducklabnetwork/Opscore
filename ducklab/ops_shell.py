@@ -152,12 +152,18 @@ def month_selector(on_month=None) -> rx.Component:
 
 
 def header(title: str, on_store=None, on_month=None,
-           description=None, actions=None) -> rx.Component:
+           description=None, actions=None, tour_key=None) -> rx.Component:
     return rx.vstack(
         rx.hstack(
             mobile_drawer(),
             ui.page_header(title, description),
             rx.spacer(),
+            *([rx.icon_button(
+                rx.icon("circle-help", size=20),
+                variant="ghost", aria_label=f"Replay {title} tour",
+                title=f"Replay {title} tour", id=f"tour-replay-{tour_key}",
+                on_click=OpsState.replay_page_tour(tour_key),
+            )] if tour_key is not None else []),
             rx.box(  # wrapper: click bubbles to sync theme into state
                 rx.color_mode.button(variant="ghost", id="theme-toggle"),
                 on_click=AuthState.set_is_dark(
@@ -192,19 +198,26 @@ def header(title: str, on_store=None, on_month=None,
 
 def shell(title: str, content: rx.Component,
           on_store=None, on_month=None, description=None,
-          actions=None) -> rx.Component:
+          actions=None, tour_key=None) -> rx.Component:
     return rx.hstack(
         sidebar(),
         rx.box(
             rx.vstack(
                 header(title, on_store=on_store, on_month=on_month,
-                       description=description, actions=actions),
+                       description=description, actions=actions,
+                       tour_key=tour_key),
                 # Hidden trigger: assets/tour.js marks the guided tour done
                 # by dispatching the OpsState.tour_finished event (primary
                 # path) or clicking this button (fallback).
                 rx.button("tour-done", on_click=OpsState.tour_finished(),
                           id="tour-done-trigger",
                           display="none", aria_hidden="true"),
+                *([rx.button(
+                    "page-tour-done",
+                    on_click=OpsState.page_tour_finished(tour_key),
+                    id=f"tour-done-trigger-{tour_key}",
+                    display="none", aria_hidden="true",
+                )] if tour_key is not None else []),
                 rx.cond(
                     ~OpsState.selected_store_active,
                     rx.callout(
