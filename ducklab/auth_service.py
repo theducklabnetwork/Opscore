@@ -85,6 +85,7 @@ class User:
     roles: tuple[str, ...]
     store_ids: tuple[int, ...]
     last_login_at: Optional[str]
+    tour_done: bool = False
 
     @property
     def is_super_admin(self) -> bool:
@@ -239,7 +240,8 @@ class AuthService:
     # ------------------------------------------------------------------
     def _load_user(self, conn: sqlite3.Connection, user_id: int) -> User:
         row = conn.execute(
-            "SELECT id, email, display_name, is_active, last_login_at "
+            "SELECT id, email, display_name, is_active, last_login_at, "
+            "tour_done "
             "FROM auth_users WHERE id = ?", (user_id,)
         ).fetchone()
         if row is None:
@@ -255,11 +257,50 @@ class AuthService:
         return User(id=row["id"], email=row["email"],
                     display_name=row["display_name"],
                     is_active=bool(row["is_active"]), roles=roles,
-                    store_ids=stores, last_login_at=row["last_login_at"])
+                    store_ids=stores, last_login_at=row["last_login_at"],
+                    tour_done=bool(row["tour_done"]))
 
     def get_user(self, user_id: int) -> User:
         conn = self._connect()
         try:
+            return self._load_user(conn, user_id)
+        finally:
+            conn.close()
+
+    def user_count(self) -> int:
+        """Total number of user accounts (drives first-launch bootstrap)."""
+        conn = self._connect()
+        try:
+            return conn.execute(
+                "SELECT COUNT(*) FROM auth_users").fetchone()[0]
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------
+    # guided tour flag (per user)
+    # ------------------------------------------------------------------
+    def mark_tour_done(self, user_id: int) -> User:
+        """Mark the guided tour finished/skipped for this user."""
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE auth_users SET tour_done = 1, updated_at = ? "
+                "WHERE id = ?", (_now_iso(), user_id))
+            self._audit(conn, "tour_done", "success", user_id)
+            conn.commit()
+            return self._load_user(conn, user_id)
+        finally:
+            conn.close()
+
+    def reset_tour(self, user_id: int) -> User:
+        """Reset the guided tour flag so it replays on next sign-in."""
+        conn = self._connect()
+        try:
+            conn.execute(
+                "UPDATE auth_users SET tour_done = 0, updated_at = ? "
+                "WHERE id = ?", (_now_iso(), user_id))
+            self._audit(conn, "tour_reset", "success", user_id)
+            conn.commit()
             return self._load_user(conn, user_id)
         finally:
             conn.close()
@@ -620,20 +661,19 @@ class AuthService:
             conn.close()
 
     # ------------------------------------------------------------------
-    # first-admin bootstrap (operator-initiated; refuses once any
-    # super_admin exists)
+    # first-admin bootstrap (first-launch only; refuses once any user
+    # account exists)
     # ------------------------------------------------------------------
     def bootstrap_first_admin(self, email: str, display_name: str,
                               password: str) -> User:
         conn = self._connect()
         try:
             existing = conn.execute(
-                "SELECT COUNT(*) FROM auth_user_roles ur JOIN auth_roles r "
-                "ON r.id = ur.role_id WHERE r.name = 'super_admin'"
+                "SELECT COUNT(*) FROM auth_users"
             ).fetchone()[0]
             if existing:
                 raise ValidationError(
-                    "Bootstrap refused: a Super Admin already exists")
+                    "Bootstrap refused: a user account already exists")
         finally:
             conn.close()
         user = self.create_user(email, display_name, password, actor=None)

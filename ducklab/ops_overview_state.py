@@ -138,6 +138,20 @@ class OverviewState(ActionsState):
         yield OverviewState.load_overview_data()
 
     @rx.event
+    def maybe_start_tour(self) -> rx.event.EventSpec | None:
+        """First sign-in only: launch the guided tour (driver.js bundle in
+        assets/tour.js). The tour itself marks completion via
+        OverviewState.tour_finished when it is closed (finish or skip)."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            return rx.redirect("/login")
+        if user.tour_done:
+            return None
+        return rx.call_script(
+            "window.ducklabTour && window.ducklabTour.start()")
+
+    @rx.event
     def load_overview_data(self) -> None:
         self._clear_overview()
         store_id = self._selected_store_id()

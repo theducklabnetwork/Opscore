@@ -175,6 +175,30 @@ async def session_endpoint(request: Request) -> JSONResponse:
         # Logout always succeeds; never reveals whether a session existed.
         return JSONResponse({"ok": True},
                             headers={"Set-Cookie": _clear_cookie_header()})
+    if action == "bootstrap":
+        # First-launch account creation: only while the database has zero
+        # users. The service re-checks inside, so a race just fails.
+        name = str(body.get("name") or "")[:120].strip()
+        email = str(body.get("email") or "")[:254]
+        password = str(body.get("password") or "")[:1024]
+        try:
+            auth.check_rate_limit(limiter_key)
+            if auth.user_count():
+                return _error(403, "Forbidden")
+            auth.bootstrap_first_admin(email, name, password)
+            token, _user = auth.login(email, password,
+                                      limiter_key=limiter_key)
+        except RateLimitError:
+            return _error(429)
+        except auth_service.ValidationError as exc:
+            return _error(400, str(exc))
+        except AuthenticationError:
+            return _error(401)
+        max_age = int(auth_service.SESSION_TTL.total_seconds())
+        return JSONResponse(
+            {"ok": True},
+            headers={"Set-Cookie": _cookie_header(token, max_age)},
+        )
     if action != "login":
         return _error(400, "Bad request")
     email = str(body.get("email") or "")[:254]

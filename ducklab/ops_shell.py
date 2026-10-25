@@ -42,6 +42,7 @@ def _nav_item(label: str, href: str, icon: str, enabled: bool) -> rx.Component:
                   width="100%", spacing="2", padding="0.35em 0.6em"),
         href=href, color=ds.TEXT, width="100%", underline="none",
         border_radius="8px",
+        id="nav-" + href.strip("/").replace("/", "-"),
         _hover={"background": ds.SURFACE_HOVER},
     )
 
@@ -198,6 +199,12 @@ def shell(title: str, content: rx.Component,
             rx.vstack(
                 header(title, on_store=on_store, on_month=on_month,
                        description=description, actions=actions),
+                # Hidden trigger: assets/tour.js marks the guided tour done
+                # by dispatching the OpsState.tour_finished event (primary
+                # path) or clicking this button (fallback).
+                rx.button("tour-done", on_click=OpsState.tour_finished(),
+                          id="tour-done-trigger",
+                          display="none", aria_hidden="true"),
                 rx.cond(
                     ~OpsState.selected_store_active,
                     rx.callout(

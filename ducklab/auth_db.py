@@ -93,6 +93,17 @@ def init_auth(db_path: Path | str = store_ops_db.DB_PATH) -> None:
             conn.execute(
                 "INSERT OR IGNORE INTO auth_roles (name) VALUES (?)", (role,)
             )
+        _migrate_auth_users(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _migrate_auth_users(conn) -> None:
+    """Additive column migrations on auth_users (idempotent)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(auth_users)")}
+    if "tour_done" not in cols:
+        conn.execute(
+            "ALTER TABLE auth_users ADD COLUMN tour_done "
+            "INTEGER NOT NULL DEFAULT 0 CHECK (tour_done IN (0, 1))"
+        )

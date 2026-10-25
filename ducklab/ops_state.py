@@ -104,6 +104,20 @@ class OpsState(AuthState):
     def actions(self) -> dict[str, str]:
         return {k: str(v) for k, v in self.report.get("actions", {}).items()}
 
+    @rx.event
+    def tour_finished(self, _result=None) -> None:
+        """Guided tour closed (finished or skipped): persist for this user.
+
+        Triggered by assets/tour.js clicking the hidden #tour-done-trigger
+        button in the app shell. The server-side user identity comes from
+        the session cookie, never from the client payload."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            return
+        if not user.tour_done:
+            app_service.auth.mark_tour_done(user.id)
+
     @rx.var
     def report_heading(self) -> str:
         """Title line: "Store A (S01) · September 2026"."""
