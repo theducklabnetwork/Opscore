@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Opscore
+Comment=Store operations monitoring
+Exec=/opt/opscore/packaging/opscore-launcher
+Icon=opscore
+Terminal=false
+Categories=Office;
+StartupNotify=true
+StartupWMClass=opscore
