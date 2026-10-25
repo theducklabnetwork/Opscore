@@ -103,6 +103,260 @@
   ];
 
   var PAGE_TOURS = {
+    dashboard: [
+      {
+        element: "#pillar-strip",
+        popover: {
+          title: "Monthly Overview",
+          description: "See the month's main sales, expenses, salary and stock figures."
+        }
+      },
+      {
+        element: "#overview-pace",
+        popover: {
+          title: "Sales Trend",
+          description: "Track daily sales and progress toward the target."
+        }
+      },
+      {
+        element: "#targets-panel",
+        popover: {
+          title: "Targets",
+          description: "Compare sales with each target level."
+        }
+      },
+      {
+        element: "#attention-panel",
+        popover: {
+          title: "Alerts",
+          description: "Find items that need attention."
+        }
+      },
+      {
+        element: "#at-a-glance",
+        popover: {
+          title: "Summary",
+          description: "Review additional monthly figures in one place."
+        }
+      }
+    ],
+    report: [
+      {
+        element: "#sales-section",
+        popover: {
+          title: "Sales",
+          description: "Review sales results, targets, achievement and basket metrics."
+        }
+      },
+      {
+        element: "#expenses-section",
+        popover: {
+          title: "Expenses",
+          description: "Review monthly expenses, budgets and category totals."
+        }
+      },
+      {
+        element: "#manpower-section",
+        popover: {
+          title: "Manpower",
+          description: "Review headcount, payroll ratios, turnover and leave."
+        }
+      },
+      {
+        element: "#stock-section",
+        popover: {
+          title: "Stock",
+          description: "Review stock loss totals, ratios and category treatments."
+        }
+      },
+      {
+        element: "#actions-section",
+        popover: {
+          title: "Actions",
+          description: "Review action totals by status."
+        }
+      }
+    ],
+    sales: [
+      {
+        element: "#sales-kpis",
+        popover: {
+          title: "Sales Summary",
+          description: "See sales, achievement, target level and daily averages."
+        }
+      },
+      {
+        element: "#basket-section",
+        popover: {
+          title: "Basket",
+          description: "Compare basket metrics with state averages."
+        }
+      },
+      {
+        element: "#pace-section",
+        popover: {
+          title: "Sales Trend",
+          description: "Track daily sales and target progress through the month."
+        }
+      },
+      {
+        element: "#ladder-section",
+        popover: {
+          title: "Targets",
+          description: "Compare achievement and gaps across target levels."
+        }
+      },
+      {
+        element: "#sales-daily-section",
+        popover: {
+          title: "Daily Sales",
+          description: "Review daily sales, targets, transactions and results."
+        }
+      }
+    ],
+    expenses: [
+      {
+        element: "#expense-kpis",
+        popover: {
+          title: "Expense Summary",
+          description: "See paid, incurred, pending and budget figures."
+        }
+      },
+      {
+        element: "#budget-monitor",
+        popover: {
+          title: "Budget vs Paid",
+          description: "Compare category budgets with paid expenses and set budgets."
+        }
+      },
+      {
+        element: "#expense-register",
+        popover: {
+          title: "Transactions",
+          description: "Filter, review and edit expense transactions."
+        }
+      }
+    ],
+    manpower: [
+      {
+        element: "#headcount-section",
+        popover: {
+          title: "Headcount",
+          description: "Review workforce changes, budget variance and turnover."
+        }
+      },
+      {
+        element: "#efficiency-section",
+        popover: {
+          title: "Productivity",
+          description: "Review sales per effective staff member."
+        }
+      },
+      {
+        element: "#payroll-section",
+        popover: {
+          title: "Salary",
+          description: "Review payroll costs and salary ratios against targets."
+        }
+      },
+      {
+        element: "#leave-section",
+        popover: {
+          title: "Leave",
+          description: "Review leave totals by type."
+        }
+      },
+      {
+        element: "#staffing-table",
+        popover: {
+          title: "Daily Staffing",
+          description: "Review and edit daily staffing and productivity records."
+        }
+      }
+    ],
+    stock: [
+      {
+        element: "#stock-kpi-section",
+        popover: {
+          title: "Stock Summary",
+          description: "See total loss, loss ratio, missing stock and extra stock."
+        }
+      },
+      {
+        element: "#trend-section",
+        popover: {
+          title: "Daily Loss",
+          description: "Track stock loss across reported days."
+        }
+      },
+      {
+        element: "#category-section",
+        popover: {
+          title: "Categories",
+          description: "Review loss by category and inspect individual entries."
+        }
+      },
+      {
+        element: "#daily-section",
+        popover: {
+          title: "Daily Stock Loss",
+          description: "Review daily stock loss figures and statuses."
+        }
+      },
+      {
+        element: "#comparison-section",
+        popover: {
+          title: "Comparison",
+          description: "Compare this month's stock figures with the previous month."
+        }
+      }
+    ],
+    actions: [
+      {
+        element: "#action-cards",
+        popover: {
+          title: "Action Summary",
+          description: "See open, overdue and completed action totals."
+        }
+      },
+      {
+        element: "#action-filters",
+        popover: {
+          title: "Action Filters",
+          description: "Narrow actions by status, pillar, priority and overdue state."
+        }
+      },
+      {
+        element: "#actions-table",
+        popover: {
+          title: "Actions",
+          description: "Filter, review and edit actions and their follow-up details."
+        }
+      }
+    ],
+    settings: [
+      {
+        element: "#settings-account",
+        popover: {
+          title: "Account",
+          description: "Review your account details and security settings."
+        }
+      },
+      {
+        element: "#pw-section",
+        popover: {
+          title: "Change Password",
+          description: "Update your password and sign out other sessions."
+        }
+      },
+      {
+        element: "#tour-section",
+        popover: {
+          title: "Guided Tour",
+          description: "Replay the welcome tour from the Dashboard."
+        }
+      }
+    ],
     stores: [
       {
         element: "#stores-table",

@@ -64,7 +64,7 @@ class OverviewState(ActionsState):
     targets_extra: list[dict[str, str]] = []
     levels_missing: str = ""
 
-    # "At a glance" secondary figures: [{label, value, title, href}]
+    # Summary secondary figures: [{label, value, title, href}]
     glance: list[dict[str, str]] = []
 
     header_context: str = ""
@@ -401,7 +401,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
          "title": ds.fmt_rm0(nd)},
     ]
 
-    # --- secondary figures ("At a glance") --------------------------------
+    # --- secondary figures (Summary) --------------------------------------
     # action counts for this store/month scope (raised in month or open)
     actions = app_service.get_actions(user, store_id)
     visible = kpi.actions_in_month_scope(actions, month)

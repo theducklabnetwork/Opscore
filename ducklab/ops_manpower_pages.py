@@ -285,4 +285,5 @@ def manpower_page() -> rx.Component:
         ),
         on_store=M.select_store,
         on_month=M.select_month,
+        tour_key="manpower",
     )
