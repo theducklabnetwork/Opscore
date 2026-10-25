@@ -15,7 +15,7 @@
   var DRIVER_SRC = "/driver.js";
   var MOBILE_BREAKPOINT = 480; // px; phones (e.g. 390px) use dialog mode
 
-  var STEPS = [
+  var WELCOME_STEPS = [
     {
       element: null, // centred welcome
       popover: {
@@ -102,6 +102,55 @@
     }
   ];
 
+  var PAGE_TOURS = {
+    stores: [
+      {
+        element: "#stores-table",
+        popover: {
+          title: "Stores",
+          description: "Add your store and keep its details up to date."
+        }
+      },
+      {
+        element: "#setup-section",
+        popover: {
+          title: "Monthly Setup",
+          description: "Set the month's targets, levels, budgets and month-end inputs."
+        }
+      },
+      {
+        element: "#setup-holidays-field",
+        popover: {
+          title: "Public Holidays",
+          description: "Mark holidays so daily targets use the right share."
+        }
+      }
+    ],
+    daily: [
+      {
+        element: "#record-day",
+        popover: {
+          title: "New Entry",
+          description: "Record a day's sales, manpower and stock loss."
+        }
+      },
+      {
+        element: "#daily-kpis",
+        popover: {
+          title: "Monthly Summary",
+          description: "See sales, achievement, transactions, units, loss and expenses for the month."
+        }
+      },
+      {
+        element: "#daily-table",
+        popover: {
+          title: "Daily Records",
+          description: "Review and edit each day's recorded figures."
+        }
+      }
+    ]
+  };
+
   function isMobile() {
     return window.innerWidth <= MOBILE_BREAKPOINT;
   }
@@ -118,16 +167,19 @@
     document.head.appendChild(s);
   }
 
-  function markDone() {
-    var btn = document.getElementById("tour-done-trigger");
+  function markDone(pageKey) {
+    var id = pageKey ? "tour-done-trigger-" + pageKey : "tour-done-trigger";
+    var btn = document.getElementById(id);
     if (btn) btn.click();
   }
 
-  function start() {
+  function start(pageKey) {
     loadDriver(function (err) {
       if (err) return;
       var mobile = isMobile();
-      var steps = STEPS.map(function (step) {
+      var sourceSteps = pageKey ? PAGE_TOURS[pageKey] : WELCOME_STEPS;
+      if (!sourceSteps) return;
+      var steps = sourceSteps.map(function (step) {
         if (mobile) {
           // Phones: centred dialog, no highlight.
           return { popover: step.popover };
@@ -147,7 +199,7 @@
         steps: steps,
         onDestroyStarted: function () {
           // Finish or Skip/close: mark the tour done, then tear down.
-          markDone();
+          markDone(pageKey);
           drv.destroy();
         }
       });

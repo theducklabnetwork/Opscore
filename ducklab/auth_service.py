@@ -306,6 +306,37 @@ class AuthService:
             conn.close()
 
     # ------------------------------------------------------------------
+    # page tours (completion is per user and stable page key)
+    # ------------------------------------------------------------------
+    PAGE_TOUR_KEYS = frozenset({"stores", "daily"})
+
+    def is_page_tour_done(self, user_id: int, page_key: str) -> bool:
+        if page_key not in self.PAGE_TOUR_KEYS:
+            raise ValidationError("Unknown page tour")
+        conn = self._connect()
+        try:
+            return conn.execute(
+                "SELECT 1 FROM auth_page_tours "
+                "WHERE user_id = ? AND page_key = ?",
+                (user_id, page_key),
+            ).fetchone() is not None
+        finally:
+            conn.close()
+
+    def mark_page_tour_done(self, user_id: int, page_key: str) -> None:
+        """Idempotently record a completed or skipped page tour."""
+        if page_key not in self.PAGE_TOUR_KEYS:
+            raise ValidationError("Unknown page tour")
+        conn = self._connect()
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO auth_page_tours (user_id, page_key) "
+                "VALUES (?, ?)", (user_id, page_key))
+            conn.commit()
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------
     # password rules
     # ------------------------------------------------------------------
     @staticmethod

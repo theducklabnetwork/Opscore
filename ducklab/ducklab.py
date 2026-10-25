@@ -440,7 +440,8 @@ app.add_page(
     daily_page,
     route="/ops/daily",
     title="Daily Operations — Opscore",
-    on_load=DailyState.load_daily,
+    on_load=[DailyState.load_daily,
+             OpsState.maybe_start_page_tour("daily")],
 )
 app.add_page(
     expenses_page,
@@ -464,7 +465,8 @@ app.add_page(
     stores_page,
     route="/ops/stores",
     title="Store Management — Opscore",
-    on_load=StoresState.load_stores,
+    on_load=[StoresState.load_stores,
+             OpsState.maybe_start_page_tour("stores")],
 )
 app.add_page(
     sales_page,

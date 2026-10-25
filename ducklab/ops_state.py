@@ -118,6 +118,41 @@ class OpsState(AuthState):
         if not user.tour_done:
             app_service.auth.mark_tour_done(user.id)
 
+    @rx.event
+    def maybe_start_page_tour(self, page_key: str) -> rx.event.EventSpec | None:
+        """Start a page tour on its first visit, after the welcome tour."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            return rx.redirect("/login")
+        if (not user.tour_done or page_key not in app_service.auth.PAGE_TOUR_KEYS
+                or app_service.auth.is_page_tour_done(user.id, page_key)):
+            return None
+        return rx.call_script(
+            f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
+
+    @rx.event
+    def replay_page_tour(self, page_key: str) -> rx.event.EventSpec | None:
+        """Replay on demand without changing the stored completion flag."""
+        try:
+            self._actor()
+        except AuthenticationError:
+            return rx.redirect("/login")
+        if page_key not in app_service.auth.PAGE_TOUR_KEYS:
+            return None
+        return rx.call_script(
+            f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
+
+    @rx.event
+    def page_tour_finished(self, page_key: str, _result=None) -> None:
+        """Persist finish or skip for this user and page."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            return
+        if page_key in app_service.auth.PAGE_TOUR_KEYS:
+            app_service.auth.mark_page_tour_done(user.id, page_key)
+
     @rx.var
     def report_heading(self) -> str:
         """Title line: "Store A (S01) · September 2026"."""
