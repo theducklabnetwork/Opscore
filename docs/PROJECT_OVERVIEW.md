@@ -124,7 +124,7 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 
 ## 8. How it was built
 
-Opscore was built by the author with AI coding agents (Claude Code, then OpenCode with Kimi K3.1 Pro). Each feature went through a short written task, an agent pull request, a review and a hands-on check before merging. Business rules came from the workbook and were checked against real monthly figures.
+Opscore was built by the author with AI coding agents (Claude Code, then OpenCode with Kimi K3.1 Pro). Each feature went through a short written task, an agent pull request, a review and a hands-on check before merging. Business rules came from the workbook and were checked against generated monthly figures. No real data were used in the development of the app.
 
 ## 9. Next steps
 
