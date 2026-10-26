@@ -1,7 +1,8 @@
 """Production security configuration (environment-driven).
 
 No secrets are hardcoded. Defaults are safe for local development;
-production sets the variables documented in docs/deployment.md.
+a server deployment sets the variables listed in docs/ARCHITECTURE.md
+(Security model) and deploy/ducklab.env.template.
 """
 
 from __future__ import annotations
