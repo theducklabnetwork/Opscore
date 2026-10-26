@@ -12,7 +12,7 @@ config = rx.Config(
                 accent_color="indigo",
                 gray_color="slate",
                 radius="large",
-                appearance="dark",
+                appearance="light",
             )
         ),
     ],
