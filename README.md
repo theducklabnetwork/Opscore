@@ -1,4 +1,4 @@
-# Opscore (code name: DuckLab)
+# Opscore (Prototype name: Ducklab)
 
 Opscore is an offline desktop app for store operations monitoring. It replaces the Excel "Store Operations Monitoring" workbook with one app that tracks, per store and per month:
 
