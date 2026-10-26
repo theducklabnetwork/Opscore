@@ -139,8 +139,8 @@ def main() -> int:
         # no Origin header at all: also rejected
         check("origin-less login POST rejected (403)", resp.status == 403)
 
-        # 9. legacy prototype routes not exposed --------------------------
-        for path in ("/placements", "/tasks", "/report"):
+        # 9. legacy routes not exposed -----------------------------------
+        for path in ("/prototype", "/placements", "/tasks", "/report"):
             page.goto(f"{BASE}{path}")
             page.wait_for_timeout(800)
             url = page.url

@@ -50,7 +50,6 @@ the session cookie, CSRF Origin check, and WebSocket Origin check all align.
 | `DUCKLAB_SECURE_COOKIES` | **production: 1** | Marks the session cookie `Secure` (HTTPS only) |
 | `DUCKLAB_TRUST_PROXY` | production behind proxy: 1 | Honor `X-Forwarded-For` from private/loopback proxies (rate-limit IP, logging). Never trust client headers otherwise. |
 | `DUCKLAB_FRONTEND_ORIGINS` | dev only | Comma-separated extra Origins allowed to call `/api/session` (e.g. `http://localhost:3000`). Empty in production. |
-| `DUCKLAB_EXPOSE_PROTOTYPE` | never in production | Re-mounts legacy Placement Tracker routes (`/`, `/placements`, `/tasks`, `/report`). Off by default. |
 
 No other secrets exist. There is no JWT signing key; session tokens are
 random and server-side validated, so no persistent secret is required yet.
