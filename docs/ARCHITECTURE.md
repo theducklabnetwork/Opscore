@@ -166,6 +166,17 @@ Deny by default. Store access comes only from explicit assignments, never from m
 
 Payroll figures never enter page state unless the user can manage configuration (Super Admin or Administrator). A deactivated store becomes read-only but keeps all its history.
 
+### Environment settings
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DUCKLAB_DB_PATH` | `ducklab/store_ops.db` | Database file. The desktop app sets it to `~/.local/share/opscore/store_ops.db`. |
+| `DUCKLAB_SECURE_COOKIES` | off | Marks the session cookie Secure (HTTPS only). Server deployments only. |
+| `DUCKLAB_TRUST_PROXY` | off | Trust `X-Forwarded-For` from a local reverse proxy for rate limiting and logs. |
+| `DUCKLAB_FRONTEND_ORIGINS` | empty | Extra Origins allowed to call `/api/session`. Development only. |
+
+None of these are needed for the desktop app. There are no secret keys: session tokens are random and checked on the server.
+
 ### Privacy
 
 - Each user's data stays in their own database on their own computer.
