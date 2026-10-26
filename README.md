@@ -14,6 +14,12 @@ Each person installs their own copy, which keeps its own database on their own m
 
 The display name is **Opscore**. The code name, Python package and repository stay **ducklab**.
 
+## Documents
+
+- [Project Overview](docs/PROJECT_OVERVIEW.md): why Opscore exists, the problem it solves, scope and timeline
+- [Architecture](docs/ARCHITECTURE.md): layers, data model, KPI engine, security and packaging
+- [User Guide](docs/USER_GUIDE.md): installing and using every page
+
 ---
 
 ## Status
@@ -31,6 +37,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Light mode default | Done |
 | Windows installer | Not started |
 | Wording pass (remove leftover subtitles and helper sentences) | Pending |
+| Finalize button on the Monthly Report page | Pending |
 
 **Test suite:** 930 passing, 116 subtests passing (as of PR #32).
 **Database schema:** version 5.
@@ -44,7 +51,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Page | Route | What it shows |
 |---|---|---|
 | Dashboard | `/ops` | Month at a glance across modules |
-| Monthly Report | `/ops/report` | Full monthly report, finalize and correct, Excel export |
+| Monthly Report | `/ops/report` | Full monthly report and Excel export |
 | Daily Operations | `/ops/daily` | Daily entry: sales, transactions, units, stock loss, staffing |
 | Sales Performance | `/ops/sales` | Level 1 to 4 achievement, Daily Target, Adjusted Target, SSSG/Year, SSSG/Month, SPR, IPR |
 | Expenses Management | `/ops/expenses` | Expense register and category budgets |
@@ -279,7 +286,8 @@ assets/                       Logo, icons, favicon
 ## Next
 
 1. Wording pass on Store Management and other pages (remove subtitles and helper sentences, Title Case labels).
-2. Windows installer.
+2. Finalize button on the Monthly Report page (the engine already supports it).
+3. Windows installer.
 
 ## Data privacy
 
