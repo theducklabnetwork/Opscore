@@ -14,6 +14,38 @@ Each person installs their own copy, which keeps its own database on their own m
 
 The display name is **Opscore**. The code name, Python package and repository stay **ducklab**.
 
+## Screenshots
+
+*Sample data: AB01 - DEMO store, August 2026.*
+
+### Dashboard
+
+![Dashboard](docs/images/dashboard.png)
+
+### Sales Performance and Daily Operations
+
+| Sales Performance | Daily Operations |
+|---|---|
+| ![Sales Performance](docs/images/sales-performance.png) | ![Daily Operations](docs/images/daily-operations.png) |
+
+### Sales Charts
+
+![Daily Sales vs Target, Sales by Day and Sales Calendar](docs/images/sales-charts.png)
+
+### Daily Targets
+
+![Targets and Daily Sales with Adjusted Target](docs/images/daily-targets.png)
+
+### Dark Mode
+
+| Dashboard | Daily Operations |
+|---|---|
+| ![Dashboard in dark mode](docs/images/dashboard-dark.png) | ![Daily Operations in dark mode](docs/images/daily-operations-dark.png) |
+
+| Monthly Report | Daily Entry |
+|---|---|
+| ![Monthly Report in dark mode](docs/images/monthly-report-dark.png) | ![Daily Entry in dark mode](docs/images/daily-entry-dark.png) |
+
 ## Documents
 
 - [Project Overview](docs/PROJECT_OVERVIEW.md): why Opscore exists, the problem it solves, scope and timeline
