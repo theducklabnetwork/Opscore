@@ -7,7 +7,7 @@ Run: python -m pytest tests/test_pages_build.py -v
 
 import unittest
 
-from ducklab import auth_pages, ducklab, ops_pages
+from ducklab import auth_pages, ops_pages
 from ducklab import (
     ops_actions_pages, ops_daily_pages, ops_expenses_pages,
     ops_manpower_pages, ops_sales_pages, ops_settings_pages,
@@ -17,8 +17,7 @@ from ducklab import (
 
 class TestPagesBuild(unittest.TestCase):
     def test_registered_pages_build(self):
-        # Every page function registered in ducklab.ducklab (the ops app),
-        # plus the prototype pages kept behind DUCKLAB_EXPOSE_PROTOTYPE.
+        # Every page function registered in ducklab.ducklab (the ops app).
         for fn in (
             auth_pages.login_page,
             auth_pages.root_page,
@@ -32,10 +31,6 @@ class TestPagesBuild(unittest.TestCase):
             ops_sales_pages.sales_page,
             ops_actions_pages.actions_page,
             ops_settings_pages.settings_page,
-            ducklab.dashboard,
-            ducklab.placements_page,
-            ducklab.tasks_page,
-            ducklab.report_page,
         ):
             with self.subTest(page=fn.__module__ + "." + fn.__name__):
                 component = fn()

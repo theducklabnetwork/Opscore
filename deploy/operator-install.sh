@@ -149,8 +149,6 @@ set -a; . "$ETC_DIR/ducklab.env"; set +a
     || die "ducklab.env: DUCKLAB_TRUST_PROXY must be 1"
 [[ -z "${DUCKLAB_FRONTEND_ORIGINS:-}" ]] \
     || die "ducklab.env: DUCKLAB_FRONTEND_ORIGINS must be empty in production"
-[[ "${DUCKLAB_EXPOSE_PROTOTYPE:-}" != "1" ]] \
-    || die "ducklab.env: DUCKLAB_EXPOSE_PROTOTYPE must not be 1"
 chmod 640 "$ETC_DIR/ducklab.env"; chown root:"$SVC_USER" "$ETC_DIR/ducklab.env"
 log "    environment validated"
 

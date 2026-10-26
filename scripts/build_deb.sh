@@ -129,7 +129,6 @@ find "$APP" -type d -name __pycache__ -prune -exec rm -rf -- {} +
 printf '==> Validating bundled runtime\n'
 [[ $("$APP/python/bin/python3" -I -c 'import sys; print(sys.version_info[:2])') == '(3, 14)' ]]
 "$APP/python/bin/python3" -I -c 'import reflex, granian, argon2, openpyxl, webview, gi; gi.require_version("Gtk", "3.0"); from gi.repository import Gtk'
-! find "$APP" -name '*.db' -print -quit | grep -q .
 [[ ! -e "$APP/.venv" ]]
 # Console entry points are not used at runtime; the app invokes python -m.
 # Remove their build-specific shebangs rather than relocating them with sed.
@@ -159,6 +158,11 @@ chmod 0755 "$WORK/package/postinst" "$WORK/package/prerm" \
 export OPSCORE_VERSION="$VERSION"
 export OPSCORE_ROOT="$WORK/package"
 envsubst < "$ROOT/packaging/nfpm.yaml" > "$WORK/nfpm/nfpm.yaml"
+
+if find "$APP" -name '*.db' -print -quit | grep -q .; then
+    printf 'Database files must not be included in the package.\n' >&2
+    exit 1
+fi
 
 OUTPUT="$DIST/opscore_${VERSION}_amd64.deb"
 rm -f -- "$OUTPUT"

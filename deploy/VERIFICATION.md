@@ -44,5 +44,5 @@ Run after the approved cutover. All against **https://app.theducklab.com/**.
 ## Security config
 - [ ] `/etc/ducklab/ducklab.env` is mode 640 root:ducklab
 - [ ] `DUCKLAB_SECURE_COOKIES=1`, `DUCKLAB_TRUST_PROXY=1`
-- [ ] `DUCKLAB_FRONTEND_ORIGINS` and `DUCKLAB_EXPOSE_PROTOTYPE` are unset
+- [ ] `DUCKLAB_FRONTEND_ORIGINS` is unset
 - [ ] No secrets in any config file or the repo

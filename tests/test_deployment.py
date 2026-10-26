@@ -147,12 +147,11 @@ class TestEnvTemplate(unittest.TestCase):
     def test_persistent_db_path(self):
         self.assertIn("DUCKLAB_DB_PATH=/var/lib/ducklab/store_ops.db", self.env)
 
-    def test_dev_escape_hatches_off(self):
-        # FRONTEND_ORIGINS and EXPOSE_PROTOTYPE must be commented/unset
+    def test_dev_frontend_origins_off(self):
         for line in self.env.splitlines():
-            if "DUCKLAB_FRONTEND_ORIGINS" in line or "DUCKLAB_EXPOSE_PROTOTYPE" in line:
+            if "DUCKLAB_FRONTEND_ORIGINS" in line:
                 self.assertTrue(line.strip().startswith("#"),
-                                f"escape hatch must be commented: {line}")
+                                f"frontend origins must be commented: {line}")
 
     def test_no_secrets(self):
         self.assertNotRegex(self.env, r"(?i)(password|secret|apikey|api_key)=\S+")

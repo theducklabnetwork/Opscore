@@ -15,7 +15,6 @@ _TMP = tempfile.TemporaryDirectory()
 os.environ["DUCKLAB_DB_PATH"] = str(Path(_TMP.name) / "sec_test.db")
 os.environ.pop("DUCKLAB_SECURE_COOKIES", None)
 os.environ.pop("DUCKLAB_TRUST_PROXY", None)
-os.environ.pop("DUCKLAB_EXPOSE_PROTOTYPE", None)
 
 from starlette.testclient import TestClient  # noqa: E402
 
@@ -409,10 +408,10 @@ class TestReadSessionToken(unittest.TestCase):
 
 
 class TestLegacyRouteExposure(unittest.TestCase):
-    def test_prototype_routes_not_mounted_by_default(self):
+    def test_legacy_routes_not_mounted(self):
         import ducklab.ducklab as dl
         routes = {p.route.lstrip("/") for p in dl.app._unevaluated_pages.values()}
-        for legacy in ("placements", "tasks", "report"):
+        for legacy in ("prototype", "placements", "tasks", "report"):
             self.assertNotIn(legacy, routes)
         # Root "/" is registered by Reflex as "index"; it must be the ops
         # root page (redirects to login/dashboard), not prototype content.
@@ -429,10 +428,6 @@ class TestLegacyRouteExposure(unittest.TestCase):
         self.assertEqual(len(root), 1)
         # Its on_load must be the AuthState.root_redirect handler.
         self.assertIsNotNone(root[0].on_load)
-
-    def test_prototype_opt_in_env(self):
-        # The escape hatch exists but is off by default (checked above).
-        self.assertNotEqual(os.environ.get("DUCKLAB_EXPOSE_PROTOTYPE"), "1")
 
 
 if __name__ == "__main__":
