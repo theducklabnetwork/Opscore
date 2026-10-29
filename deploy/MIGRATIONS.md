@@ -34,6 +34,13 @@ application schema version: **7** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 - **v7** — soft default colors for the standard shift codes. Only codes still
   using their v6 default colors are updated; customized colors are preserved.
 
+## Desktop upgrades
+
+Before installing a desktop release that raises the schema version, download a
+backup in **Settings → Data**. The migration runs automatically on first launch
+and preserves existing data. Reinstalling older application code does not
+reverse a database migration.
+
 ## Rules
 
 1. **Migrations are additive-only and idempotent.** `init_db()` runs at app

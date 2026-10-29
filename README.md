@@ -5,7 +5,7 @@ Opscore is an offline desktop app for store operations monitoring. It replaces t
 - Sales against four target levels, with daily targets and shortfall carry-forward
 - Daily operations: sales, transactions, units, stock loss and staffing
 - Expenses against budgets
-- Manpower efficiency and salary ratio
+- Manpower efficiency, salary ratio and weekly staff schedules
 - Stock loss by code
 - Corrective actions
 - Versioned monthly reports, with Excel export
@@ -65,14 +65,15 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Settings (Account, Reference Data, Backup/Restore) | Done |
 | First launch (Create Account) and page tours | Done |
 | Ubuntu desktop app (`.deb`) | Done. Tested on Ubuntu with a native window |
+| Weekly staff schedules, printing and CSV export | Done |
 | Demo data import (AB01 / DEMO) | Done |
 | Light mode default | Done |
 | Windows installer | Not started |
 | Wording pass (remove leftover subtitles and helper sentences) | Pending |
 | Finalize button on the Monthly Report page | Pending |
 
-**Test suite:** 930 passing, 116 subtests passing (as of PR #32).
-**Database schema:** version 5.
+**Test suite:** 936 passing, 112 subtests passing (as of v0.1.1).
+**Database schema:** version 7.
 
 ---
 
@@ -87,7 +88,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Daily Operations | `/ops/daily` | Daily entry: sales, transactions, units, stock loss, staffing |
 | Sales Performance | `/ops/sales` | Level 1 to 4 achievement, Daily Target, Adjusted Target, SSSG/Year, SSSG/Month, SPR, IPR |
 | Expenses Management | `/ops/expenses` | Expense register and category budgets |
-| Manpower Efficiency | `/ops/manpower` | Headcount, salary ratio, turnover |
+| Manpower Efficiency | `/ops/manpower` | Headcount, salary ratio, turnover and weekly staff schedules |
 | Stock Management | `/ops/stock` | Stock loss by code against target |
 | Action Tracker | `/ops/actions` | Corrective actions with priority and status |
 | Store Management | `/ops/stores` | Stores, access and Monthly Setup (targets, budgets, holidays) |
@@ -130,7 +131,7 @@ Access is deny-by-default and enforced server-side in `ducklab/authz.py`. Store 
 
 ```bash
 cd ~/ducklab-dev && git checkout main && git pull
-scripts/build_deb.sh
+scripts/build_deb.sh 0.1.1
 ```
 
 The package lands in `dist/` as `opscore_<version>_amd64.deb`. The version defaults to today's date. The build bundles Python 3.14 and the prebuilt frontend, so the installed app needs no internet, Node or system Python.
@@ -143,6 +144,8 @@ sudo apt remove opscore
 ```
 
 Opscore then appears in the app menu. It opens in its own window on `127.0.0.1:47811`. Closing the window stops the app. Clicking the icon again focuses the open window.
+
+Before upgrading, download a backup in **Settings → Data**. Version 0.1.1 automatically migrates an existing 0.1.0 database from schema 5 to 7 on first launch. Existing records and accounts are preserved.
 
 ### Where the data lives
 
@@ -312,6 +315,9 @@ assets/                       Logo, icons, favicon
 | #30 | Monthly report Excel export |
 | #31 | Ubuntu desktop app (`.deb`) |
 | #32 | Demo data import, light mode default |
+| #33–#35 | Project documentation and desktop release preparation |
+| #36 | Application screenshots |
+| #37–#38 | Weekly schedule planner, print view and CSV export |
 
 ---
 
