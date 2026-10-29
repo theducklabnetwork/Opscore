@@ -79,6 +79,7 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 ### In scope (built)
 
 - Seven operational modules: Dashboard, Daily Operations, Sales Performance, Expenses Management, Manpower Efficiency, Stock Management, Action Tracker
+- Weekly staff scheduling with target headcounts, printable schedules and per-staff CSV export
 - Store Management with Monthly Setup (targets, budgets, holidays) and user assignment
 - Monthly Report with Excel export, plus finalize and versioning in the engine
 - Daily Sales Contribution: daily targets by State, Concept and weekday or public holiday
@@ -103,7 +104,8 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 | Desktop app (.deb) | Done and tested |
 | Demo data (AB01 / DEMO, June to September 2026) | Done |
 | Light mode default | Done |
-| Tests | 930 passing |
+| Weekly scheduling, printing and CSV export | Done |
+| Tests | 936 passing |
 | Wording pass | Pending |
 | Finalize button on screen | Pending |
 | Windows installer | Not started |
@@ -121,6 +123,7 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 | 7. Move to desktop | Local Ubuntu development, one copy per user |
 | 8. Settings and onboarding | Account, Reference Data, Backup/Restore, first launch, page tours (PRs #23 to #29) |
 | 9. Release | Excel export, desktop package, demo data, light mode (PRs #30 to #32) |
+| 10. Scheduling | Documentation and screenshots, weekly staff schedules, print view and CSV export (PRs #33 to #38) |
 
 ## 8. How it was built
 

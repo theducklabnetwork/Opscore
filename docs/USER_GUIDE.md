@@ -9,11 +9,14 @@ This guide shows you how to install Opscore, set up your stores and use each pag
 Opscore runs on **Ubuntu 22.04 or newer** (and Debian-based systems).
 
 1. Download `opscore_<version>_amd64.deb`.
-2. Open a terminal in the folder where you saved it and run:
+2. If you are upgrading, first open your current Opscore and use **Settings → Data → Download Backup**. Keep the backup somewhere safe.
+3. Open a terminal in the folder where you saved it and run:
    ```bash
    sudo apt install ./opscore_*_amd64.deb
    ```
-3. Open your app menu and click **Opscore**.
+4. Open your app menu and click **Opscore**.
+
+When upgrading from 0.1.0, your database is automatically upgraded on first launch. Existing records and accounts are kept.
 
 The app opens in its own window. You don't need internet after installing.
 
@@ -139,6 +142,19 @@ Shows **Opening** and **Closing Headcount** against budget, **Effective Staff**,
 
 Salary figures appear only to Super Admin and Administrator. Until month-end payroll is entered, the salary ratio shows **Awaiting Payroll**.
 
+### Weekly schedule
+
+Open the **Schedule** tab to plan staff shifts for the selected store. The existing manpower figures remain under **Overview**.
+
+1. Open **Staff**, click **Add Staff**, and enter each person's name, staff ID and position. Use **Save & Add Another** to enter a roster quickly.
+2. Open **Planner** and choose a week. Select a shift code for each person and day. Changes save automatically.
+3. Enter **Target Manpower** for the week. The **Headcount** row shows scheduled working staff each day and highlights days below target in red. Only shift codes with start and end times count toward headcount.
+4. Open **Config** to add or edit shift codes, labels, times and colors. Start and End must either both be set or both be blank. Shift codes are shared by all stores; deleting a code used by a schedule is not allowed.
+5. Click **Generate** to open the formatted schedule in **View**, then **Print** to print it or save it as a PDF.
+6. Click **Export CSV** in Planner to save one CSV per staff member who has shifts that week. Each file contains `date,shift_code` and is saved at `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+
+Deleting a staff member also deletes that person's schedule entries. Viewers can read schedules but cannot edit them or export CSV files. Other store-writing roles can manage schedules for their assigned, active stores.
+
 ## 9. Stock Management
 
 Shows **Total Loss** and **Loss Ratio** against the stock loss target, with a breakdown by code.
@@ -226,6 +242,7 @@ A suggested routine for an ABM with two or more stores:
 1. Compare stores on the **Dashboard**.
 2. Review **Expenses** and **Stock Management**.
 3. Close finished actions and chase overdue ones.
+4. Prepare and review the weekly staff schedule.
 
 **Month-end**
 1. Make sure every day is entered.

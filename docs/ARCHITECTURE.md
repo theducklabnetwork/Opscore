@@ -33,7 +33,7 @@ Opscore is a full-stack Python app built with **Reflex 0.10**. Reflex compiles t
 │  Database          store_ops_db.py + auth_db.py (schema, migrations)│
 └───────────────┬─────────────────────────────────────────────────────┘
                 ▼
-        ~/.local/share/opscore/store_ops.db   (SQLite, schema v5)
+        ~/.local/share/opscore/store_ops.db   (SQLite, schema v7)
 ```
 
 ## 2. Technology
@@ -79,7 +79,7 @@ Each layer only calls the one below it.
 
 ## 4. Data model
 
-One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **5**). Initialization is idempotent and migrations are additive.
+One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **7**). Initialization is idempotent and migrations are additive.
 
 ### Operations tables
 
@@ -99,6 +99,10 @@ One SQLite file holds both operations data and accounts. Schema version is track
 | `contribution_shares` | Daily Sales Contribution: each day type's share of the month by State and Concept |
 | `basket_benchmarks` | State average SPR and IPR by Concept and month |
 | `reference_data_info` | When and from which file the reference data was loaded |
+| `staff` | Store-scoped staff roster: name, staff ID and position |
+| `shift_codes` | Shared shift codes, labels, working times and colors |
+| `schedule_entries` | Staff shift assignments by store and date |
+| `schedule_targets` | Target manpower per store and week |
 
 ### Account tables
 
@@ -130,6 +134,10 @@ Pure functions with no database or UI access. The main groups:
 Parsing helpers (`parse_money_cents`, `parse_count`, `parse_decimal`) are shared by every data-entry page so validation is identical everywhere.
 
 **Proof of correctness:** `scripts/import_workbook_dev.py --verify` loads a real month from the original workbook and compares every figure the app shows with the workbook's own results. For September 2026, all 102 metrics matched.
+
+### Weekly schedules
+
+Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Only shift codes with working times count toward daily headcount. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_manpower_state.py` writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
 
 ## 6. Monthly reports and snapshots
 
@@ -251,7 +259,7 @@ Depends on GTK 3 and WebKit2GTK 4.1. Supports Ubuntu 22.04 and newer.
 
 | Kind | Where | Notes |
 |---|---|---|
-| Unit and integration | `tests/` | 930 tests, each on a disposable database |
+| Unit and integration | `tests/` | 936 tests, each on a disposable database |
 | KPI rules | `test_kpi_synthetic.py`, `test_ops_levels_synthetic.py`, `test_daily_targets_t1.py` | Hand-made cases for every rule |
 | Security | `test_security.py`, `test_auth.py`, `test_ops_payroll_policy.py` | Roles, sessions, payroll visibility |
 | Packaging | `test_release_pipeline.py`, `test_deployment.py` | Build and release checks |
