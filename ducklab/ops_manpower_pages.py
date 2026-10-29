@@ -10,6 +10,7 @@ from ducklab import design as ds
 from ducklab import ui
 from ducklab.ops_manpower_state import ManpowerState
 from ducklab.ops_shell import shell
+from ducklab.ops_schedule_pages import schedule_tab
 
 
 M = ManpowerState
@@ -267,18 +268,29 @@ def manpower_page() -> rx.Component:
                 M.mp_config_exists & (M.mp_error != ""),
                 ds.error_callout(M.mp_error),
             ),
-            rx.cond(
-                ~M.mp_config_exists,
-                ui.empty_state("Monthly configuration required",
-                               M.mp_error, icon="settings"),
-                rx.vstack(
-                    _headcount_section(),
-                    _efficiency_section(),
-                    _payroll_section(),
-                    _leave_section(),
-                    _staffing_table(),
-                    spacing=ui.GAP, width="100%",
+            rx.tabs.root(
+                rx.tabs.list(
+                    rx.tabs.trigger("Overview", value="overview", id="manpower-tab-overview"),
+                    rx.tabs.trigger("Schedule", value="schedule", id="manpower-tab-schedule"),
                 ),
+                rx.tabs.content(
+                    rx.cond(
+                        ~M.mp_config_exists,
+                        ui.empty_state("Monthly configuration required",
+                                       M.mp_error, icon="settings"),
+                        rx.vstack(
+                            _headcount_section(),
+                            _efficiency_section(),
+                            _payroll_section(),
+                            _leave_section(),
+                            _staffing_table(),
+                            spacing=ui.GAP, width="100%",
+                        ),
+                    ),
+                    value="overview",
+                ),
+                rx.tabs.content(schedule_tab(), value="schedule"),
+                default_value="overview", width="100%",
             ),
             _config_dialog(),
             spacing=ui.GAP, width="100%",

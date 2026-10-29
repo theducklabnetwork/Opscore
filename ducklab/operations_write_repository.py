@@ -702,6 +702,140 @@ class OperationsWriteRepository:
             conn.close()
 
     # ------------------------------------------------------------------
+    # Manpower schedule
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _require_text(value, label: str) -> str:
+        value = (value or "").strip()
+        if not value:
+            raise ValidationError(f"{label} is required")
+        return value
+
+    def save_staff(self, store_id: int, staff_id: Optional[int], name: str,
+                   staff_code: str, position: str) -> int:
+        name = self._require_text(name, "Name")
+        staff_code = self._require_text(staff_code, "Staff ID")
+        position = self._require_text(position, "Position")
+        conn = self._connect()
+        try:
+            if staff_id is None:
+                cur = conn.execute(
+                    "INSERT INTO staff (store_id, name, staff_code, position) "
+                    "VALUES (?, ?, ?, ?)",
+                    (store_id, name, staff_code, position))
+                staff_id = cur.lastrowid
+            else:
+                cur = conn.execute(
+                    "UPDATE staff SET name = ?, staff_code = ?, position = ? "
+                    "WHERE id = ? AND store_id = ?",
+                    (name, staff_code, position, staff_id, store_id))
+                if not cur.rowcount:
+                    raise RecordNotFoundError("Staff member not found in this store")
+            conn.commit()
+            return staff_id
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise DuplicateRecordError("Staff ID already exists in this store") from exc
+        finally:
+            conn.close()
+
+    def delete_staff(self, store_id: int, staff_id: int) -> None:
+        cur = self._execute(
+            "DELETE FROM staff WHERE id = ? AND store_id = ?",
+            (staff_id, store_id))
+        if not cur.rowcount:
+            raise RecordNotFoundError("Staff member not found in this store")
+
+    def save_shift_code(self, original_code: Optional[str], code: str,
+                        label: str, start_time: Optional[str],
+                        end_time: Optional[str], color: str) -> None:
+        code = self._require_text(code, "Code").upper()
+        label = self._require_text(label, "Label")
+        color = self._require_text(color, "Color")
+        if bool(start_time) != bool(end_time):
+            raise ValidationError("Start and End must both be set or both be blank")
+        for value, field in ((start_time, "Start"), (end_time, "End")):
+            if value:
+                try:
+                    datetime.strptime(value, "%H:%M")
+                except ValueError:
+                    raise ValidationError(f"{field} must be a valid time") from None
+        conn = self._connect()
+        try:
+            if original_code is None:
+                conn.execute(
+                    "INSERT INTO shift_codes "
+                    "(code, label, start_time, end_time, color) VALUES (?, ?, ?, ?, ?)",
+                    (code, label, start_time or None, end_time or None, color))
+            else:
+                cur = conn.execute(
+                    "UPDATE shift_codes SET label = ?, start_time = ?, "
+                    "end_time = ?, color = ? WHERE code = ?",
+                    (label, start_time or None, end_time or None, color,
+                     original_code))
+                if not cur.rowcount:
+                    raise RecordNotFoundError("Shift code not found")
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise DuplicateRecordError("Shift code already exists") from exc
+        finally:
+            conn.close()
+
+    def delete_shift_code(self, code: str) -> None:
+        cur = self._execute("DELETE FROM shift_codes WHERE code = ?", (code,))
+        if not cur.rowcount:
+            raise RecordNotFoundError("Shift code not found")
+
+    def set_schedule_entry(self, store_id: int, staff_id: int,
+                           work_date: date, code: str) -> None:
+        conn = self._connect()
+        try:
+            owned = conn.execute(
+                "SELECT 1 FROM staff WHERE id = ? AND store_id = ?",
+                (staff_id, store_id)).fetchone()
+            if not owned:
+                raise RecordNotFoundError("Staff member not found in this store")
+            if code:
+                conn.execute(
+                    "INSERT INTO schedule_entries "
+                    "(store_id, staff_id, work_date, code) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(staff_id, work_date) DO UPDATE SET code = excluded.code",
+                    (store_id, staff_id, work_date.isoformat(), code))
+            else:
+                conn.execute(
+                    "DELETE FROM schedule_entries WHERE store_id = ? "
+                    "AND staff_id = ? AND work_date = ?",
+                    (store_id, staff_id, work_date.isoformat()))
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise ValidationError("Unknown shift code or invalid schedule entry") from exc
+        finally:
+            conn.close()
+
+    def set_schedule_target(self, store_id: int, week_start: date,
+                            target: Optional[int]) -> None:
+        if target is not None and target < 0:
+            raise ValidationError("Target Manpower cannot be negative")
+        conn = self._connect()
+        try:
+            if target is None:
+                conn.execute(
+                    "DELETE FROM schedule_targets WHERE store_id = ? AND week_start = ?",
+                    (store_id, week_start.isoformat()))
+            else:
+                conn.execute(
+                    "INSERT INTO schedule_targets "
+                    "(store_id, week_start, target_manpower) VALUES (?, ?, ?) "
+                    "ON CONFLICT(store_id, week_start) "
+                    "DO UPDATE SET target_manpower = excluded.target_manpower",
+                    (store_id, week_start.isoformat(), target))
+            conn.commit()
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
     _ACTION_FIELDS = (

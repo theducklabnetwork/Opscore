@@ -160,6 +160,32 @@ class OperationsRepository:
         )
 
     # ------------------------------------------------------------------
+    # Manpower schedule
+    # ------------------------------------------------------------------
+    def get_staff(self, store_id: int) -> list[dict]:
+        return [dict(r) for r in self._query(
+            "SELECT * FROM staff WHERE store_id = ? ORDER BY name, staff_code",
+            (store_id,))]
+
+    def get_shift_codes(self) -> list[dict]:
+        return [dict(r) for r in self._query(
+            "SELECT * FROM shift_codes ORDER BY code")]
+
+    def get_schedule_entries(self, store_id: int, start: date,
+                             end: date) -> list[dict]:
+        return [dict(r) for r in self._query(
+            "SELECT * FROM schedule_entries WHERE store_id = ? "
+            "AND work_date BETWEEN ? AND ? ORDER BY work_date",
+            (store_id, start.isoformat(), end.isoformat()))]
+
+    def get_schedule_target(self, store_id: int, week_start: date) -> Optional[int]:
+        rows = self._query(
+            "SELECT target_manpower FROM schedule_targets "
+            "WHERE store_id = ? AND week_start = ?",
+            (store_id, week_start.isoformat()))
+        return rows[0]["target_manpower"] if rows else None
+
+    # ------------------------------------------------------------------
     # Monthly configuration
     # ------------------------------------------------------------------
     def get_month_config(self, store_id: int, month: str) -> MonthConfig:

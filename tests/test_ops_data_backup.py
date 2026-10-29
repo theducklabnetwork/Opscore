@@ -114,6 +114,8 @@ class BackupModuleTest(unittest.TestCase):
         shutil.copy(self.db, v4)
         conn = sqlite3.connect(v4)
         conn.execute("DROP TABLE reference_data_info")   # v5's table
+        for table in ("schedule_entries", "schedule_targets", "staff", "shift_codes"):
+            conn.execute(f"DROP TABLE {table}")          # v6's tables
         conn.execute("DELETE FROM schema_migrations WHERE version >= 5")
         conn.execute("PRAGMA user_version = 4")
         conn.commit()

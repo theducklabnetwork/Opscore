@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -276,6 +276,14 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 5 and current >= 4:
             _apply_v5(conn)
             conn.execute("PRAGMA user_version = 5")
+            current = 5
+        if current < 6 and current >= 5:
+            _apply_v6(conn)
+            conn.execute("PRAGMA user_version = 6")
+            current = 6
+        if current < 7 and current >= 6:
+            _apply_v7(conn)
+            conn.execute("PRAGMA user_version = 7")
         conn.commit()
     finally:
         conn.close()
@@ -386,3 +394,82 @@ def _apply_v5(conn: sqlite3.Connection) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (5,)
     )
+
+
+_SCHEMA_V6 = """
+-- v6: store-scoped staff roster and weekly manpower schedules.
+CREATE TABLE staff (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id INTEGER NOT NULL REFERENCES stores(id),
+    name TEXT NOT NULL,
+    staff_code TEXT NOT NULL,
+    position TEXT NOT NULL,
+    UNIQUE (store_id, staff_code),
+    UNIQUE (store_id, id)
+);
+
+CREATE TABLE shift_codes (
+    code TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    start_time TEXT,
+    end_time TEXT,
+    color TEXT NOT NULL
+);
+
+CREATE TABLE schedule_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id INTEGER NOT NULL REFERENCES stores(id),
+    staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+    work_date TEXT NOT NULL,
+    code TEXT NOT NULL REFERENCES shift_codes(code),
+    UNIQUE (staff_id, work_date),
+    FOREIGN KEY (store_id, staff_id) REFERENCES staff (store_id, id)
+);
+
+CREATE TABLE schedule_targets (
+    store_id INTEGER NOT NULL REFERENCES stores(id),
+    week_start TEXT NOT NULL,
+    target_manpower INTEGER NOT NULL CHECK (target_manpower >= 0),
+    PRIMARY KEY (store_id, week_start)
+);
+"""
+
+SHIFT_CODES = [
+    ("M900", "Morning", "09:00", "19:00", "#bbf7d0"),
+    ("M945", "Morning", "09:45", "19:45", "#dcfce7"),
+    ("F900", "Full Day", "09:00", "21:00", "#fed7aa"),
+    ("F945", "Full Day", "09:45", "21:45", "#ffedd5"),
+    ("F101", "Full Day", "10:15", "22:15", "#fdba74"),
+    ("A121", "Afternoon", "12:15", "22:15", "#fde68a"),
+    ("ODM", "Off Day Morning", "09:00", "19:00", "#bae6fd"),
+    ("ODA", "Off Day Afternoon", "12:15", "22:15", "#93c5fd"),
+    ("OOD", "Off Day", None, None, "#fef08a"),
+    ("ORD", "Rest Day", None, None, "#86efac"),
+    ("AL", "Annual Leave", None, None, "#e9d5ff"),
+    ("EL", "Emergency Leave", None, None, "#fecaca"),
+    ("UPL", "Unpaid Leave", None, None, "#e5e7eb"),
+    ("MC", "Sick Leave", None, None, "#fbcfe8"),
+    ("OPH", "Public Holiday", None, None, "#ddd6fe"),
+]
+
+
+def _apply_v6(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA_V6)
+    conn.executemany(
+        "INSERT OR IGNORE INTO shift_codes "
+        "(code, label, start_time, end_time, color) VALUES (?, ?, ?, ?, ?)",
+        SHIFT_CODES,
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (6,)
+    )
+
+
+def _apply_v7(conn: sqlite3.Connection) -> None:
+    old_colors = ("#3b82f6", "#06b6d4", "#8b5cf6", "#a855f7", "#d946ef",
+                  "#f59e0b", "#14b8a6", "#10b981", "#64748b", "#78716c",
+                  "#22c55e", "#ef4444", "#f97316", "#eab308", "#ec4899")
+    for (code, _label, _start, _end, color), old_color in zip(SHIFT_CODES, old_colors):
+        conn.execute("UPDATE shift_codes SET color = ? WHERE code = ? AND color = ?",
+                     (color, code, old_color))
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (7)")
