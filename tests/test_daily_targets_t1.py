@@ -166,7 +166,8 @@ class MigrationTests(unittest.TestCase):
             conn = store_ops_db.connect(db)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 5)
+                    conn.execute("PRAGMA user_version").fetchone()[0],
+                    store_ops_db.SCHEMA_VERSION)
                 row = conn.execute(
                     "SELECT concept, state FROM stores").fetchone()
                 self.assertEqual(tuple(row), ("Kiosk", None))
@@ -204,7 +205,8 @@ class MigrationTests(unittest.TestCase):
             conn = store_ops_db.connect(db)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 5)
+                    conn.execute("PRAGMA user_version").fetchone()[0],
+                    store_ops_db.SCHEMA_VERSION)
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM basket_benchmarks").fetchone()[0], 0)
                 self.assertEqual(conn.execute(

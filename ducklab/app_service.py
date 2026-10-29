@@ -266,6 +266,45 @@ class AppService:
         authz.require_store_access(user, store_id)
         return self.read_repo.get_actions(store_id, month)
 
+    # -- manpower schedule ---------------------------------------------------
+    def get_schedule(self, user: User, store_id: int, start: date, end: date) -> dict:
+        authz.require_store_access(user, store_id)
+        return {
+            "staff": self.read_repo.get_staff(store_id),
+            "codes": self.read_repo.get_shift_codes(),
+            "entries": self.read_repo.get_schedule_entries(store_id, start, end),
+        }
+
+    def get_schedule_target(self, user: User, store_id: int, week_start: date):
+        authz.require_store_access(user, store_id)
+        return self.read_repo.get_schedule_target(store_id, week_start)
+
+    def save_staff(self, user: User, store_id: int, staff_id, **fields):
+        self._store_write(user, store_id)
+        return self.write.repo.save_staff(store_id, staff_id, **fields)
+
+    def delete_staff(self, user: User, store_id: int, staff_id: int):
+        self._store_write(user, store_id)
+        self.write.repo.delete_staff(store_id, staff_id)
+
+    def save_shift_code(self, user: User, store_id: int, original_code, **fields):
+        self._store_write(user, store_id)
+        self.write.repo.save_shift_code(original_code, **fields)
+
+    def delete_shift_code(self, user: User, store_id: int, code: str):
+        self._store_write(user, store_id)
+        self.write.repo.delete_shift_code(code)
+
+    def set_schedule_entry(self, user: User, store_id: int, staff_id: int,
+                           work_date: date, code: str):
+        self._store_write(user, store_id)
+        self.write.repo.set_schedule_entry(store_id, staff_id, work_date, code)
+
+    def set_schedule_target(self, user: User, store_id: int, week_start: date,
+                            target):
+        self._store_write(user, store_id)
+        self.write.repo.set_schedule_target(store_id, week_start, target)
+
     # -- configuration ----------------------------------------------------------
     def configure_month(self, user: User, store_id: int, month: str, **fields):
         authz.require_config_manager(user)

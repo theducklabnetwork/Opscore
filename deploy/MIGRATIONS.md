@@ -2,7 +2,7 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **5** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **7** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -28,6 +28,11 @@ application schema version: **5** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
   DSC import timestamp; written by `ducklab/dsc_import` inside the same
   transaction that replaces the reference tables (shown on Settings >
   Reference Data, and importable there too). No existing table changes.
+- **v6** — additive: store-scoped `staff`, shared `shift_codes`, dated
+  `schedule_entries`, and per-store/week `schedule_targets` for Manpower
+  Efficiency scheduling. Seeds the standard shift codes; no staff are seeded.
+- **v7** — soft default colors for the standard shift codes. Only codes still
+  using their v6 default colors are updated; customized colors are preserved.
 
 ## Rules
 
