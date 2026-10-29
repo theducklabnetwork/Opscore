@@ -71,6 +71,10 @@ def _builder() -> rx.Component:
             rx.spacer(),
             rx.button(rx.icon("file-text", size=14), "Generate",
                       on_click=M.generate_schedule, id="generate-schedule"),
+            rx.tooltip(rx.icon_button(rx.icon("download", size=14), size="1",
+                                     variant="soft", on_click=M.export_schedule_csv,
+                                     id="export-schedule-csv", aria_label="Export CSV"),
+                       content="Export CSV"),
             width="100%", align="end", flex_wrap="nowrap",
         ),
         rx.cond(

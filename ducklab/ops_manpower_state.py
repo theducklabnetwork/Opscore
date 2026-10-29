@@ -17,8 +17,10 @@ aggregate workbook inputs and does not decompose them by position.
 from __future__ import annotations
 
 import calendar
+import csv
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Optional
 
 import reflex as rx
@@ -258,6 +260,52 @@ class ManpowerState(ExpensesState):
     @rx.event
     def generate_schedule(self):
         self.schedule_subtab = "generated"
+
+    @rx.event
+    def export_schedule_csv(self):
+        self.schedule_error = self.schedule_notice = ""
+        if not self.can_write_schedule:
+            self.schedule_error = "You have read-only access."
+            return
+        store_id = self._selected_store_id()
+        if store_id is None or not self.schedule_week:
+            self.schedule_error = "Select a store and week first."
+            return
+        try:
+            # Revalidate the actor and store access; never trust client rows alone.
+            user = self._actor()
+            week_start = date.fromisoformat(self.schedule_week)
+            data = app_service.get_schedule(
+                user, store_id, week_start, week_start.fromordinal(week_start.toordinal() + 6))
+            store = next(store for store in user.stores if store.id == store_id)
+            store_part = "".join(c if c.isalnum() or c in "-_" else "_" for c in store.code)
+            folder = Path.home() / "Documents/Opscore Schedules" / store_part / self.schedule_week
+            folder.mkdir(parents=True, exist_ok=True)
+            entries = {(row["staff_id"], row["work_date"]): row["code"]
+                       for row in data["entries"] if row["code"]}
+            count = 0
+            for staff in data["staff"]:
+                rows = [(day.isoformat(), entries[(staff["id"], day.isoformat())])
+                        for i in range(7)
+                        if (day := week_start.fromordinal(week_start.toordinal() + i))
+                        and (staff["id"], day.isoformat()) in entries]
+                if not rows:
+                    continue
+                staff_code = "".join(c if c.isalnum() or c in "-_" else "_"
+                                     for c in staff["staff_code"])
+                with (folder / f"{staff_code}_{self.schedule_week}.csv").open(
+                        "w", newline="", encoding="utf-8") as handle:
+                    writer = csv.writer(handle)
+                    writer.writerow(("date", "shift_code"))
+                    writer.writerows(rows)
+                count += 1
+            self.schedule_notice = f"{count} Files Saved: {folder.resolve()}"
+        except AuthenticationError:
+            self.schedule_error = SESSION_EXPIRED
+        except (AuthorizationError, StoreNotFoundError):
+            self.schedule_error = ACCESS_DENIED
+        except (OSError, RepositoryError):
+            self.schedule_error = "Could not export schedule CSV files."
 
     @rx.event
     def set_schedule_subtab(self, value: str):
