@@ -161,6 +161,12 @@ def _generated() -> rx.Component:
 def _staff_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(row["name"]), ui.td(row["staff_code"]), ui.td(row["position"]),
+        ui.td(rx.vstack(
+            rx.text(row["employment_type"], size="2"),
+            rx.cond(row["employment_type"] == "Not Set",
+                    rx.text("Set Employment Type", size="1", color_scheme="amber")),
+            spacing="1",
+        )),
         ui.td(rx.hstack(
             rx.button("Edit", size="1", variant="soft",
                       on_click=M.open_schedule_staff(row["id"])),
@@ -173,7 +179,7 @@ def _staff_row(row) -> rx.Component:
 def _staff_tab() -> rx.Component:
     return ui.section_card(
         rx.cond(M.schedule_staff.length() > 0,
-                ui.data_table(["Name", "Staff ID", "Position", ""],
+                ui.data_table(["Name", "Staff ID", "Position", "Employment Type", ""],
                               rx.foreach(M.schedule_staff, _staff_row)),
                 ui.empty_state("No Staff", icon="users")),
         title="Staff",
@@ -222,7 +228,11 @@ def _schedule_dialog() -> rx.Component:
             ["ABM", "ASV", "SV", "RA"], value=M.sf_position,
             on_change=M.set_sf_position, placeholder="Select position",
             id="schedule-staff-position"), required=True),
-        columns="3",
+        ui.form_field("Employment Type", rx.select(
+            ["Full-Time", "Part-Time", "Not Set"], value=M.sf_employment_type,
+            on_change=M.set_sf_employment_type,
+            id="schedule-staff-employment-type"), required=True),
+        columns="4",
     )
     code_fields = ui.form_grid(
         ui.form_field("Code", rx.input(value=M.sc_code, on_change=M.set_sc_code,
