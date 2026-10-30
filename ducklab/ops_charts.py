@@ -562,3 +562,15 @@ def fmt_pct1(ratio: Optional[float]) -> str:
     if ratio is None:
         return "—"
     return f"{float(ratio) * 100:.1f}%"
+
+
+# Chart-capable page states register here at import time so the theme
+# toggle (AuthState.toggle_is_dark) can restyle their open figures without
+# importing the page modules (Phase 3.6: no lazy cross-module imports).
+CHART_STATES: list = []
+
+
+def register_chart_state(cls) -> None:
+    """Register a state class exposing _apply_chart_theme(dark)."""
+    if cls not in CHART_STATES:
+        CHART_STATES.append(cls)

@@ -16,7 +16,7 @@ from ducklab import ops_charts
 from ducklab.auth_service import AuthenticationError, AuthorizationError
 from ducklab.auth_pages import app_service
 from ducklab.operations_repository import RepositoryError
-from ducklab.ops_stores_state import StoresState
+from ducklab.ops_shared_state import SharedOpsState
 
 # Status colors come from the shared map in design.py (ds.status_color).
 
@@ -30,7 +30,7 @@ def _fmt_rm0(value) -> str:
     return "—" if value is None else ds.fmt_rm0(int(value))
 
 
-class SalesState(StoresState):
+class SalesState(SharedOpsState):
     """Sales Performance page state."""
 
     sp_error: str = ""
@@ -242,7 +242,7 @@ class SalesState(StoresState):
         self.selected_store_label = label
         self._clear_all_modules()
         self._clear_sales()
-        yield SalesState.refresh_report()
+        yield SalesState.resync_selection()
         yield SalesState.load_sales_data()
 
     @rx.event
@@ -252,22 +252,20 @@ class SalesState(StoresState):
         self.selected_month_label = label
         self._clear_all_modules()
         self._clear_sales()
-        yield SalesState.refresh_report()
+        yield SalesState.resync_selection()
         yield SalesState.load_sales_data()
 
     def _clear_all_modules(self) -> None:
-        for fn in (self._clear_report, self._clear_manpower,
-                   self._clear_stock, self._clear_setup,
-                   self._clear_stores):
-            fn()
+        # Flat state: sibling pages own their data; only the shared
+        # status surface is reset alongside the Sales values.
+        self._clear_shared_status()
 
     @rx.event
     def load_sales(self):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        from ducklab.ops_state import OpsState
-        yield OpsState.load_ops()
+        yield SalesState.load_selectors()
         yield SalesState.load_sales_data()
 
     @rx.event
@@ -560,3 +558,6 @@ class SalesState(StoresState):
     def _pace_chart(self, days, dim: int, level1) -> list[dict]:
         """Cumulative pace points (kpi.pace_series; shared with Overview)."""
         return kpi.pace_series(days, dim, level1)
+
+
+ops_charts.register_chart_state(SalesState)

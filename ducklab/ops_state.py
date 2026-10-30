@@ -1,4 +1,4 @@
-"""DuckLab operations application: shell, navigation, monthly report.
+"""DuckLab operations application: monthly report state (/ops/report).
 
 All data flows through AppService (authenticated + authorized). Report data
 is formatted server-side into plain Python structures so monetary values
@@ -7,13 +7,14 @@ never trusted — the session token is revalidated on every event.
 
 The finalization/correction workflow and report export live in
 ducklab/ops_finalize.py; the event handlers here are thin delegates.
+
+Selectors, store-active status, the shared error surface and tour handlers
+live on the flat shared base ducklab/ops_shared_state.SharedOpsState
+(Phase 3.6); the names other modules import from here stay re-exported so
+import paths remain stable.
 """
 
 from __future__ import annotations
-
-import calendar
-from datetime import date
-from typing import Optional
 
 import reflex as rx
 
@@ -22,63 +23,29 @@ from ducklab import design as ds
 from ducklab import kpi
 from ducklab import ops_finalize
 from ducklab import report_presenter
-from ducklab.input_validation import parse_client_id
-from ducklab.auth_pages import AuthState, app_service
-from ducklab.auth_service import AuthenticationError, AuthorizationError, User
+from ducklab.auth_pages import app_service
+from ducklab.auth_service import AuthenticationError, AuthorizationError
 from ducklab.operations_repository import (
     ConfigNotFoundError, InvalidMonthError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_snapshots import SnapshotNotFoundError
-from ducklab.operations_write_repository import ValidationError
+from ducklab.ops_overview_state import compute_portfolio
 
-
-SESSION_EXPIRED = "Your session has expired. Please sign in again."
-ACCESS_DENIED = "You do not have access to this store."
-
-
-def auth_message(exc: Exception) -> str:
-    """User message for an auth failure raised inside a page handler."""
-    if isinstance(exc, AuthenticationError):
-        return SESSION_EXPIRED
-    return ACCESS_DENIED
-
-
-def _page_tour_script(page_key: str, user: User) -> rx.event.EventSpec:
-    """Launch a page tour with only the Settings tabs this role may see."""
-    if page_key == "settings":
-        if authz.can_manage_users(user):
-            role = "super_admin"
-        elif authz.can_manage_config(user):
-            role = "administrator"
-        else:
-            role = "limited"
-        return rx.call_script(
-            f"window.ducklabTour && window.ducklabTour.start('settings', "
-            f"'{role}')")
-    return rx.call_script(
-        f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
-
-
-def month_label(month: str) -> str:
-    return report_presenter.month_label(month)
+# Canonical home is ducklab/ops_shared_state (Phase 3.6); re-exported here
+# so existing imports (ducklab modules and tests) keep working.
+from ducklab.ops_shared_state import (  # noqa: F401
+    ACCESS_DENIED, SESSION_EXPIRED, SharedOpsState, _refresh_store_active,
+    auth_message, month_label,
+)
 
 
 # ---------------------------------------------------------------------------
 # State
 # ---------------------------------------------------------------------------
 
-class OpsState(AuthState):
-    """Authenticated operations state: selectors + monthly report."""
-
-    # selectors
-    stores: list[dict] = []
-    store_options: list[str] = []       # display labels "CODE — Name"
-    dashboard_store_options: list[str] = []
-    selected_store_label: str = ""
-    month_options: list[str] = []       # labels
-    selected_month_label: str = ""
-    has_stores: bool = True
-    selected_store_active: bool = True
+class OpsState(SharedOpsState):
+    """Monthly report state (/ops/report): report data, versions,
+    finalization — on top of the shared selectors."""
 
     # report mode
     report_mode: str = "live"           # live | finalized
@@ -129,53 +96,6 @@ class OpsState(AuthState):
     def actions(self) -> dict[str, str]:
         return {k: str(v) for k, v in self.report.get("actions", {}).items()}
 
-    @rx.event
-    def tour_finished(self, _result=None) -> None:
-        """Guided tour closed (finished or skipped): persist for this user.
-
-        Triggered by assets/tour.js clicking the hidden #tour-done-trigger
-        button in the app shell. The server-side user identity comes from
-        the session cookie, never from the client payload."""
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            return
-        if not user.tour_done:
-            app_service.auth.mark_tour_done(user.id)
-
-    @rx.event
-    def maybe_start_page_tour(self, page_key: str) -> rx.event.EventSpec | None:
-        """Start a page tour on its first visit, after the welcome tour."""
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            return rx.redirect("/login")
-        if (not user.tour_done or page_key not in app_service.auth.PAGE_TOUR_KEYS
-                or app_service.auth.is_page_tour_done(user.id, page_key)):
-            return None
-        return _page_tour_script(page_key, user)
-
-    @rx.event
-    def replay_page_tour(self, page_key: str) -> rx.event.EventSpec | None:
-        """Replay on demand without changing the stored completion flag."""
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            return rx.redirect("/login")
-        if page_key not in app_service.auth.PAGE_TOUR_KEYS:
-            return None
-        return _page_tour_script(page_key, user)
-
-    @rx.event
-    def page_tour_finished(self, page_key: str, _result=None) -> None:
-        """Persist finish or skip for this user and page."""
-        try:
-            user = self._actor()
-        except AuthenticationError:
-            return
-        if page_key in app_service.auth.PAGE_TOUR_KEYS:
-            app_service.auth.mark_page_tour_done(user.id, page_key)
-
     @rx.var
     def report_heading(self) -> str:
         """Title line: "Store A (S01) · September 2026"."""
@@ -208,40 +128,9 @@ class OpsState(AuthState):
     # untyped detail vars accessed via to(...) casts in components
     report_categories: list[dict[str, str]] = []
     report_stock_codes: list[dict[str, str]] = []
-    report_status: str = "idle"         # idle | loading | ok | empty | error
-    error_message: str = ""
     finalized_note: str = ""
 
     # --- internals ---------------------------------------------------------
-    def _sync_store_active(self) -> None:
-        self.selected_store_active = next(
-            (bool(s.get("active", True)) for s in self.stores
-             if s["label"] == self.selected_store_label), True)
-
-    def _selected_store_id(self) -> Optional[int]:
-        for s in self.stores:
-            if s["label"] == self.selected_store_label:
-                return s["id"]
-        return None
-
-    def _selected_month(self) -> Optional[str]:
-        for m in self._month_choices():
-            if m[1] == self.selected_month_label:
-                return m[0]
-        return None
-
-    def _month_choices(self) -> list[tuple[str, str]]:
-        # Past 12 months including the current one, newest first.
-        today = kpi.kl_today()
-        out = []
-        y, m = today.year, today.month
-        for _ in range(12):
-            out.append((f"{y:04d}-{m:02d}", f"{calendar.month_name[m]} {y}"))
-            m -= 1
-            if m == 0:
-                m, y = 12, y - 1
-        return out
-
     def _clear_report(self) -> None:
         self.report = {}
         self.all_stores = False
@@ -263,25 +152,11 @@ class OpsState(AuthState):
     # --- events -------------------------------------------------------------
     @rx.event
     def load_ops(self) -> rx.event.EventSpec | None:
-        """On-load for all /ops pages: auth guard + store/month init."""
+        """On-load for /ops/report: auth guard + store/month init + report."""
         guard = self.require_auth()
         if guard is not None:
             return guard
-        user = self._actor()
-        stores = [
-            {**s, "label": f"{s['code']} — {s['name']}"}
-            for s in app_service.list_my_stores(user)
-        ]
-        self.stores = stores
-        self.store_options = [s["label"] for s in stores]
-        self.dashboard_store_options = ["All Stores", *self.store_options]
-        self.has_stores = bool(stores)
-        self._sync_store_active()
-        self.month_options = [label for _, label in self._month_choices()]
-        if stores and self._selected_store_id() is None:
-            self.selected_store_label = stores[0]["label"]
-        if self._selected_month() is None:
-            self.selected_month_label = self.month_options[0]
+        self._populate_selectors(self._actor())
         return OpsState.refresh_report()
 
     @rx.event
@@ -360,7 +235,6 @@ class OpsState(AuthState):
             self.report_status = "loading"
             yield
             try:
-                from ducklab.ops_overview_state import compute_portfolio
                 user = self._actor()
                 data = compute_portfolio(user, month, kpi.kl_today())
                 self.portfolio = data["portfolio"]
@@ -475,29 +349,6 @@ class OpsState(AuthState):
         except RepositoryError as exc:
             self.report_status = "error"
             self.error_message = f"Report unavailable: {exc}"
-
-
-# ---------------------------------------------------------------------------
-# Refresh helpers (pure; testable without a Reflex runtime)
-# ---------------------------------------------------------------------------
-
-def _refresh_store_active(service, user, store_id: int, stores: list[dict],
-                          label: str) -> tuple[bool, str]:
-    """-> (store active?, error message). Looks the store up through
-    AppService (access checked first) and updates the cached store entry.
-    A failed lookup marks the store inactive (read-only) — never a stale
-    "active" flag from the cached list. AuthenticationError propagates."""
-    try:
-        active = bool(service.get_store(user, store_id).active)
-        error = ""
-    except StoreNotFoundError:
-        active, error = False, "This store no longer exists."
-    except AuthorizationError:
-        active, error = False, "You do not have access to this store."
-    for s in stores:
-        if s["label"] == label:
-            s["active"] = active
-    return active, error
 
 
 # ---------------------------------------------------------------------------

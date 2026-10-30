@@ -30,9 +30,8 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, InvalidMonthError, RepositoryError,
     StoreNotFoundError,
 )
-from ducklab.ops_manpower_state import ManpowerState
-from ducklab.ops_state import (
-    ACCESS_DENIED, SESSION_EXPIRED, OpsState, auth_message, month_label,
+from ducklab.ops_shared_state import (
+    ACCESS_DENIED, SESSION_EXPIRED, SharedOpsState, auth_message, month_label,
 )
 
 # All status colors: ds.status_color (design.py shared map)
@@ -47,8 +46,8 @@ def _prev_month(month: str) -> str:
     return f"{y:04d}-{m:02d}"
 
 
-class StockState(ManpowerState):
-    """Stock Management page state (inherits selectors + auth guards)."""
+class StockState(SharedOpsState):
+    """Stock Management page state (flat base: shared selectors + guards)."""
 
     st_loaded: bool = False
     st_finalized: bool = False
@@ -133,10 +132,9 @@ class StockState(ManpowerState):
         if label == self.selected_store_label:
             return
         self.selected_store_label = label
-        self._clear_manpower()
         self._clear_stock()
-        self._clear_report()
-        yield StockState.refresh_report()
+        self._clear_shared_status()
+        yield StockState.resync_selection()
         yield StockState.load_stock_data()
 
     @rx.event
@@ -144,10 +142,9 @@ class StockState(ManpowerState):
         if label == self.selected_month_label:
             return
         self.selected_month_label = label
-        self._clear_manpower()
         self._clear_stock()
-        self._clear_report()
-        yield StockState.refresh_report()
+        self._clear_shared_status()
+        yield StockState.resync_selection()
         yield StockState.load_stock_data()
 
     @rx.event
@@ -155,7 +152,7 @@ class StockState(ManpowerState):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        yield OpsState.load_ops()
+        yield StockState.load_selectors()
         yield StockState.load_stock_data()
 
     @rx.event

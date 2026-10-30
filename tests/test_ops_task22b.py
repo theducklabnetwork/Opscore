@@ -160,12 +160,12 @@ class OversizedInputTests(Fixture):
 
     def test_monthly_setup_rejects_huge_and_nan_percent(self):
         import ducklab.ops_setup_state as mod
-        from ducklab.ops_stores_state import StoresState
+        from ducklab.ops_setup_state import SetupState
         for raw in ("1e999999999", "NaN"):
-            st = StoresState()
+            st = SetupState()
             st.setup_original = {}
             st.s_level2 = raw
-            self.bound(mod, StoresState, lambda: list(st.save_setup()))
+            self.bound(mod, SetupState, lambda: list(st.save_setup()))
             self.assertEqual(
                 st.setup_error,
                 "Level 2 Uplift (%): enter a non-negative number "
@@ -310,7 +310,9 @@ class ClientIdTests(Fixture):
 
     def test_assignment_ids(self):
         mod, cls, st = self._stores()
-        self.bound(mod, cls, lambda: list(st.open_assign("abc")))
+        from ducklab.ops_assignment_state import AssignmentState
+        st = AssignmentState()
+        self.bound(mod, AssignmentState, lambda: list(st.open_assign("abc")))
         self.assertEqual(st.stores_error,
                          "Unknown store — reopen it from the list.")
         self.assertEqual(st.assign_store_id, "")
@@ -318,7 +320,8 @@ class ClientIdTests(Fixture):
                                  "ViewerPass123!")
         self.app.assign_store(self.admin, v.id, self.sid)
         st.assign_store_id = str(self.sid)
-        self.bound(mod, cls, lambda: list(st.unassign_user("abc")))
+        self.bound(mod, AssignmentState,
+                   lambda: list(st.unassign_user("abc")))
         self.assertEqual(st.stores_error,
                          "Unknown user — reopen it from the list.")
         self.assertEqual(self.app.auth.get_user(v.id).store_ids,
@@ -422,10 +425,10 @@ class AuthFailureTests(Fixture):
         self.assertFalse(st.cfg_open)
 
     def test_stores_setup_revoked(self):
-        import ducklab.ops_stores_state as mod
-        from ducklab.ops_stores_state import StoresState
-        st = StoresState()
-        self.bound(mod, StoresState, st.load_page_data,
+        import ducklab.ops_setup_state as mod
+        from ducklab.ops_setup_state import SetupState
+        st = SetupState()
+        self.bound(mod, SetupState, st.load_setup_data,
                    actor=self.revoked_viewer())
         self.assertEqual(st.setup_error, ACCESS)
         self.assertEqual(st.budget_rows, [])

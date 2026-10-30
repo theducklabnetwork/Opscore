@@ -26,8 +26,8 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import ValidationError
-from ducklab.ops_state import (
-    SESSION_EXPIRED, OpsState, auth_message, month_label,
+from ducklab.ops_shared_state import (
+    SESSION_EXPIRED, SharedOpsState, auth_message, month_label,
 )
 
 # ---------------------------------------------------------------------------
@@ -55,8 +55,8 @@ MANPOWER_FIELDS = [
 CLEARABLE = {"sales_cents", "transactions", "units"}
 
 
-class DailyState(OpsState):
-    """Daily Operations page state (inherits selectors from OpsState)."""
+class DailyState(SharedOpsState):
+    """Daily Operations page state (flat base: shared selectors + guards)."""
 
     stock_codes: list[dict[str, str]] = []   # code/name/sign (sign as str)
     # loaded via AppService.get_month_config; None -> unset (shows "—")
@@ -251,8 +251,8 @@ class DailyState(OpsState):
         self.form_open = False
         self._clear_schedule_preview()
         self.save_notice = ""
-        self._clear_report()
-        yield DailyState.refresh_report()
+        self._clear_shared_status()
+        yield DailyState.resync_selection()
         yield DailyState.load_daily_data()
 
     @rx.event
@@ -263,8 +263,8 @@ class DailyState(OpsState):
         self.form_open = False
         self._clear_schedule_preview()
         self.save_notice = ""
-        self._clear_report()
-        yield DailyState.refresh_report()
+        self._clear_shared_status()
+        yield DailyState.resync_selection()
         yield DailyState.load_daily_data()
 
     # ------------------------------------------------------------------
@@ -275,7 +275,7 @@ class DailyState(OpsState):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        yield OpsState.load_ops()
+        yield DailyState.load_selectors()
         yield DailyState.load_daily_data()
         yield DailyState.open_deep_linked_day()
 
@@ -739,7 +739,7 @@ class DailyState(OpsState):
         self.save_notice = (
             f"Saved {self.form_day_label}. KPIs recalculated live.")
         yield DailyState.load_daily_data
-        yield DailyState.refresh_report
+        yield DailyState.resync_selection
 
 
 # ---------------------------------------------------------------------------

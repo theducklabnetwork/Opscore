@@ -6,9 +6,9 @@ import reflex as rx
 
 from ducklab import design as ds
 from ducklab import ui
-from ducklab.ops_manpower_state import ManpowerState
+from ducklab.ops_schedule_state import ScheduleState
 
-M = ManpowerState
+M = ScheduleState
 
 
 def _schedule_cell(staff_id, cell) -> rx.Component:

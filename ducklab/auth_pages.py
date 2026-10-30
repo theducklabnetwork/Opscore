@@ -15,6 +15,7 @@ from datetime import date
 import reflex as rx
 
 from ducklab import auth_service
+from ducklab import ops_charts
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthenticationError
 from ducklab.session_transport import (
@@ -48,11 +49,10 @@ class AuthState(rx.State):
     async def toggle_is_dark(self) -> None:
         """Toggle the server theme and restyle charts without reloading data."""
         self.is_dark = not self.is_dark
-        # Restyle both concrete child states; the inactive page has no
-        # source data and is therefore a no-op.
-        from ducklab.ops_overview_state import OverviewState
-        from ducklab.ops_sales_state import SalesState
-        for cls in (OverviewState, SalesState):
+        # Chart-capable states register themselves in ops_charts at import
+        # time (registry, Phase 3.6); inactive pages have no source data and
+        # are no-ops.
+        for cls in ops_charts.CHART_STATES:
             state = await self.get_state(cls)
             state._apply_chart_theme(self.is_dark)
 

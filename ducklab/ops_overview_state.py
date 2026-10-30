@@ -28,8 +28,7 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, InvalidMonthError, RepositoryError,
     StoreNotFoundError,
 )
-from ducklab.ops_actions_state import ActionsState
-from ducklab.ops_state import OpsState
+from ducklab.ops_shared_state import SharedOpsState
 ALL_STORES = "All Stores"
 
 
@@ -45,7 +44,7 @@ def _today() -> date:
     return kpi.kl_today()
 
 
-class OverviewState(ActionsState):
+class OverviewState(SharedOpsState):
     """Overview dashboard state (inherits selectors + guards)."""
 
     loaded: bool = False
@@ -195,7 +194,7 @@ class OverviewState(ActionsState):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        yield OpsState.load_ops()
+        yield OverviewState.load_selectors()
         yield OverviewState.load_overview_data()
 
     @rx.event
@@ -689,3 +688,6 @@ def compute_overview(user, store_id: int, month: str, today: date,
     }
     out["finalized_notice"] = finalized_notice
     return out
+
+
+ops_charts.register_chart_state(OverviewState)

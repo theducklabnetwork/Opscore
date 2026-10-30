@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ducklab import ops_state
+from ducklab import ops_shared_state, ops_state
 from ducklab.app_service import AppService
 from ducklab.auth_service import ValidationError
 from ducklab.ops_state import OpsState
@@ -29,6 +29,7 @@ class PageTourFixture(unittest.TestCase):
             "admin@ducklab.com", "Root Admin", PW)
         self.state = object.__new__(OpsState)
         self._patches = [
+            mock.patch.object(ops_shared_state, "app_service", self.app),
             mock.patch.object(ops_state, "app_service", self.app),
             mock.patch.object(OpsState, "_actor", lambda _: self.admin),
         ]

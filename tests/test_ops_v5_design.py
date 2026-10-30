@@ -261,7 +261,7 @@ class PlainLanguageTests(Fixture):
                 self.assertNotIn(word, out, f"{page.__name__}: {word}")
 
     def test_setup_levels_read_level_1(self):
-        st = self.bound("ops_stores_state", "StoresState", "load_page_data")
+        st = self.bound("ops_setup_state", "SetupState", "load_setup_data")
         self.assertEqual([lv["level"] for lv in st.setup_levels],
                          ["Level 1", "Level 2", "Level 3", "Level 4"])
 

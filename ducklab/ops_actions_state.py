@@ -23,9 +23,8 @@ from ducklab.operations_write_repository import (
     ACTION_STATUSES, PILLARS, PRIORITIES, ValidationError,
     RecordNotFoundError, WriteError,
 )
-from ducklab.ops_stores_state import StoresState
 from ducklab.input_validation import parse_client_id
-from ducklab.ops_state import OpsState
+from ducklab.ops_shared_state import SharedOpsState
 
 OPEN_STATUSES = ("Open", "In progress", "Blocked")
 
@@ -40,8 +39,8 @@ def _today() -> date:
     return kpi.kl_today()
 
 
-class ActionsState(StoresState):
-    """Action Tracker state (inherits selectors + guards)."""
+class ActionsState(SharedOpsState):
+    """Action Tracker state (flat base: shared selectors + guards)."""
 
     can_write_actions: bool = False
 
@@ -97,7 +96,7 @@ class ActionsState(StoresState):
             return
         self.selected_store_label = label
         self._clear_actions()
-        self._clear_report()
+        self._clear_shared_status()
         yield ActionsState.load_actions_data()
 
     @rx.event
@@ -106,7 +105,7 @@ class ActionsState(StoresState):
             return
         self.selected_month_label = label
         self._clear_actions()
-        self._clear_report()
+        self._clear_shared_status()
         yield ActionsState.load_actions_data()
 
     # --- loading ------------------------------------------------------------
@@ -115,7 +114,7 @@ class ActionsState(StoresState):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        yield OpsState.load_ops()
+        yield ActionsState.load_selectors()
         yield ActionsState.load_actions_data()
 
     @rx.event

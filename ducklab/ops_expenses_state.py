@@ -30,8 +30,9 @@ from ducklab.operations_write_repository import (
     PAYMENT_SOURCES, PAYMENT_STATUSES, VERIFICATIONS, ValidationError,
 )
 from ducklab.operations_write_repository import RecordNotFoundError
-from ducklab.ops_daily_state import DailyState
-from ducklab.ops_state import SESSION_EXPIRED, OpsState, auth_message
+from ducklab.ops_shared_state import (
+    SESSION_EXPIRED, SharedOpsState, auth_message,
+)
 
 PERIOD_OPTIONS = [
     ("incurred", "Incurred This Month"),
@@ -51,7 +52,7 @@ MAX_ROWS = 100
 BUDGET_CLEAR_CONFLICT = "Enter an amount, or use × to clear"
 
 
-class ExpensesState(DailyState):
+class ExpensesState(SharedOpsState):
     """Expenses page state (inherits selectors + guards)."""
 
     can_write_expenses: bool = False
@@ -234,8 +235,8 @@ class ExpensesState(DailyState):
         self.filter_paid_date = ""
         self.exp_form_open = False
         self.exp_notice = ""
-        self._clear_report()
-        yield ExpensesState.refresh_report()
+        self._clear_shared_status()
+        yield ExpensesState.resync_selection()
         yield ExpensesState.load_expenses_data()
 
     @rx.event
@@ -246,8 +247,8 @@ class ExpensesState(DailyState):
         self.filter_paid_date = ""
         self.exp_form_open = False
         self.exp_notice = ""
-        self._clear_report()
-        yield ExpensesState.refresh_report()
+        self._clear_shared_status()
+        yield ExpensesState.resync_selection()
         yield ExpensesState.load_expenses_data()
 
     # ------------------------------------------------------------------
@@ -262,7 +263,7 @@ class ExpensesState(DailyState):
             self.router.page.params.get("paid", ""))
         if self.filter_paid_date:
             self.filter_period = "all"     # the select matches the chip
-        yield OpsState.load_ops()
+        yield ExpensesState.load_selectors()
         yield ExpensesState.load_expenses_data()
 
     @rx.event
@@ -667,7 +668,7 @@ class ExpensesState(DailyState):
         self.exp_notice = (f"Expense {verb} and persisted. KPIs and budgets "
                            f"recalculated live.")
         yield ExpensesState.load_expenses_data()
-        yield ExpensesState.refresh_report()
+        yield ExpensesState.resync_selection()
 
     def _parse_expense_form(self) -> dict:
         def parse_date(raw: str, label: str) -> Optional[date]:
@@ -784,7 +785,7 @@ class ExpensesState(DailyState):
                          f"Budget for {self.b_category} saved "
                          f"({ds.fmt_rm(cents)} for {month}).")
         yield ExpensesState.load_expenses_data()
-        yield ExpensesState.refresh_report()
+        yield ExpensesState.resync_selection()
 
 
 def _paid_param(raw) -> str:

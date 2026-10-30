@@ -11,9 +11,13 @@ from ducklab.operations_write_repository import CONCEPTS, STATES
 from ducklab.ops_setup_state import (
     SETUP_DAILY, SETUP_MANPOWER, SETUP_PAYROLL, SETUP_SALES, SETUP_STOCK,
 )
+from ducklab.ops_assignment_state import AssignmentState
+from ducklab.ops_setup_state import SetupState
 from ducklab.ops_stores_state import StoresState
 
-S = StoresState
+Stores = StoresState
+Setup = SetupState
+Assign = AssignmentState
 
 
 # ----------------------------------------------------------------------
@@ -32,17 +36,17 @@ def _store_row(row) -> rx.Component:
                              rx.cond(row["active"] == "1", "green", "gray"))),
         ui.td(rx.hstack(
             rx.button("Edit", size="1", variant="soft",
-                      on_click=S.open_store_form(row["id"]),
-                      disabled=~S.can_manage_stores,
+                      on_click=Stores.open_store_form(row["id"]),
+                      disabled=~Stores.can_manage_stores,
                       id=f"store-edit-{row['code']}"),
             rx.button(rx.cond(row["active"] == "1", "Deactivate", "Activate"),
                       size="1", variant="soft", color_scheme="gray",
-                      on_click=S.toggle_store_active(row["id"]),
-                      disabled=~S.can_manage_stores,
+                      on_click=Stores.toggle_store_active(row["id"]),
+                      disabled=~Stores.can_manage_stores,
                       id=f"store-toggle-{row['code']}"),
             rx.button("Users", size="1", variant="soft",
-                      on_click=S.open_assign(row["id"]),
-                      disabled=~S.can_assign_users,
+                      on_click=Assign.open_assign(row["id"]),
+                      disabled=~Assign.can_assign_users,
                       id=f"store-users-{row['code']}"),
             spacing="2")),
     )
@@ -51,11 +55,11 @@ def _store_row(row) -> rx.Component:
 def _stores_table() -> rx.Component:
     return ui.section_card(
         rx.cond(
-            S.store_rows.length() > 0,
+            Stores.store_rows.length() > 0,
             ui.data_table(
                 ["Code", "Name", "Concept", "State", "Zone", "Zone PIC",
                  "Branch Manager", "Status", "Actions"],
-                rx.foreach(S.store_rows, _store_row),
+                rx.foreach(Stores.store_rows, _store_row),
                 phone=("Code", "Status", "Actions"),
             ),
             ui.empty_state("No Stores", "Create your first store to begin.",
@@ -64,8 +68,8 @@ def _stores_table() -> rx.Component:
         ui.note("Deactivation preserves all historical records."),
         title="Stores",
         extra=rx.button(rx.icon("plus", size=14), "New Store",
-                        on_click=S.open_store_form(""),
-                        disabled=~S.can_manage_stores, id="store-new"),
+                        on_click=Stores.open_store_form(""),
+                        disabled=~Stores.can_manage_stores, id="store-new"),
         id="stores-table",
     )
 
@@ -82,41 +86,41 @@ def _store_form_dialog() -> rx.Component:
         ui.form_section(
             "Store",
             ui.form_grid(
-                _sf_field("Code", S.sf_code, S.set_sf_code, "sf-code",
+                _sf_field("Code", Stores.sf_code, Stores.set_sf_code, "sf-code",
                           "e.g. A01", required=True),
-                _sf_field("Name", S.sf_name, S.set_sf_name, "sf-name",
+                _sf_field("Name", Stores.sf_name, Stores.set_sf_name, "sf-name",
                           required=True),
                 ui.form_field(
                     "Concept",
-                    rx.select(list(CONCEPTS), value=S.sf_concept,
-                              on_change=S.set_sf_concept,
+                    rx.select(list(CONCEPTS), value=Stores.sf_concept,
+                              on_change=Stores.set_sf_concept,
                               placeholder="Select…", id="sf-concept"),
-                    hint=S.sf_concept_hint),
+                    hint=Stores.sf_concept_hint),
                 ui.form_field(
                     "State",
-                    rx.select(list(STATES), value=S.sf_state,
-                              on_change=S.set_sf_state,
+                    rx.select(list(STATES), value=Stores.sf_state,
+                              on_change=Stores.set_sf_state,
                               placeholder="Select…", id="sf-state")),
             ),
         ),
         ui.form_section(
             "Area & People",
             ui.form_grid(
-                _sf_field("Zone", S.sf_zone, S.set_sf_zone, "sf-zone"),
-                _sf_field("Zone PIC", S.sf_zone_pic, S.set_sf_zone_pic,
+                _sf_field("Zone", Stores.sf_zone, Stores.set_sf_zone, "sf-zone"),
+                _sf_field("Zone PIC", Stores.sf_zone_pic, Stores.set_sf_zone_pic,
                           "sf-zone-pic"),
-                _sf_field("Branch Manager", S.sf_branch_manager,
-                          S.set_sf_branch_manager, "sf-bm"),
+                _sf_field("Branch Manager", Stores.sf_branch_manager,
+                          Stores.set_sf_branch_manager, "sf-bm"),
             ),
         ),
-        open=S.sf_open,
-        on_open_change=lambda v: S.close_store_form(),
-        title=rx.cond(S.sf_editing != "", "Edit Store", "New Store"),
+        open=Stores.sf_open,
+        on_open_change=lambda v: Stores.close_store_form(),
+        title=rx.cond(Stores.sf_editing != "", "Edit Store", "New Store"),
         close_id="store-form-close",
-        notices=[rx.cond(S.sf_error != "", ds.error_callout(S.sf_error))],
+        notices=[rx.cond(Stores.sf_error != "", ds.error_callout(Stores.sf_error))],
         actions=ui.dialog_actions(
-            save_label="Save Store", on_save=S.save_store,
-            saving=S.sf_saving, save_id="store-form-save",
+            save_label="Save Store", on_save=Stores.save_store,
+            saving=Stores.sf_saving, save_id="store-form-save",
             cancel_id="store-form-cancel"),
         width="600px",
     )
@@ -131,7 +135,7 @@ def _assigned_user(r) -> rx.Component:
         rx.cond(r["active"] == "0", ui.status_chip("Disabled", "gray")),
         rx.spacer(),
         rx.button("Unassign", size="1", variant="soft", color_scheme="red",
-                  on_click=S.unassign_user(r["id"]),
+                  on_click=Assign.unassign_user(r["id"]),
                   id=f"unassign-{r['id']}"),
         width="100%", align="center", padding_y="0.5em",
         border_bottom=f"1px solid {ui.ROW_BORDER}",
@@ -140,22 +144,22 @@ def _assigned_user(r) -> rx.Component:
 
 def _assign_panel() -> rx.Component:
     return rx.cond(
-        S.assign_store_id != "",
+        Assign.assign_store_id != "",
         ui.section_card(
             rx.cond(
-                S.assign_rows.length() > 0,
-                rx.vstack(rx.foreach(S.assign_rows, _assigned_user),
+                Assign.assign_rows.length() > 0,
+                rx.vstack(rx.foreach(Assign.assign_rows, _assigned_user),
                           spacing="0", width="100%"),
                 rx.text("No users assigned yet.", size="2",
                         color=ds.TEXT_MUTED),
             ),
             rx.hstack(
-                rx.select(S.assign_options, value=S.assign_selected,
-                          on_change=S.select_assign_user,
+                rx.select(Assign.assign_options, value=Assign.assign_selected,
+                          on_change=Assign.select_assign_user,
                           placeholder="Select an existing user…",
                           id="assign-select"),
-                rx.button("Assign", on_click=S.assign_user,
-                          disabled=S.assign_selected == "",
+                rx.button("Assign", on_click=Assign.assign_user,
+                          disabled=Assign.assign_selected == "",
                           id="assign-submit"),
                 spacing="3", align="center", wrap="wrap"),
             title="User Assignment",
@@ -172,9 +176,10 @@ def _setup_field(spec) -> rx.Component:
     attr, field, _kind, label = spec
     return ui.form_field(
         label,
-        rx.input(value=getattr(S, attr), on_change=getattr(S, "set_" + attr),
+        rx.input(value=getattr(Setup, attr),
+                 on_change=getattr(Setup, "set_" + attr),
                  placeholder="—", id="setup-" + field.replace("_", "-"),
-                 disabled=~S.can_edit_setup))
+                 disabled=~Setup.can_edit_setup))
 
 
 def _setup_grid(specs) -> rx.Component:
@@ -183,9 +188,9 @@ def _setup_grid(specs) -> rx.Component:
 
 def _levels_panel() -> rx.Component:
     return rx.cond(
-        S.setup_levels.length() > 0,
+        Setup.setup_levels.length() > 0,
         rx.grid(
-            rx.foreach(S.setup_levels,
+            rx.foreach(Setup.setup_levels,
                        lambda lv: ui.stat(lv["level"], lv["value"],
                                           size="4")),
             columns=rx.breakpoints(initial="2", md="4"), spacing="4",
@@ -200,9 +205,9 @@ def _levels_panel() -> rx.Component:
 def _holiday_chip(h) -> rx.Component:
     return rx.badge(
         h["label"],
-        rx.cond(S.can_edit_setup,
+        rx.cond(Setup.can_edit_setup,
                 rx.icon("x", size=12, cursor="pointer",
-                        on_click=S.remove_holiday(h["iso"]),
+                        on_click=Setup.remove_holiday(h["iso"]),
                         id="setup-ph-remove-" + h["iso"])),
         variant="soft", color_scheme="indigo", size="2",
         id="setup-ph-" + h["iso"],
@@ -215,12 +220,12 @@ def _holidays_field() -> rx.Component:
         "Public Holidays",
         rx.box(
             rx.vstack(
-                rx.input(type="date", value="", min=S.s_holiday_min,
-                         max=S.s_holiday_max, on_change=S.add_holiday,
+                rx.input(type="date", value="", min=Setup.s_holiday_min,
+                         max=Setup.s_holiday_max, on_change=Setup.add_holiday,
                          id="setup-public-holidays",
-                         disabled=~S.can_edit_setup),
-                rx.cond(S.holiday_chips.length() > 0,
-                        rx.hstack(rx.foreach(S.holiday_chips, _holiday_chip),
+                         disabled=~Setup.can_edit_setup),
+                rx.cond(Setup.holiday_chips.length() > 0,
+                        rx.hstack(rx.foreach(Setup.holiday_chips, _holiday_chip),
                                   spacing="2", wrap="wrap"),
                         ui.note("None")),
                 spacing="2", width="100%"),
@@ -235,31 +240,31 @@ def _budget_row(row) -> rx.Component:
         rx.input(
             # "×" beside a saved budget: clears it (save writes NULL)
             ui.clear_x((row["original"] != "") & (row["clear"] != "1")
-                       & S.can_edit_setup,
-                       S.clear_budget(row["id"]),
+                       & Setup.can_edit_setup,
+                       Setup.clear_budget(row["id"]),
                        id=f"setup-budget-{row['id']}-clear"),
             value=row["value"],
-            on_change=lambda v: S.set_budget_value(row["id"], v),
+            on_change=lambda v: Setup.set_budget_value(row["id"], v),
             placeholder="—", id=f"setup-budget-{row['id']}",
-            disabled=~S.can_edit_setup),
+            disabled=~Setup.can_edit_setup),
     )
 
 
 def _setup_section() -> rx.Component:
     return ui.section_card(
         rx.cond(
-            S.setup_finalized,
+            Setup.setup_finalized,
             rx.callout(
                 "A finalized snapshot exists for this month. Edits change "
                 "live configuration only — the finalized report is "
                 "unchanged.",
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%")),
-        rx.cond(S.setup_notice != "",
-                rx.callout(S.setup_notice, icon="circle-check",
+        rx.cond(Setup.setup_notice != "",
+                rx.callout(Setup.setup_notice, icon="circle-check",
                            color_scheme="green", variant="soft",
                            width="100%")),
-        rx.cond(S.setup_error != "", ds.error_callout(S.setup_error)),
+        rx.cond(Setup.setup_error != "", ds.error_callout(Setup.setup_error)),
         ui.form_stack(
             ui.form_section(
                 "Sales Targets",
@@ -267,10 +272,10 @@ def _setup_section() -> rx.Component:
                 _setup_grid(SETUP_SALES[2:5]),
                 rx.hstack(
                     rx.button("Use HQ Defaults",
-                              on_click=S.use_hq_defaults, variant="soft",
+                              on_click=Setup.use_hq_defaults, variant="soft",
                               size="2", type="button", id="setup-hq-levels",
-                              disabled=~S.can_edit_setup),
-                    rx.cond(S.setup_levels_missing,
+                              disabled=~Setup.can_edit_setup),
+                    rx.cond(Setup.setup_levels_missing,
                             ui.status_chip(ds.LEVELS_MISSING, "amber",
                                            id="setup-levels-missing",
                                            wrap=True)),
@@ -293,8 +298,8 @@ def _setup_section() -> rx.Component:
             ui.form_section(
                 "Expense Budgets (RM)",
                 rx.cond(
-                    S.budget_rows.length() > 0,
-                    rx.grid(rx.foreach(S.budget_rows, _budget_row),
+                    Setup.budget_rows.length() > 0,
+                    rx.grid(rx.foreach(Setup.budget_rows, _budget_row),
                             columns=rx.breakpoints(initial="1", sm="3"),
                             spacing="4", width="100%"),
                     ui.note("No expense categories configured for this "
@@ -306,11 +311,11 @@ def _setup_section() -> rx.Component:
         ),
         rx.hstack(
             rx.button(
-                rx.cond(S.setup_saving, rx.spinner(size="1"),
+                rx.cond(Setup.setup_saving, rx.spinner(size="1"),
                         rx.icon("save", size=14)),
-                "Save Setup", color_scheme="indigo", on_click=S.save_setup,
-                disabled=S.setup_saving | ~S.can_edit_setup, id="setup-save"),
-            rx.cond(~S.can_edit_setup,
+                "Save Setup", color_scheme="indigo", on_click=Setup.save_setup,
+                disabled=Setup.setup_saving | ~Setup.can_edit_setup, id="setup-save"),
+            rx.cond(~Setup.can_edit_setup,
                     ui.note("You have read-only access for this store.")),
             spacing="3", align="center", width="100%",
             border_top=f"1px solid {ui.CARD_BORDER}", padding_top="1em",
@@ -330,12 +335,14 @@ def stores_page() -> rx.Component:
         rx.fragment(
             rx.vstack(
                 rx.cond(
-                    S.stores_notice != "",
-                    rx.callout(S.stores_notice, icon="circle-check",
+                    (Stores.stores_notice != "") | (Assign.stores_notice != ""),
+                    rx.callout(Stores.stores_notice + Assign.stores_notice,
+                               icon="circle-check",
                                color_scheme="green", variant="soft",
                                width="100%")),
-                rx.cond(S.stores_error != "",
-                        ds.error_callout(S.stores_error)),
+                rx.cond((Stores.stores_error != "") | (Assign.stores_error != ""),
+                        ds.error_callout(Stores.stores_error
+                                         + Assign.stores_error)),
                 _stores_table(),
                 _assign_panel(),
                 _setup_section(),
@@ -343,7 +350,7 @@ def stores_page() -> rx.Component:
             ),
             _store_form_dialog(),
         ),
-        on_store=S.select_store,
-        on_month=S.select_month,
+        on_store=Stores.select_store,
+        on_month=Stores.select_month,
         tour_key="stores",
     )

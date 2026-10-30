@@ -16,15 +16,14 @@ from ducklab.auth_service import (
 )
 from ducklab.auth_pages import app_service
 from ducklab.operations_write_repository import ValidationError
-from ducklab.ops_stock_state import StockState
+from ducklab.ops_shared_state import SharedOpsState
 
 
-class AssignmentState(StockState):
+class AssignmentState(SharedOpsState):
     """Store Management shared page state + user-assignment workflow."""
 
-    # --- stores table / shared page state -------------------------------
-    store_rows: list[dict[str, str]] = []
-    can_manage_stores: bool = False
+    # --- assignment surface (same notice/error names as StoresState; the
+    # page renders both classes' surfaces) -------------------------------
     can_assign_users: bool = False
     stores_error: str = ""
     stores_notice: str = ""
@@ -35,6 +34,30 @@ class AssignmentState(StockState):
     assign_options: list[str] = []           # "email — name (roles)" to add
     assign_selected: str = ""
     _assign_all: list[dict] = []             # cache: all active users
+
+    def _clear_assign(self) -> None:
+        self.assign_store_id = ""
+        self.assign_rows = []
+        self.assign_options = []
+        self.assign_selected = ""
+
+    # ------------------------------------------------------------------
+    # loading
+    # ------------------------------------------------------------------
+    @rx.event
+    def refresh_flags(self) -> None:
+        """Recompute the page-level assignment permission flag."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            self.can_assign_users = False
+            return
+        self.can_assign_users = authz.can_manage_users(user)
+
+    @rx.event
+    def reset_assign(self) -> None:
+        """Clear the open assignment panel (store/month switch)."""
+        self._clear_assign()
 
     # ------------------------------------------------------------------
     # user assignment

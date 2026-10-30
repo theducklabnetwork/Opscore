@@ -61,7 +61,7 @@ Each layer only calls the one below it.
 | Layer | Files | Responsibility |
 |---|---|---|
 | Pages | `ops_*_pages.py`, `auth_pages.py`, `ops_shell.py`, `ui.py`, `design.py` | Layout and components. Display only. |
-| State | `ops_*_state.py`, `ops_state.py` | Page state and event handlers. Formats values for display. Calls `AppService`. |
+| State | `ops_shared_state.py`, `ops_state.py`, `ops_*_state.py` | Page state and event handlers. Formats values for display. Calls `AppService`. |
 | App service | `app_service.py` | The single entry point for every operation. Resolves the signed-in user and checks access before anything runs. |
 | Access control | `authz.py` | Deny-by-default role and store checks. |
 | Services | `operations_service.py`, `operations_write_service.py`, `operations_snapshots.py`, `auth_service.py`, `backup.py`, `report_export.py`, `dsc_import.py` | Business workflows. |
@@ -76,6 +76,33 @@ Each layer only calls the one below it.
 3. **Money is integer cents** everywhere below the display layer. No floating-point currency maths.
 4. **NULL means "not reported"** and is never turned into 0. An entered 0 is a real zero.
 5. **Percentages are stored as fractions** (10% is 0.10).
+6. **Page states are flat.** Every `/ops` page state inherits `SharedOpsState` directly:
+
+```
+AuthState (auth + theme)
+└── SharedOpsState          (selectors, store-active flag, shared status
+    ├── OpsState            surface, tours; load_selectors/resync_selection)
+    │                       = the Report page (/ops/report): report data,
+    │                         versions, finalization, export
+    ├── DailyState          (/ops/daily)
+    ├── ExpensesState       (/ops/expenses)
+    ├── ScheduleState       (schedule tab on /ops/manpower)
+    ├── ManpowerState       (/ops/manpower)
+    ├── StockState          (/ops/stock)
+    ├── StoresState         (/ops/stores: table + form)
+    ├── SetupState          (/ops/stores: Monthly Setup)
+    ├── AssignmentState     (/ops/stores: user assignment)
+    ├── SalesState          (/ops/sales)
+    ├── ActionsState        (/ops/actions)
+    ├── OverviewState       (/ops dashboard)
+    └── SettingsState       (/ops/settings)
+```
+
+No page state subclasses another page's state; siblings share one
+`SharedOpsState` instance for selectors and the status surface, and wire
+cross-page refreshes by yielding each other's events. Chart-capable states
+register in `ops_charts.CHART_STATES` at import time so the theme toggle
+can restyle open figures without cross-module imports.
 
 ## 4. Data model
 
@@ -137,7 +164,7 @@ Parsing helpers (`parse_money_cents`, `parse_count`, `parse_decimal`) are shared
 
 ### Weekly schedules
 
-Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Only shift codes with working times count toward daily headcount. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, inherited by ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Only shift codes with working times count toward daily headcount. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, a sibling of ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
 
 ## 6. Monthly reports and snapshots
 

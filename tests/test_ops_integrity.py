@@ -56,13 +56,13 @@ class Fixture(unittest.TestCase):
         # (Reflex state can't be instantiated outside an app context).
         import types
         from ducklab.ops_setup_state import SETUP_ALL
-        from ducklab.ops_stores_state import StoresState
+        from ducklab.ops_setup_state import SetupState
         st = types.SimpleNamespace(
             setup_original={attr: "" for attr, _, _, _ in SETUP_ALL},
             **{attr: "" for attr, _, _, _ in SETUP_ALL})
         st.s_pt_factor = "0.5"
-        parse = StoresState._parse_fields.__wrapped__ if hasattr(
-            StoresState._parse_fields, "__wrapped__") else StoresState._parse_fields
+        parse = SetupState._parse_fields.__wrapped__ if hasattr(
+            SetupState._parse_fields, "__wrapped__") else SetupState._parse_fields
         fields, errors = parse(st)
         self.assertEqual(errors, [])
         self.assertAlmostEqual(fields["part_timer_factor"], 0.5)
@@ -135,13 +135,13 @@ class Fixture(unittest.TestCase):
         sent; blanking an existing budget WITHOUT ticking "Clear saved
         value" is rejected (never written as NULL or 0)."""
         import types
-        from ducklab.ops_stores_state import StoresState
+        from ducklab.ops_setup_state import SetupState
         st = types.SimpleNamespace(budget_rows=[
             {"id": "7", "name": "Elec", "value": "", "original": ""},
             {"id": "8", "name": "Water", "value": " ", "original": "500.00"},
             {"id": "9", "name": "Gas", "value": "123.45", "original": ""},
         ])
-        updates, errors = StoresState._parse_budgets(st)
+        updates, errors = SetupState._parse_budgets(st)
         self.assertEqual(updates, {9: 12345})
         self.assertEqual(errors, [
             "Budget for Water: enter a budget amount, or use "

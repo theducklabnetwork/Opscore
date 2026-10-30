@@ -7,7 +7,7 @@ import reflex as rx
 from ducklab import design as ds
 from ducklab import ui
 from ducklab.auth_pages import AuthState
-from ducklab.ops_state import OpsState
+from ducklab.ops_shared_state import SharedOpsState
 
 NAV = [
     ("Overview", [("Dashboard", "/ops", "layout-dashboard", True)]),
@@ -126,16 +126,16 @@ def mobile_drawer() -> rx.Component:
 
 
 def store_selector(on_store=None, include_all: bool = False) -> rx.Component:
-    options = OpsState.store_options
+    options = SharedOpsState.store_options
     if include_all:
-        options = OpsState.dashboard_store_options
+        options = SharedOpsState.dashboard_store_options
     return rx.cond(
-        OpsState.has_stores,
+        SharedOpsState.has_stores,
         rx.select(
             options,
-            value=OpsState.selected_store_label,
+            value=SharedOpsState.selected_store_label,
             on_change=on_store if on_store is not None
-            else OpsState.select_store,
+            else SharedOpsState.select_store,
             size="2", id="store-selector",
             width=["100%", "100%", "240px"],
         ),
@@ -145,10 +145,10 @@ def store_selector(on_store=None, include_all: bool = False) -> rx.Component:
 
 def month_selector(on_month=None) -> rx.Component:
     return rx.select(
-        OpsState.month_options,
-        value=OpsState.selected_month_label,
+        SharedOpsState.month_options,
+        value=SharedOpsState.selected_month_label,
         on_change=on_month if on_month is not None
-        else OpsState.select_month,
+        else SharedOpsState.select_month,
         size="2", id="month-selector",
         width=["100%", "100%", "200px"],
     )
@@ -166,7 +166,7 @@ def header(title: str, on_store=None, on_month=None,
                 rx.icon("circle-help", size=20),
                 variant="ghost", aria_label=f"Replay {title} tour",
                 title=f"Replay {title} tour", id=f"tour-replay-{tour_key}",
-                on_click=OpsState.replay_page_tour(tour_key),
+                on_click=SharedOpsState.replay_page_tour(tour_key),
             )] if tour_key is not None else []),
             rx.box(  # wrapper: click bubbles to sync theme into state
                 rx.color_mode.button(variant="ghost", id="theme-toggle"),
@@ -210,19 +210,19 @@ def shell(title: str, content: rx.Component,
                        description=description, actions=actions,
                        tour_key=tour_key, include_all_stores=include_all_stores),
                 # Hidden trigger: assets/tour.js marks the guided tour done
-                # by dispatching the OpsState.tour_finished event (primary
+                # by dispatching the SharedOpsState.tour_finished event (primary
                 # path) or clicking this button (fallback).
-                rx.button("tour-done", on_click=OpsState.tour_finished(),
+                rx.button("tour-done", on_click=SharedOpsState.tour_finished(),
                           id="tour-done-trigger",
                           display="none", aria_hidden="true"),
                 *([rx.button(
                     "page-tour-done",
-                    on_click=OpsState.page_tour_finished(tour_key),
+                    on_click=SharedOpsState.page_tour_finished(tour_key),
                     id=f"tour-done-trigger-{tour_key}",
                     display="none", aria_hidden="true",
                 )] if tour_key is not None else []),
                 rx.cond(
-                    ~OpsState.selected_store_active,
+                    ~SharedOpsState.selected_store_active,
                     rx.callout(
                         "This store is deactivated — read-only. "
                         "Reactivate it on Store Management to make changes.",
