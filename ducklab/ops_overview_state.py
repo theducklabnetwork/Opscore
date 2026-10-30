@@ -240,8 +240,9 @@ def compute_portfolio(user, month: str, today: date) -> dict:
         ("Overdue Actions", str(report.overdue_actions), "Active stores"),
     ]
     if not report.payroll_visible:
-        for item in summary[3:]:
-            item[1:] = ["Restricted", coverage]
+        summary[3] = ("Total Salary Cost", "Restricted",
+                      coverage + salary_suffix)
+        summary[4] = ("Salary Ratio", "Restricted", days + salary_suffix)
     rows = []
     for r in report.rows:
         if r.configured:
@@ -259,8 +260,23 @@ def compute_portfolio(user, month: str, today: date) -> dict:
             "sales": ds.fmt_rm(r.sales_cents) if r.configured else "—",
             "achievement": ds.fmt_pct(r.achievement) if r.configured else "—",
             "expenses": ds.fmt_rm(r.expenses_cents) if r.configured else "—",
+            "expense_detail": (
+                f"{ds.fmt_rm(r.expenses_cents)} paid · "
+                f"{ds.fmt_rm(r.incurred_expenses_cents)} incurred · "
+                f"{ds.fmt_rm(r.open_expenses_cents)} open"
+                if r.configured else "—"),
+            "salary": ("Restricted" if not report.payroll_visible and r.configured
+                       else ds.fmt_rm(r.salary_cents) if r.configured else "—"),
             "salary_ratio": salary_display,
+            "headcount": (str(r.closing_headcount)
+                          if r.closing_headcount is not None else "—"),
             "stock_loss": ds.fmt_rm(r.stock_loss_cents) if r.configured else "—",
+            "stock_ratio": (ds.fmt_pct(r.stock_loss_ratio)
+                            if r.configured else "—"),
+            "actions": (f"{r.open_actions} open · {r.overdue_actions} overdue"
+                        if r.configured else "—"),
+            "completion": (ds.fmt_pct(r.completion_pct)
+                           if r.configured else "—"),
             "days": (f"{r.days_reported} of {r.days_in_month}"
                      if r.configured else "—"),
             "href": f"/ops?store={r.store_id}",

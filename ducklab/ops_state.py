@@ -111,6 +111,13 @@ class OpsState(AuthState):
     finalize_error: str = ""
     finalize_saving: bool = False
 
+    # Portfolio presentation is deliberately separate from the single-store
+    # report structure: All Stores is always live and has no versions.
+    all_stores: bool = False
+    portfolio: dict[str, str] = {}
+    portfolio_summary: list[dict[str, str]] = []
+    portfolio_rows: list[dict[str, str]] = []
+
     # report data (plain dict, preformatted)
     report: dict[str, dict] = {}
 
@@ -251,6 +258,10 @@ class OpsState(AuthState):
 
     def _clear_report(self) -> None:
         self.report = {}
+        self.all_stores = False
+        self.portfolio = {}
+        self.portfolio_summary = []
+        self.portfolio_rows = []
         self.report_categories = []
         self.report_stock_codes = []
         self.report_status = "idle"
@@ -443,7 +454,35 @@ class OpsState(AuthState):
             return
         store_id = self._selected_store_id()
         month = self._selected_month()
-        if store_id is None or month is None:
+        if month is None:
+            self.report_status = "empty"
+            return
+        if self.selected_store_label == "All Stores":
+            self.all_stores = True
+            self.report_mode = "live"
+            self.can_finalize = False
+            self.selected_store_active = True
+            self.report_status = "loading"
+            yield
+            try:
+                from ducklab.ops_overview_state import compute_portfolio
+                user = self._actor()
+                data = compute_portfolio(user, month, kpi.kl_today())
+                self.portfolio = data["portfolio"]
+                self.portfolio_summary = data["portfolio_summary"]
+                self.portfolio_rows = data["portfolio_rows"]
+                self.report_status = "ok"
+            except AuthenticationError:
+                self.report_status = "error"
+                self.error_message = "Your session has expired. Please sign in again."
+            except AuthorizationError:
+                self.report_status = "error"
+                self.error_message = "You do not have access to this report."
+            except Exception:
+                self.report_status = "error"
+                self.error_message = "Report unavailable."
+            return
+        if store_id is None:
             self.report_status = "empty"
             return
         # Re-read the selected store's active flag on EVERY refresh so a
