@@ -55,6 +55,10 @@ class SnapshotNotFoundError(SnapshotError):
 # --------------------------------------------------------------------------
 
 def _encode(obj: Any) -> Any:
+    if isinstance(obj, MonthlyOperationsReport):
+        # Live Dashboard source rows are not report outputs. Keep the v1
+        # snapshot payload unchanged when sharing assembled daily records.
+        return {k: _encode(v) for k, v in asdict(obj).items() if k != "days"}
     if isinstance(obj, Decimal):
         return {"__decimal__": str(obj)}
     if isinstance(obj, date):

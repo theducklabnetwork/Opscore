@@ -3,6 +3,7 @@
 Temp DBs only. Run: python -m unittest tests.test_operations_snapshots -v
 """
 
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -62,6 +63,7 @@ class TestPreview(SnapFixture):
         self.assertEqual(report.sales.sales_mtd_cents, rm(10000))
         self.assertFalse(report.is_snapshot)
         self.assertEqual(self.count_snapshots(), 0)  # no auto-finalization
+        self.assertNotIn("days", json.loads(serialize_report(report))["report"])
 
     def test_preview_errors(self):
         from ducklab.operations_repository import ConfigNotFoundError, StoreNotFoundError

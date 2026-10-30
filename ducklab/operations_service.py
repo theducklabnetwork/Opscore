@@ -117,7 +117,12 @@ class ActionsSection:
 
 @dataclass
 class MonthlyOperationsReport:
-    """LIVE recalculated report (not a finalized snapshot)."""
+    """LIVE recalculated report and its assembled source records.
+
+    ``days`` is shared with Dashboard charts; no chart or consumer recomputes
+    report formulas. It is excluded from dataclass equality for backwards-
+    compatible report comparisons and is never part of snapshot payloads.
+    """
     store: Store
     month: str
     config: MonthConfig
@@ -127,6 +132,7 @@ class MonthlyOperationsReport:
     stock: StockSection
     actions: ActionsSection
     is_snapshot: bool = False
+    days: list[kpi.DailyInput] = field(default_factory=list, compare=False)
 
 
 def assemble_month(
@@ -214,16 +220,16 @@ def assemble_month(
     # (workbook: blank -> "No budget", never 0 -> "Over budget").
     budget_values = [b for b in budgets.values() if b is not None]
     total_budget = sum(budget_values) if budget_values else None
+    category_paid = kpi.category_paid_totals_cents(
+        exp_inputs, month, store_id)
     cat_rows = [
         ExpenseCategoryRow(
             category_id=c.id,
             name=c.name,
             budget_cents=budgets.get(c.id),
-            paid_mtd_cents=kpi.category_paid_mtd_cents(
-                exp_inputs, month, store_id, c.id),
+            paid_mtd_cents=category_paid.get(c.id, 0),
             budget_status=kpi.budget_status(
-                kpi.category_paid_mtd_cents(exp_inputs, month, store_id, c.id),
-                budgets.get(c.id)),
+                category_paid.get(c.id, 0), budgets.get(c.id)),
         )
         for c in categories
     ]
@@ -292,5 +298,5 @@ def assemble_month(
     return MonthlyOperationsReport(
         store=store, month=month, config=cfg, sales=sales,
         expenses=expenses_section, manpower=manpower, stock=stock,
-        actions=actions_section,
+        actions=actions_section, days=days,
     )

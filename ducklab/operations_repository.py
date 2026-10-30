@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
 from ducklab import store_ops_db
 from ducklab.kpi import (
-    ActionInput, DailyInput, ExpenseInput, MonthConfig, to_decimal,
+    ActionInput, DailyInput, ExpenseInput, MonthConfig, month_bounds, to_decimal,
 )
 
 
@@ -59,6 +59,12 @@ def _validate_month(month: str) -> None:
             raise ValueError
     except (ValueError, TypeError, IndexError) as exc:
         raise InvalidMonthError(f"Invalid reporting month: {month!r}") from exc
+
+
+def _month_range(month: str) -> tuple[str, str]:
+    """ISO bounds for a validated month, suitable for indexed comparisons."""
+    start, end, _ = month_bounds(month)
+    return start.isoformat(), (end + timedelta(days=1)).isoformat()
 
 
 @dataclass(frozen=True)
@@ -228,8 +234,8 @@ class OperationsRepository:
         _validate_month(month)
         rows = self._query(
             "SELECT date FROM public_holidays WHERE store_id = ? "
-            "AND strftime('%Y-%m', date) = ? ORDER BY date",
-            (store_id, month),
+            "AND date >= ? AND date < ? ORDER BY date",
+            (store_id, *_month_range(month)),
         )
         return [_parse_date(r["date"]) for r in rows]
 
@@ -276,8 +282,8 @@ class OperationsRepository:
         _validate_month(month)
         rows = self._query(
             "SELECT * FROM daily_records WHERE store_id = ? "
-            "AND strftime('%Y-%m', date) = ? ORDER BY date",
-            (store_id, month),
+            "AND date >= ? AND date < ? ORDER BY date",
+            (store_id, *_month_range(month)),
         )
         losses = self._daily_stock_loss_map(
             [r["id"] for r in rows]
@@ -399,8 +405,9 @@ class OperationsRepository:
             _validate_month(month)
             rows = self._query(
                 "SELECT * FROM actions WHERE store_id = ? "
-                "AND strftime('%Y-%m', raised_date) = ? ORDER BY raised_date, id",
-                (store_id, month),
+                "AND raised_date >= ? AND raised_date < ? "
+                "ORDER BY raised_date, id",
+                (store_id, *_month_range(month)),
             )
         else:
             rows = self._query(
