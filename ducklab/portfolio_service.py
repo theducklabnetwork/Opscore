@@ -35,13 +35,19 @@ class PortfolioStore:
     sales_cents: Optional[int] = None
     achievement: Optional[Decimal] = None
     expenses_cents: Optional[int] = None
+    incurred_expenses_cents: Optional[int] = None
+    open_expenses_cents: Optional[int] = None
     salary_cents: Optional[int] = None
     salary_ratio: Optional[Decimal] = None
+    closing_headcount: Optional[int] = None
     stock_loss_cents: Optional[int] = None
+    stock_loss_ratio: Optional[Decimal] = None
     days_reported: int = 0
     days_in_month: int = 0
     open_actions: int = 0
     overdue_actions: int = 0
+    total_actions: int = 0
+    completion_pct: Optional[Decimal] = None
     alerts: list[PortfolioAlert] = field(default_factory=list)
 
     @property
@@ -132,8 +138,12 @@ class PortfolioService:
             row.sales_cents = s.sales_mtd_cents
             row.achievement = s.achievement_by_level.get("level1")
             row.expenses_cents = e.paid_cents
+            row.incurred_expenses_cents = e.incurred_cents
+            row.open_expenses_cents = e.open_cents
             row.salary_cents = m.total_salary_cents
+            row.closing_headcount = m.closing_headcount
             row.stock_loss_cents = st.total_loss_cents
+            row.stock_loss_ratio = st.loss_pct_of_sales
             row.days_reported = s.days_entered
             row.days_in_month = s.days_in_month
             # The per-store ratio is present only when its own payroll exists;
@@ -142,6 +152,8 @@ class PortfolioService:
             if store["active"]:
                 row.open_actions = report.actions.open
                 row.overdue_actions = report.actions.counts["overdue"]
+                row.total_actions = report.actions.counts["total"]
+                row.completion_pct = report.actions.completion_pct
                 for alert in dashboard_attention(report, alert_today):
                     kind = _alert_kind(alert)
                     if kind is None:

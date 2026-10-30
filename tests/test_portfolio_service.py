@@ -171,6 +171,73 @@ class PortfolioTests(unittest.TestCase):
         self.assertTrue(all(a.href == f"/ops?store={self.b}"
                             for a in result.alerts))
 
+    def test_report_portfolio_details_and_payroll_redaction(self):
+        from ducklab.ops_overview_state import compute_portfolio
+        result = PortfolioService(self.app).build(
+            self.admin, "2026-10", date(2026, 10, 21))
+        with mock.patch("ducklab.portfolio_service.PortfolioService.build",
+                        return_value=result):
+            admin = compute_portfolio(self.admin, "2026-10", date(2026, 10, 21))
+        row = admin["portfolio_rows"][0]
+        self.assertIn("paid · RM 0.00 incurred · RM 0.00 open",
+                      row["expense_detail"])
+        self.assertEqual(row["salary"], "RM 500.00")
+        self.assertEqual(row["salary_ratio"], "25.0%")
+        self.assertIn("open", row["actions"])
+        self.assertIn("stock_ratio", row)
+        self.assertNotIn("Level Reached", str(admin))
+        self.assertNotIn("growth", str(admin))
+
+        result = PortfolioService(self.app).build(
+            self.viewer, "2026-10", date(2026, 10, 21))
+        with mock.patch("ducklab.portfolio_service.PortfolioService.build",
+                        return_value=result):
+            viewer = compute_portfolio(self.viewer, "2026-10", date(2026, 10, 21))
+        for row in viewer["portfolio_rows"]:
+            self.assertEqual(row["salary"], "Restricted")
+            self.assertEqual(row["salary_ratio"], "Restricted")
+        self.assertNotIn("RM 500.00", str(viewer))
+        self.assertNotIn("25.0%", str(viewer))
+
+    def test_report_is_live_only_and_uses_separate_state(self):
+        from ducklab.ops_pages import report_page
+        from ducklab.ops_state import OpsState
+        from ducklab import ops_state
+        page = str(report_page())
+        for text in ("All Stores Summary", "Store Comparison", "Manpower",
+                     "Stock Loss", "Actions", "all_stores"):
+            self.assertIn(text, page)
+        class ReportState(OpsState):
+            pass
+
+        state = ReportState()
+        values = {
+            "has_stores": True,
+            "selected_store_label": "All Stores",
+            "selected_month_label": "October 2026",
+            "report_mode": "finalized",
+            "month_options": ["October 2026"],
+        }
+        for key, value in values.items():
+            state.__dict__[key] = value
+        result = PortfolioService(self.app).build(
+            self.admin, "2026-10", date(2026, 10, 21))
+        with mock.patch.object(ops_state.kpi, "kl_today",
+                               return_value=date(2026, 10, 21)), \
+             mock.patch("ducklab.portfolio_service.PortfolioService.build",
+                        return_value=result), \
+             mock.patch.object(ReportState, "_actor", return_value=self.admin), \
+             mock.patch.object(ops_state.app_service, "list_report_versions") as versions:
+            list(ReportState.refresh_report.fn(state))
+        self.assertTrue(state.all_stores)
+        self.assertEqual(state.report_mode, "live")
+        self.assertEqual(state.report_status, "ok")
+        self.assertEqual(state.report, {})
+        self.assertEqual(state.versions, [])
+        self.assertFalse(state.can_finalize)
+        self.assertEqual(len(state.portfolio_rows), 3)
+        versions.assert_not_called()
+
     def test_dashboard_option_and_comparison_links(self):
         from ducklab.ops_pages import dashboard_page
         page = str(dashboard_page())

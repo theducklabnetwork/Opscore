@@ -136,6 +136,50 @@ def _portfolio_view() -> rx.Component:
     )
 
 
+def _portfolio_store_details(row) -> rx.Component:
+    return ui.section_card(
+        rx.cond(row["status"] != "OK",
+                ui.status_chip(row["status"], "amber"),
+                rx.grid(
+                    ui.stat("Expenses", row["expenses"], sub=row["expense_detail"]),
+                    ui.stat("Manpower", row["headcount"],
+                            sub=row["salary"] + " salary · " + row["salary_ratio"]),
+                    ui.stat("Stock Loss", row["stock_loss"], sub=row["stock_ratio"]),
+                    ui.stat("Actions", row["actions"], sub=row["completion"] + " completed"),
+                    columns=rx.breakpoints(initial="1", sm="2", lg="4"),
+                    spacing="5", width="100%",
+                )),
+        title=row["store"],
+    )
+
+
+def _portfolio_report_view() -> rx.Component:
+    return rx.vstack(
+        ui.section_card(
+            ui.stat_grid(
+                rx.foreach(R.portfolio_summary,
+                           lambda item: ui.stat(item["label"], item["value"],
+                                                sub=item["coverage"], size="6",
+                                                size_narrow="5")),
+                columns=rx.breakpoints(initial="1", sm="2", lg="7"),
+            ),
+            title="All Stores Summary", id="portfolio-report-summary",
+        ),
+        ui.section_card(
+            ui.data_table(
+                ["Store", ("Sales", True), ("Achievement", True),
+                 ("Expenses", True), ("Salary Ratio", True),
+                 ("Stock Loss", True), ("Days Reported", True)],
+                rx.foreach(R.portfolio_rows, _portfolio_row),
+                id="portfolio-report-comparison",
+            ),
+            title="Store Comparison",
+        ),
+        rx.foreach(R.portfolio_rows, _portfolio_store_details),
+        spacing=ui.GAP, width="100%",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Overview sections (values pre-formatted by OverviewState; each figure
 # appears exactly once on the page)
@@ -630,7 +674,7 @@ def report_page() -> rx.Component:
     return shell(
         "Monthly Report",
         rx.vstack(
-            _mode_controls(),
+            rx.cond(~R.all_stores, _mode_controls()),
             rx.cond(R.report_status == "loading",
                     ds.loading_state("Calculating report…")),
             rx.cond(R.report_status == "empty",
@@ -641,6 +685,8 @@ def report_page() -> rx.Component:
             rx.cond(
                 R.report_status == "ok",
                 rx.vstack(
+                    rx.cond(R.all_stores, _portfolio_report_view()),
+                    rx.cond(~R.all_stores,
                     rx.hstack(
                         rx.heading(R.report_heading, size="4",
                                    weight="medium", color=ds.TEXT),
@@ -648,17 +694,18 @@ def report_page() -> rx.Component:
                         rx.cond(R.finalized_note != "",
                                 ui.note(R.finalized_note)),
                         width="100%", align="baseline", wrap="wrap",
-                    ),
-                    _sales_section(),
-                    _expenses_section(),
-                    _manpower_section(),
-                    _stock_section(),
-                    _actions_section(),
+                    )),
+                    rx.cond(~R.all_stores, _sales_section()),
+                    rx.cond(~R.all_stores, _expenses_section()),
+                    rx.cond(~R.all_stores, _manpower_section()),
+                    rx.cond(~R.all_stores, _stock_section()),
+                    rx.cond(~R.all_stores, _actions_section()),
                     spacing=ui.GAP, width="100%",
                 ),
             ),
-            _finalize_dialog(),
+            rx.cond(~R.all_stores, _finalize_dialog()),
             spacing=ui.GAP, width="100%",
         ),
         tour_key="report",
+        include_all_stores=True,
     )
