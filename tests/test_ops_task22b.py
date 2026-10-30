@@ -16,8 +16,10 @@ from decimal import Decimal
 from pathlib import Path
 from unittest import mock
 
-from ducklab import kpi
 from ducklab.app_service import AppService
+from ducklab.input_validation import (
+    parse_client_id, parse_count, parse_decimal, parse_money_cents,
+)
 from ducklab.auth_service import AuthenticationError
 from ducklab.operations_write_repository import ValidationError
 
@@ -82,11 +84,11 @@ class NanFactorTests(Fixture):
     def test_shared_parser_rejects_nan_and_inf(self):
         for raw in ("NaN", "nan", "inf", "-Infinity", "sNaN"):
             with self.assertRaises(ValueError) as ctx:
-                kpi.parse_decimal(raw, "Part-time conversion factor",
+                parse_decimal(raw, "Part-time conversion factor",
                                   Decimal(0), Decimal(2))
             self.assertEqual(str(ctx.exception),
                              "Part-time conversion factor must be a number")
-        self.assertEqual(kpi.parse_decimal(" 0.75 ", "F", Decimal(0),
+        self.assertEqual(parse_decimal(" 0.75 ", "F", Decimal(0),
                                            Decimal(2)), Decimal("0.75"))
 
     def _save(self, **form):
@@ -116,19 +118,19 @@ class NanFactorTests(Fixture):
 # 2 ---------------------------------------------------------------------------
 class OversizedInputTests(Fixture):
     def test_money_parser_bounds(self):
-        self.assertEqual(kpi.parse_money_cents("100,000,000.00"),
+        self.assertEqual(parse_money_cents("100,000,000.00"),
                          10000000000)
-        self.assertEqual(kpi.parse_money_cents("-100000000"), -10000000000)
+        self.assertEqual(parse_money_cents("-100000000"), -10000000000)
         for raw in ("1e20", "100000000.01", "-100000000.01",
                     "1e999999999"):
             with self.assertRaises(ValueError) as ctx:
-                kpi.parse_money_cents(raw)
+                parse_money_cents(raw)
             self.assertEqual(str(ctx.exception), "Amount too large")
 
     def test_count_parser_bound(self):
-        self.assertEqual(kpi.parse_count("1000000", "Transactions"), 1000000)
+        self.assertEqual(parse_count("1000000", "Transactions"), 1000000)
         with self.assertRaises(ValueError) as ctx:
-            kpi.parse_count("99999999999999999999", "Transactions")
+            parse_count("99999999999999999999", "Transactions")
         self.assertEqual(str(ctx.exception), "Transactions is too large")
 
     def test_daily_save_rejects_1e20(self):
@@ -240,7 +242,6 @@ class DailyEntryDateTests(Fixture):
 # 4 ---------------------------------------------------------------------------
 class ClientIdTests(Fixture):
     def test_shared_helper(self):
-        from ducklab.ops_state import parse_client_id
         self.assertIsNone(parse_client_id("", "store"))
         self.assertIsNone(parse_client_id(None, "store"))
         self.assertEqual(parse_client_id(" 12 ", "store"), 12)

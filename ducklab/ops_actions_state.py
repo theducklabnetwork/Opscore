@@ -24,7 +24,8 @@ from ducklab.operations_write_repository import (
     RecordNotFoundError, WriteError,
 )
 from ducklab.ops_stores_state import StoresState
-from ducklab.ops_state import OpsState, parse_client_id
+from ducklab.input_validation import parse_client_id
+from ducklab.ops_state import OpsState
 
 OPEN_STATUSES = ("Open", "In progress", "Blocked")
 

@@ -32,22 +32,19 @@ from ducklab.auth_service import (
     AuthenticationError, AuthorizationError,
 )
 from ducklab.auth_pages import app_service
+from ducklab.input_validation import (
+    parse_client_id, parse_count, parse_decimal, parse_money_cents,
+)
 from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import ValidationError
-from ducklab.ops_daily_state import _parse_count, _parse_money
 from ducklab.ops_expenses_state import ExpensesState
 from ducklab.ops_state import (
     ACCESS_DENIED, SESSION_EXPIRED, OpsState, auth_message, month_label,
-    parse_client_id,
 )
 
 # All status colors: ds.status_color (design.py shared map)
-
-
-# Shared kpi parser: rejects "NaN"/"inf" (is_finite) like Monthly Setup.
-_parse_decimal = kpi.parse_decimal
 
 PAYROLL_LABELS = {
     "p_salary": "Basic salary + allowances",
@@ -948,26 +945,26 @@ class ManpowerState(ExpensesState):
         orig = self.cfg_original
         if self.c_opening != orig.get("c_opening", ""):
             if self.c_opening.strip():
-                fields["opening_headcount_ft"] = _parse_count(
+                fields["opening_headcount_ft"] = parse_count(
                     self.c_opening, "Opening headcount")
             else:
                 fields["opening_headcount_ft"] = None
         if self.c_budget != orig.get("c_budget", ""):
             if self.c_budget.strip():
-                fields["budget_headcount"] = _parse_count(
+                fields["budget_headcount"] = parse_count(
                     self.c_budget, "Budget headcount")
             else:
                 fields["budget_headcount"] = None
         if self.c_pt_factor != orig.get("c_pt_factor", ""):
             if self.c_pt_factor.strip():
-                fields["part_timer_factor"] = float(_parse_decimal(
+                fields["part_timer_factor"] = float(parse_decimal(
                     self.c_pt_factor, "Part-time conversion factor",
                     Decimal(0), Decimal(2)))
             else:
                 fields["part_timer_factor"] = None
         if self.c_turnover != orig.get("c_turnover", ""):
             if self.c_turnover.strip():
-                pct = _parse_decimal(self.c_turnover,
+                pct = parse_decimal(self.c_turnover,
                                      "Turnover threshold (%)",
                                      Decimal(0), Decimal(100))
                 fields["turnover_threshold"] = float(pct / 100)
@@ -975,7 +972,7 @@ class ManpowerState(ExpensesState):
                 fields["turnover_threshold"] = None
         if self.c_ratio_target != orig.get("c_ratio_target", ""):
             if self.c_ratio_target.strip():
-                pct = _parse_decimal(self.c_ratio_target,
+                pct = parse_decimal(self.c_ratio_target,
                                      "Salary ratio target (%)",
                                      Decimal(0), Decimal(100))
                 fields["salary_ratio_target"] = float(pct / 100)
@@ -992,7 +989,7 @@ class ManpowerState(ExpensesState):
             raw = getattr(self, attr)
             if raw == orig.get(attr, ""):
                 continue
-            cents = _parse_money(raw) if raw.strip() else None
+            cents = parse_money_cents(raw) if raw.strip() else None
             if cents is not None and cents < 0:
                 raise ValueError(f"{PAYROLL_LABELS[attr]} cannot be negative")
             fields[col] = cents

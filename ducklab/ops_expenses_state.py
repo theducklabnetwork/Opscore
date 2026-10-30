@@ -22,6 +22,7 @@ from ducklab.auth_service import (
     AuthenticationError, AuthorizationError, User,
 )
 from ducklab.auth_pages import app_service
+from ducklab.input_validation import parse_client_id, parse_money_cents
 from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
@@ -29,10 +30,8 @@ from ducklab.operations_write_repository import (
     PAYMENT_SOURCES, PAYMENT_STATUSES, VERIFICATIONS, ValidationError,
 )
 from ducklab.operations_write_repository import RecordNotFoundError
-from ducklab.ops_daily_state import DailyState, _parse_money
-from ducklab.ops_state import (
-    SESSION_EXPIRED, OpsState, auth_message, parse_client_id,
-)
+from ducklab.ops_daily_state import DailyState
+from ducklab.ops_state import SESSION_EXPIRED, OpsState, auth_message
 
 PERIOD_OPTIONS = [
     ("incurred", "Incurred This Month"),
@@ -682,7 +681,7 @@ class ExpensesState(DailyState):
 
         amount = None
         if self.e_amount.strip():
-            amount = _parse_money(self.e_amount)
+            amount = parse_money_cents(self.e_amount)
         category_id = None
         if self.e_category.strip():
             category_id = self._category_id(self.e_category.strip())
@@ -808,4 +807,4 @@ def _budget_save_value(amount: str, clear: bool) -> Optional[int]:
         raise ValueError(
             "Enter a budget amount, or use × to clear it. A missing budget "
             "is distinct from RM 0.")
-    return _parse_money(amount)
+    return parse_money_cents(amount)

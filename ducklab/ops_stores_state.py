@@ -19,6 +19,9 @@ import reflex as rx
 from ducklab import authz
 from ducklab import design as ds
 from ducklab import kpi
+from ducklab.input_validation import (
+    parse_client_id, parse_count, parse_decimal, parse_money_cents,
+)
 from ducklab.auth_service import (
     AuthenticationError, AuthorizationError,
 )
@@ -33,7 +36,7 @@ from ducklab.operations_write_repository import (
 from ducklab.ops_expenses_state import BUDGET_CLEAR_CONFLICT
 from ducklab.ops_stock_state import StockState
 from ducklab.ops_state import (
-    SESSION_EXPIRED, OpsState, auth_message, month_label, parse_client_id,
+    SESSION_EXPIRED, OpsState, auth_message, month_label,
 )
 
 # Monthly setup field specs: (state attr, config field, kind, label)
@@ -572,20 +575,20 @@ class StoresState(StockState):
                 continue
             try:
                 if kind == "money":
-                    cents = kpi.parse_money_cents(raw)
+                    cents = parse_money_cents(raw)
                     if cents < 0:
                         raise ValueError("negative")
                     out[field] = cents
                 elif kind == "count":
-                    out[field] = kpi.parse_count(raw, label)
+                    out[field] = parse_count(raw, label)
                 elif kind == "factor":
-                    out[field] = float(kpi.parse_decimal(
+                    out[field] = float(parse_decimal(
                         raw, label, Decimal(0), Decimal(2)))
                 elif kind == "ipr":
-                    out[field] = float(kpi.parse_decimal(
+                    out[field] = float(parse_decimal(
                         raw, label, Decimal(0), Decimal(1000)))
                 else:  # pct -> fraction (repository range 0..10 = 1000%)
-                    out[field] = float(kpi.parse_decimal(
+                    out[field] = float(parse_decimal(
                         raw, label, Decimal(0), Decimal(1000)) / 100)
             except ValueError:
                 errors.append(
@@ -839,7 +842,7 @@ def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
                 "× to clear it (No budget).")
             continue
         try:
-            cents = kpi.parse_money_cents(raw)
+            cents = parse_money_cents(raw)
             if cents < 0:
                 raise ValueError("negative")
         except ValueError:

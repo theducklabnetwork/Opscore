@@ -32,7 +32,8 @@ from ducklab.operations_write_repository import (
     DuplicateRecordError, RecordNotFoundError,
 )
 from ducklab.ops_shell import shell
-from ducklab.ops_state import OpsState, SESSION_EXPIRED, parse_client_id
+from ducklab.input_validation import parse_client_id
+from ducklab.ops_state import OpsState, SESSION_EXPIRED
 from ducklab.session_transport import DB_PATH
 
 APP_NAME = "Opscore"

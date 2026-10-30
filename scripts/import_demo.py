@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ducklab import kpi  # noqa: E402
+from ducklab.input_validation import parse_count, parse_money_cents  # noqa: E402
 
 STORE = {
     "store_code": "AB01",
@@ -48,11 +48,11 @@ def _rows(path: Path, headers: tuple[str, ...]) -> list[dict[str, str]]:
 
 
 def _money(value: str) -> int | None:
-    return kpi.parse_money_cents(value) if value.strip() else None
+    return parse_money_cents(value) if value.strip() else None
 
 
 def _count(value: str, label: str) -> int | None:
-    return kpi.parse_count(value, label) if value.strip() else None
+    return parse_count(value, label) if value.strip() else None
 
 
 def _month(value: str) -> str:
