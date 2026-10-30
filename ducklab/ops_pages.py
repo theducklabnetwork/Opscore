@@ -45,9 +45,11 @@ def dashboard_page() -> rx.Component:
                     rx.cond(
                         O.loaded,
                         rx.vstack(
-                            _hero_row(),
-                            _main_row(),
-                            _bottom_row(),
+                            rx.cond(O.all_stores,
+                                    _portfolio_view(),
+                                    rx.vstack(_hero_row(), _main_row(),
+                                              _bottom_row(), spacing=ui.GAP,
+                                              width="100%")),
                             spacing=ui.GAP, width="100%",
                         ),
                     ),
@@ -59,6 +61,47 @@ def dashboard_page() -> rx.Component:
         on_store=O.select_store,
         on_month=O.select_month,
         tour_key="dashboard",
+        include_all_stores=True,
+    )
+
+
+def _portfolio_row(row) -> rx.Component:
+    return rx.el.tr(
+        ui.td(rx.link(row["store"], href=row["href"], underline="hover"),
+              rx.cond(row["status"] != "OK",
+                      ui.status_chip(row["status"], "amber"))),
+        ui.td(row["sales"], numeric=True),
+        ui.td(row["achievement"], numeric=True),
+        ui.td(row["expenses"], numeric=True),
+        ui.td(row["salary_ratio"], numeric=True),
+        ui.td(row["stock_loss"], numeric=True),
+        ui.td(row["days"], numeric=True),
+    )
+
+
+def _portfolio_view() -> rx.Component:
+    return rx.vstack(
+        ui.section_card(
+            ui.stat_grid(
+                rx.foreach(O.portfolio_summary,
+                           lambda item: ui.stat(item["label"], item["value"],
+                                                sub=item["coverage"], size="6",
+                                                size_narrow="5")),
+                columns=rx.breakpoints(initial="1", sm="2", lg="5"),
+            ),
+            title="All Stores Summary", id="portfolio-summary",
+        ),
+        ui.section_card(
+            ui.data_table(
+                ["Store", ("Sales", True), ("Achievement", True),
+                 ("Expenses", True), ("Salary Ratio", True),
+                 ("Stock Loss", True), ("Days Reported", True)],
+                rx.foreach(O.portfolio_rows, _portfolio_row),
+                id="portfolio-comparison",
+            ),
+            title="Store Comparison", id="portfolio-table",
+        ),
+        spacing=ui.GAP, width="100%",
     )
 
 
