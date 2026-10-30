@@ -150,6 +150,7 @@ class ManpowerState(ExpensesState):
     sf_name: str = ""
     sf_staff_code: str = ""
     sf_position: str = ""
+    sf_employment_type: str = "Not Set"
     sc_code: str = ""
     sc_label: str = ""
     sc_start: str = ""
@@ -403,6 +404,7 @@ class ManpowerState(ExpensesState):
         self.sf_staff_code = row.get("staff_code", "")
         position = row.get("position", "")
         self.sf_position = position if position in ("ABM", "ASV", "SV", "RA") else ""
+        self.sf_employment_type = row.get("employment_type", "Not Set")
         self.schedule_form_error = ""
         self.schedule_staff_confirmation = ""
         self.schedule_form_open = True
@@ -431,6 +433,8 @@ class ManpowerState(ExpensesState):
     def set_sf_staff_code(self, value: str): self.sf_staff_code = value
     @rx.event
     def set_sf_position(self, value: str): self.sf_position = value
+    @rx.event
+    def set_sf_employment_type(self, value: str): self.sf_employment_type = value
     @rx.event
     def set_sc_code(self, value: str): self.sc_code = value
     @rx.event
@@ -461,7 +465,8 @@ class ManpowerState(ExpensesState):
             if self.schedule_form_kind == "staff":
                 app_service.save_staff(user, store_id,
                     parse_client_id(self.schedule_editing_id, "staff") if self.schedule_editing_id else None,
-                    name=self.sf_name, staff_code=self.sf_staff_code, position=self.sf_position)
+                    name=self.sf_name, staff_code=self.sf_staff_code, position=self.sf_position,
+                    employment_type=self.sf_employment_type)
             else:
                 app_service.save_shift_code(user, store_id,
                     self.schedule_editing_id or None, code=self.sc_code,
@@ -480,6 +485,7 @@ class ManpowerState(ExpensesState):
             self.schedule_staff_confirmation = f"{staff_name} added."
             self.sf_name = ""
             self.sf_staff_code = ""
+            self.sf_employment_type = "Not Set"
             yield ManpowerState.load_schedule_data()
             yield rx.call_script("document.getElementById('schedule-staff-name')?.focus()")
         else:
