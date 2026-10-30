@@ -11,12 +11,14 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
+import ducklab.ops_finalize as ops_finalize
 import ducklab.ops_state as ops_state
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
 from ducklab.operations_repository import ConfigNotFoundError
 from ducklab.operations_snapshots import finalization_warnings
-from ducklab.ops_state import OpsState, _version_label
+from ducklab.ops_state import OpsState
+from ducklab.report_presenter import _version_label
 
 
 class FinalizationFixture(unittest.TestCase):
@@ -55,7 +57,10 @@ class FinalizationFixture(unittest.TestCase):
         return state
 
     def bound(self, fn):
+        # The finalize workflow handlers delegate to ducklab.ops_finalize;
+        # both modules' AppService reference is patched.
         with mock.patch.object(ops_state, "app_service", self.app), \
+                mock.patch.object(ops_finalize, "app_service", self.app), \
                 mock.patch.object(OpsState, "_actor", lambda _: self.admin):
             return fn()
 

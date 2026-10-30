@@ -55,7 +55,8 @@ class Fixture(unittest.TestCase):
         # Exercise the real parse code path with a plain stand-in object
         # (Reflex state can't be instantiated outside an app context).
         import types
-        from ducklab.ops_stores_state import SETUP_ALL, StoresState
+        from ducklab.ops_setup_state import SETUP_ALL
+        from ducklab.ops_stores_state import StoresState
         st = types.SimpleNamespace(
             setup_original={attr: "" for attr, _, _, _ in SETUP_ALL},
             **{attr: "" for attr, _, _, _ in SETUP_ALL})

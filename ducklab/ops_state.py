@@ -4,6 +4,9 @@ All data flows through AppService (authenticated + authorized). Report data
 is formatted server-side into plain Python structures so monetary values
 never pass through binary floats, and client-supplied roles/store IDs are
 never trusted — the session token is revalidated on every event.
+
+The finalization/correction workflow and report export live in
+ducklab/ops_finalize.py; the event handlers here are thin delegates.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import reflex as rx
 from ducklab import authz
 from ducklab import design as ds
 from ducklab import kpi
+from ducklab import ops_finalize
 from ducklab import report_presenter
 from ducklab.input_validation import parse_client_id
 from ducklab.auth_pages import AuthState, app_service
@@ -24,9 +28,7 @@ from ducklab.auth_service import AuthenticationError, AuthorizationError, User
 from ducklab.operations_repository import (
     ConfigNotFoundError, InvalidMonthError, RepositoryError, StoreNotFoundError,
 )
-from ducklab.operations_snapshots import (
-    SnapshotNotFoundError, finalization_warnings, snapshot_to_report,
-)
+from ducklab.operations_snapshots import SnapshotNotFoundError
 from ducklab.operations_write_repository import ValidationError
 
 
@@ -313,117 +315,26 @@ class OpsState(AuthState):
     @rx.event
     def open_finalize(self) -> None:
         """Preflight current live data; warnings are informational only."""
-        yield from self._open_finalize("finalize")
+        yield from ops_finalize.open_finalize(self, "finalize")
 
     @rx.event
     def open_correct(self) -> None:
         """Corrections always snapshot live data, not the selected version."""
-        yield from self._open_finalize("correct")
-
-    def _open_finalize(self, action: str) -> None:
-        self.finalize_dialog_open = True
-        self.finalize_action = action
-        self.finalize_error = ""
-        self.finalize_warnings = []
-        self.finalize_next_version = 1
-        try:
-            user = self._actor()
-            store_id = self._selected_store_id()
-            month = self._selected_month()
-            if store_id is None or month is None:
-                raise SnapshotNotFoundError("Select a store and month first.")
-            report = app_service.preview_month(user, store_id, month)
-            rows = app_service.list_report_versions(user, store_id, month)
-            self.finalize_month_label = month_label(month)
-            self.finalize_next_version = max(
-                (int(row["version"]) for row in rows), default=0) + 1
-            self.finalize_warnings = finalization_warnings(report)
-        except Exception as exc:
-            self.finalize_error = _finalize_error(exc)
-        finally:
-            self.finalize_saving = False
-        yield
+        yield from ops_finalize.open_finalize(self, "correct")
 
     @rx.event
     def set_finalize_dialog_open(self, open: bool) -> None:
-        self.finalize_dialog_open = bool(open)
-        if not open:
-            self.finalize_error = ""
+        ops_finalize.set_finalize_dialog_open(self, open)
 
     @rx.event
     def save_finalization(self) -> None:
         """Create a new immutable snapshot and explicitly select its head."""
-        if self.finalize_saving:
-            return
-        self.finalize_saving = True
-        self.finalize_error = ""
-        yield
-        try:
-            user = self._actor()
-            store_id = self._selected_store_id()
-            month = self._selected_month()
-            if store_id is None or month is None:
-                raise SnapshotNotFoundError("Select a store and month first.")
-            save = (app_service.correct_month if self.finalize_action == "correct"
-                    else app_service.finalize_month)
-            result = save(user, store_id, month)
-            # The service's allocated number is authoritative, even if another
-            # operator finalized while this dialog was open.
-            rows = app_service.list_report_versions(user, store_id, month)
-            row = next(row for row in rows
-                       if int(row["version"]) == int(result["version"]))
-            self.finalize_dialog_open = False
-            self._clear_report()
-            self.report_mode = "finalized"
-            self.selected_version_label = _version_label(row)
-            version_rows = app_service.list_report_versions(user, store_id, month)
-            self.versions = [_version_label(v) for v in version_rows]
-            self.report_status = "loading"
-            self._load_report(user, store_id, month, version_rows)
-        except Exception as exc:
-            # Keep both this dialog and the previously selected report intact.
-            self.finalize_error = _finalize_error(exc)
-        finally:
-            self.finalize_saving = False
+        yield from ops_finalize.save_finalization(self)
 
     @rx.event
     def export_report(self) -> rx.event.EventSpec | None:
         """Download the selected live or finalized report as Excel."""
-        self.error_message = ""
-        store_id = self._selected_store_id()
-        month = self._selected_month()
-        if store_id is None or month is None:
-            self.error_message = "Select a store and month before exporting."
-            return None
-        try:
-            from ducklab import report_export
-            user = self._actor()
-            snapshot = None
-            if self.report_mode == "finalized":
-                wanted = None
-                if self.selected_version_label:
-                    rows = app_service.list_report_versions(user, store_id, month)
-                    wanted = _version_for_label(self.selected_version_label, rows)
-                snapshot = app_service.get_finalized_report(
-                    user, store_id, month, version=wanted)
-                report = snapshot_to_report(snapshot)
-            else:
-                report = app_service.preview_month(user, store_id, month)
-            data = report_export.export_bytes(
-                report, app_service.read_repo,
-                include_payroll=authz.can_manage_config(user), snapshot=snapshot)
-            return rx.download(
-                data=data,
-                filename=report_export.export_filename(report, snapshot))
-        except AuthenticationError:
-            return rx.redirect("/login")
-        except (AuthorizationError, ConfigNotFoundError, StoreNotFoundError,
-                InvalidMonthError, SnapshotNotFoundError, RepositoryError) as exc:
-            self.error_message = str(exc)
-            return None
-        except Exception as exc:
-            self.error_message = str(exc) or "The report could not be exported."
-            return None
+        return ops_finalize.export_report(self)
 
     @rx.event
     def refresh_report(self) -> None:
@@ -491,7 +402,8 @@ class OpsState(AuthState):
             version_rows = app_service.list_report_versions(user, store_id, month)
         except AuthorizationError:
             version_rows = []
-        self.versions = [_version_label(v) for v in version_rows]
+        self.versions = [report_presenter._version_label(v)
+                         for v in version_rows]
         self.report_status = "loading"
         yield
         try:
@@ -520,8 +432,8 @@ class OpsState(AuthState):
                         "No finalized snapshot exists for this store and month")
                 wanted = None
                 if self.selected_version_label:
-                    wanted = _version_for_label(self.selected_version_label,
-                                                version_rows)
+                    wanted = report_presenter._version_for_label(
+                        self.selected_version_label, version_rows)
                 snap = app_service.get_finalized_report(user, store_id, month,
                                                         version=wanted)
                 data = _serialize_snapshot(snap, user=user)
@@ -586,32 +498,6 @@ def _refresh_store_active(service, user, store_id: int, stores: list[dict],
         if s["label"] == label:
             s["active"] = active
     return active, error
-
-
-def _finalize_error(exc: Exception) -> str:
-    if isinstance(exc, (AuthenticationError, AuthorizationError)):
-        return auth_message(exc)
-    return str(exc) or "The report could not be finalized."
-
-
-def _version_label(row: dict) -> str:
-    """Version label based on the active-head link, never version order."""
-    label = (f"Version {row['version']} — "
-             f"{ds.fmt_kl_datetime(row['created_at'])}")
-    if "superseded_by" in row:
-        label += " — " + ("Superseded" if row["superseded_by"] is not None
-                          else "Current")
-    return label
-
-
-def _version_for_label(label: str, version_rows: list[dict]) -> int:
-    """Map a picker label back to its version number. Labels arrive over
-    the socket, so anything not in the current list is rejected."""
-    for row in version_rows:
-        if _version_label(row) == label:
-            return int(row["version"])
-    raise SnapshotNotFoundError(
-        "Unknown report version — choose one from the list.")
 
 
 # ---------------------------------------------------------------------------

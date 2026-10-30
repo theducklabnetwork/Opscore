@@ -10,12 +10,14 @@ from unittest import mock
 from openpyxl import load_workbook
 
 from ducklab import design as ds
+from ducklab import ops_finalize
 from ducklab import ops_state
 from ducklab import report_export
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
 from ducklab.operations_snapshots import snapshot_to_report
-from ducklab.ops_state import OpsState, _version_label
+from ducklab.ops_state import OpsState
+from ducklab.report_presenter import _version_label
 
 
 class FinalizedReportExportTests(unittest.TestCase):
@@ -54,10 +56,11 @@ class FinalizedReportExportTests(unittest.TestCase):
                 self.admin, self.sid, "2026-09") if row["version"] == version)
             state.selected_version_label = _version_label(row)
         with mock.patch.object(ops_state, "app_service", self.app), \
+                mock.patch.object(ops_finalize, "app_service", self.app), \
                 mock.patch.object(OpsState, "_actor", lambda _: actor), \
                 mock.patch.object(OpsState, "_selected_month",
                                   lambda _: "2026-09"), \
-                mock.patch.object(ops_state.rx, "download",
+                mock.patch.object(ops_finalize.rx, "download",
                                   side_effect=lambda **kw: kw):
             result = state.export_report()
         self.assertIsNotNone(result, state.error_message)
@@ -131,6 +134,7 @@ class FinalizedReportExportTests(unittest.TestCase):
         state.selected_version_label = _version_label(row)
         state.report = {"sales": {"mtd": "original"}}
         with mock.patch.object(ops_state, "app_service", self.app), \
+                mock.patch.object(ops_finalize, "app_service", self.app), \
                 mock.patch.object(OpsState, "_actor", lambda _: self.admin), \
                 mock.patch.object(OpsState, "_selected_month",
                                   lambda _: "2026-09"), \

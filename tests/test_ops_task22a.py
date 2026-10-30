@@ -531,7 +531,7 @@ class BudgetClearConflictTests(Fixture):
         return self.app.get_expense_budgets(self.admin, self.sid, "2026-10")
 
     def test_monthly_setup_rows(self):
-        from ducklab.ops_stores_state import _parse_budget_rows
+        from ducklab.ops_setup_state import _parse_budget_rows
         row = {"id": str(self.cat), "name": "Elec", "value": "600.00",
                "original": "500.00", "clear": "1"}
         self.assertEqual(_parse_budget_rows([row]), ({}, [
@@ -544,7 +544,7 @@ class BudgetClearConflictTests(Fixture):
         self.assertEqual(_parse_budget_rows([row]), ({self.cat: None}, []))
 
     def test_monthly_setup_save_writes_nothing(self):
-        import ducklab.ops_stores_state as mod
+        import ducklab.ops_setup_state as mod
         from ducklab.ops_stores_state import StoresState
         st = StoresState()
         st.budget_rows = [{"id": str(self.cat), "name": "Elec",

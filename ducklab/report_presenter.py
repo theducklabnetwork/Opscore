@@ -10,11 +10,32 @@ import calendar
 
 from ducklab import authz, kpi, store_ops_db
 from ducklab import design as ds
+from ducklab.operations_snapshots import SnapshotNotFoundError
 
 
 def month_label(month: str) -> str:
     y, m = int(month[:4]), int(month[5:7])
     return f"{calendar.month_name[m]} {y}"
+
+
+def _version_label(row: dict) -> str:
+    """Version label based on the active-head link, never version order."""
+    label = (f"Version {row['version']} — "
+             f"{ds.fmt_kl_datetime(row['created_at'])}")
+    if "superseded_by" in row:
+        label += " — " + ("Superseded" if row["superseded_by"] is not None
+                          else "Current")
+    return label
+
+
+def _version_for_label(label: str, version_rows: list[dict]) -> int:
+    """Map a picker label back to its version number. Labels arrive over
+    the socket, so anything not in the current list is rejected."""
+    for row in version_rows:
+        if _version_label(row) == label:
+            return int(row["version"])
+    raise SnapshotNotFoundError(
+        "Unknown report version — choose one from the list.")
 
 
 def _payroll_gated(values: dict, user) -> dict:

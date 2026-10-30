@@ -299,10 +299,13 @@ class StoreChoiceTests(Fixture):
 
 class MonthlySetupTests(Fixture):
     def setup_state(self):
-        import ducklab.ops_stores_state as mod
+        # load_page_data lives in ops_stores_state; the setup handlers
+        # (save_setup, holidays) in ducklab.ops_setup_state — patch both.
+        import ducklab.ops_setup_state as mod
+        import ducklab.ops_stores_state as stores_mod
         from ducklab.ops_stores_state import StoresState
         st = StoresState()
-        self.bound(mod, StoresState, st.load_page_data)
+        self.bound(stores_mod, StoresState, st.load_page_data)
         return mod, StoresState, st
 
     def test_targets_and_holidays_round_trip(self):
