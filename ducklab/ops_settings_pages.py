@@ -33,7 +33,7 @@ from ducklab.operations_write_repository import (
 )
 from ducklab.ops_shell import shell
 from ducklab.input_validation import parse_client_id
-from ducklab.ops_state import OpsState, SESSION_EXPIRED
+from ducklab.ops_shared_state import SESSION_EXPIRED, SharedOpsState
 from ducklab.session_transport import DB_PATH
 
 APP_NAME = "Opscore"
@@ -78,7 +78,7 @@ def app_version() -> str:
     return "Unknown"
 
 
-class SettingsState(OpsState):
+class SettingsState(SharedOpsState):
     """Account + Reference Data + About. Identity from the session,
     re-validated on every event."""
 
