@@ -275,6 +275,16 @@ class AppService:
             "entries": self.read_repo.get_schedule_entries(store_id, start, end),
         }
 
+    def get_daily_schedule_preview(self, user: User, store_id: int,
+                                   day: date) -> dict[str, int]:
+        """Staffing/leave values to preview in Daily Entry (read-only)."""
+        authz.require_store_access(user, store_id)
+        from ducklab import kpi
+        return kpi.schedule_day_preview(
+            self.read_repo.get_staff(store_id),
+            self.read_repo.get_schedule_entries(store_id, day, day),
+            self.read_repo.get_shift_codes())
+
     def get_schedule_target(self, user: User, store_id: int, week_start: date):
         authz.require_store_access(user, store_id)
         return self.read_repo.get_schedule_target(store_id, week_start)
