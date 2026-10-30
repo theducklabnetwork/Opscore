@@ -17,3 +17,4 @@ argon2-cffi==25.1.0
 openpyxl==3.1.5
 plotly==6.3.1
 pywebview==6.2.1
+starlette==1.10.0
