@@ -10,6 +10,7 @@ from ducklab import ui
 from ducklab.auth_pages import AuthState
 from ducklab.ops_overview_state import OverviewState
 from ducklab.ops_shell import shell
+from ducklab.ops_shared_state import SharedOpsState
 from ducklab.ops_state import OpsState
 
 
@@ -21,7 +22,7 @@ def dashboard_page() -> rx.Component:
         "Dashboard",
         rx.vstack(
             rx.cond(
-                ~OpsState.has_stores,
+                ~SharedOpsState.has_stores,
                 ui.section_card(
                     rx.text("No stores are assigned to your account. Ask an "
                             "administrator to assign you a store to see the "
@@ -33,7 +34,7 @@ def dashboard_page() -> rx.Component:
                 ),
             ),
             rx.cond(
-                OpsState.has_stores,
+                SharedOpsState.has_stores,
                 rx.vstack(
                     rx.cond(O.error != "", ds.error_callout(O.error)),
                     rx.cond(
@@ -700,6 +701,8 @@ def report_page() -> rx.Component:
             rx.cond(~R.all_stores, _finalize_dialog()),
             spacing=ui.GAP, width="100%",
         ),
+        on_store=OpsState.select_store,
+        on_month=OpsState.select_month,
         tour_key="report",
         include_all_stores=True,
     )

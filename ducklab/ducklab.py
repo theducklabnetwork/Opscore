@@ -44,6 +44,7 @@ from ducklab.ops_expenses_state import ExpensesState  # noqa: E402
 from ducklab.ops_manpower_pages import manpower_page  # noqa: E402
 from ducklab.ops_manpower_state import ManpowerState  # noqa: E402
 from ducklab.ops_state import OpsState  # noqa: E402
+from ducklab.ops_shared_state import SharedOpsState  # noqa: E402
 from ducklab.ops_overview_state import OverviewState  # noqa: E402
 from ducklab.ops_stock_pages import stock_page  # noqa: E402
 from ducklab.ops_stock_state import StockState  # noqa: E402
@@ -67,68 +68,68 @@ app.add_page(
     title="Dashboard — Opscore Operations",
     on_load=[OverviewState.load_overview,
              OverviewState.maybe_start_tour,
-             OpsState.maybe_start_page_tour("dashboard")],
+             SharedOpsState.maybe_start_page_tour("dashboard")],
 )
 app.add_page(
     ops_pages.report_page,
     route="/ops/report",
     title="Monthly Report — Opscore Operations",
     on_load=[OpsState.load_ops,
-             OpsState.maybe_start_page_tour("report")],
+             SharedOpsState.maybe_start_page_tour("report")],
 )
 app.add_page(
     daily_page,
     route="/ops/daily",
     title="Daily Operations — Opscore",
     on_load=[DailyState.load_daily,
-             OpsState.maybe_start_page_tour("daily")],
+             SharedOpsState.maybe_start_page_tour("daily")],
 )
 app.add_page(
     expenses_page,
     route="/ops/expenses",
     title="Expenses Management — Opscore",
     on_load=[ExpensesState.load_expenses,
-             OpsState.maybe_start_page_tour("expenses")],
+             SharedOpsState.maybe_start_page_tour("expenses")],
 )
 app.add_page(
     manpower_page,
     route="/ops/manpower",
     title="Manpower Efficiency — Opscore",
     on_load=[ManpowerState.load_manpower,
-             OpsState.maybe_start_page_tour("manpower")],
+             SharedOpsState.maybe_start_page_tour("manpower")],
 )
 app.add_page(
     stock_page,
     route="/ops/stock",
     title="Stock Management — Opscore",
     on_load=[StockState.load_stock,
-             OpsState.maybe_start_page_tour("stock")],
+             SharedOpsState.maybe_start_page_tour("stock")],
 )
 app.add_page(
     stores_page,
     route="/ops/stores",
     title="Store Management — Opscore",
     on_load=[StoresState.load_stores,
-             OpsState.maybe_start_page_tour("stores")],
+             SharedOpsState.maybe_start_page_tour("stores")],
 )
 app.add_page(
     sales_page,
     route="/ops/sales",
     title="Sales Performance — Opscore",
     on_load=[SalesState.load_sales,
-             OpsState.maybe_start_page_tour("sales")],
+             SharedOpsState.maybe_start_page_tour("sales")],
 )
 app.add_page(
     actions_page,
     route="/ops/actions",
     title="Action Tracker — Opscore",
     on_load=[ActionsState.load_actions,
-             OpsState.maybe_start_page_tour("actions")],
+             SharedOpsState.maybe_start_page_tour("actions")],
 )
 app.add_page(
     settings_page,
     route="/ops/settings",
     title="Settings — Opscore",
     on_load=[SettingsState.load_settings,
-             OpsState.maybe_start_page_tour("settings")],
+             SharedOpsState.maybe_start_page_tour("settings")],
 )
