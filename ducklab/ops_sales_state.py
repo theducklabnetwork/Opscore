@@ -558,3 +558,6 @@ class SalesState(SharedOpsState):
     def _pace_chart(self, days, dim: int, level1) -> list[dict]:
         """Cumulative pace points (kpi.pace_series; shared with Overview)."""
         return kpi.pace_series(days, dim, level1)
+
+
+ops_charts.register_chart_state(SalesState)

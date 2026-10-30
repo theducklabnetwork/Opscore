@@ -688,3 +688,6 @@ def compute_overview(user, store_id: int, month: str, today: date,
     }
     out["finalized_notice"] = finalized_notice
     return out
+
+
+ops_charts.register_chart_state(OverviewState)

@@ -29,6 +29,7 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, InvalidMonthError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_snapshots import SnapshotNotFoundError
+from ducklab.ops_overview_state import compute_portfolio
 
 # Canonical home is ducklab/ops_shared_state (Phase 3.6); re-exported here
 # so existing imports (ducklab modules and tests) keep working.
@@ -234,7 +235,6 @@ class OpsState(SharedOpsState):
             self.report_status = "loading"
             yield
             try:
-                from ducklab.ops_overview_state import compute_portfolio
                 user = self._actor()
                 data = compute_portfolio(user, month, kpi.kl_today())
                 self.portfolio = data["portfolio"]
