@@ -192,6 +192,41 @@ def _summary(label, value, id=None) -> rx.Component:
     return ui.status_chip(label + ": " + value, "gray", id=id)
 
 
+def _schedule_preview() -> rx.Component:
+    rows = [("Full-Time Staff", "ft_working"),
+            ("Part-Time Staff", "pt_working"),
+            ("Annual Leave", "leave_annual"),
+            ("Medical Leave", "leave_mc"),
+            ("Unpaid Leave", "leave_unpaid")]
+    return rx.cond(
+        DailyState.schedule_preview_visible,
+        rx.vstack(
+            rx.text("Schedule Preview", size="2", weight="medium",
+                    color=ds.TEXT),
+            rx.grid(
+                *[rx.text(label + ": " +
+                          DailyState.schedule_preview[key], size="2")
+                  for label, key in rows],
+                columns=rx.breakpoints(initial="2", sm="5"), spacing="2",
+                width="100%"),
+            rx.cond(DailyState.schedule_preview_warning != "",
+                    rx.callout(DailyState.schedule_preview_warning,
+                               icon="triangle-alert", color_scheme="amber",
+                               variant="soft", width="100%",
+                               id="schedule-preview-warning")),
+            rx.hstack(
+                rx.button("Apply to Entry", size="2",
+                          on_click=DailyState.apply_schedule_preview,
+                          id="apply-schedule-confirm"),
+                rx.button("Cancel", size="2", variant="soft",
+                          on_click=DailyState.cancel_schedule_preview,
+                          id="apply-schedule-cancel"),
+                spacing="2"),
+            padding="3", border=f"1px solid {ds.BORDER}", border_radius="8px",
+            spacing="3", width="100%", id="schedule-preview"),
+    )
+
+
 def _manpower_section() -> rx.Component:
     fields = [
         ("f_ft_working", "set_f_ft_working", "Full-Time Staff", "f-ft"),
@@ -211,6 +246,12 @@ def _manpower_section() -> rx.Component:
         ui.form_grid(*[_num_field(label, attr, setter, fid)
                        for attr, setter, label, fid in fields],
                      columns="3"),
+        rx.cond(DailyState.can_write,
+                rx.button(rx.icon("calendar-check", size=15),
+                          "Apply Schedule", size="2", variant="soft",
+                          on_click=DailyState.preview_schedule,
+                          id="apply-schedule")),
+        _schedule_preview(),
         extra=_summary("Effective Staff", DailyState.form_effective_staff,
                        id="effective-staff"),
     )

@@ -55,6 +55,40 @@ def kl_today() -> date:
     return datetime.now(KL_TZ).date()
 
 
+def schedule_day_preview(staff: list[dict], entries: list[dict],
+                         codes: list[dict]) -> dict[str, int]:
+    """Daily-entry values from schedule rows for one day.
+
+    Only timed shifts count as working staff. Leave is mapped by the three
+    standard codes; every other custom, untimed code adds no leave.
+    """
+    staff_by_id = {row["id"]: row for row in staff}
+    codes_by_code = {row["code"]: row for row in codes}
+    counts = {"ft_working": 0, "pt_working": 0, "leave_annual": 0,
+              "leave_mc": 0, "leave_unpaid": 0, "not_set": 0}
+    leave_codes = {"AL": "leave_annual", "MC": "leave_mc",
+                   "UPL": "leave_unpaid"}
+    for entry in entries:
+        member = staff_by_id.get(entry["staff_id"])
+        if member is None:
+            continue
+        code = entry["code"]
+        if code in leave_codes:
+            counts[leave_codes[code]] += 1
+            continue
+        shift = codes_by_code.get(code, {})
+        if not shift.get("start_time") or not shift.get("end_time"):
+            continue
+        employment_type = member.get("employment_type", "Not Set")
+        if employment_type == "Full-Time":
+            counts["ft_working"] += 1
+        elif employment_type == "Part-Time":
+            counts["pt_working"] += 1
+        else:
+            counts["not_set"] += 1
+    return counts
+
+
 def reporting_date(month: str, today: Optional[date] = None) -> date:
     """Workbook Expense Monitor!B4: max(month start, min(today, month end)).
 

@@ -105,6 +105,9 @@ class DailyState(OpsState):
     stock_original: dict[str, str] = {}
     # original values for unsaved-changes detection
     form_original: dict[str, str] = {}
+    # Schedule preview is form-only until the manager explicitly applies it.
+    schedule_preview: dict[str, str] = {}
+    schedule_preview_date: str = ""
 
     # ------------------------------------------------------------------
     # helpers
@@ -162,6 +165,64 @@ class DailyState(OpsState):
         return self.day_expenses.get(self.form_date, "—")
 
     @rx.var
+    def schedule_preview_visible(self) -> bool:
+        return (bool(self.schedule_preview)
+                and self.schedule_preview_date == self.form_date)
+
+    @rx.var
+    def schedule_preview_warning(self) -> str:
+        count = int(self.schedule_preview.get("not_set", "0"))
+        return (f"{count} scheduled staff have Employment Type Not Set and "
+                "are excluded from Full-Time and Part-Time counts."
+                if count else "")
+
+    # ------------------------------------------------------------------
+    # Apply Schedule: preview first; confirmation changes form fields only.
+    # ------------------------------------------------------------------
+    def _clear_schedule_preview(self) -> None:
+        self.schedule_preview = {}
+        self.schedule_preview_date = ""
+
+    @rx.event
+    def preview_schedule(self) -> None:
+        self.form_error = ""
+        self._clear_schedule_preview()
+        store_id = self._selected_store_id()
+        month = self._selected_month()
+        error = _entry_date_error(self.form_date, month)
+        if store_id is None and not error:
+            error = "Select a store and month first."
+        if error:
+            self.form_error = error
+            return
+        try:
+            preview = app_service.get_daily_schedule_preview(
+                self._actor(), store_id, date.fromisoformat(self.form_date))
+        except AuthenticationError:
+            self.form_error = SESSION_EXPIRED
+            return
+        except (AuthorizationError, StoreNotFoundError) as exc:
+            self.form_error = auth_message(exc)
+            return
+        self.schedule_preview = {key: str(value)
+                                 for key, value in preview.items()}
+        self.schedule_preview_date = self.form_date
+
+    @rx.event
+    def cancel_schedule_preview(self) -> None:
+        self._clear_schedule_preview()
+
+    @rx.event
+    def apply_schedule_preview(self) -> None:
+        if not self.schedule_preview_visible:
+            return
+        for attr, col, _, _ in MANPOWER_FIELDS:
+            if col in self.schedule_preview:
+                setattr(self, attr, self.schedule_preview[col])
+                self.clear_fields = {**self.clear_fields, attr: False}
+        self._clear_schedule_preview()
+
+    @rx.var
     def form_effective_staff(self) -> str:
         """FT + PT × configured factor (preview; stored values unchanged)."""
         try:
@@ -187,6 +248,7 @@ class DailyState(OpsState):
             return
         self.selected_store_label = label
         self.form_open = False
+        self._clear_schedule_preview()
         self.save_notice = ""
         self._clear_report()
         yield DailyState.refresh_report()
@@ -198,6 +260,7 @@ class DailyState(OpsState):
             return
         self.selected_month_label = label
         self.form_open = False
+        self._clear_schedule_preview()
         self.save_notice = ""
         self._clear_report()
         yield DailyState.refresh_report()
@@ -548,6 +611,7 @@ class DailyState(OpsState):
             return
         self.form_error = ""
         self.save_notice = ""
+        self._clear_schedule_preview()
         self.form_date = iso_date
         self.form_title = "Daily Entry"
         values = {attr: "" for attr, _, _, _ in SALES_FIELDS + MANPOWER_FIELDS}
@@ -572,6 +636,7 @@ class DailyState(OpsState):
     def close_entry(self) -> None:
         self.form_open = False
         self.form_error = ""
+        self._clear_schedule_preview()
 
     @rx.event
     def set_stock_amount(self, code: str, value: str) -> None:
