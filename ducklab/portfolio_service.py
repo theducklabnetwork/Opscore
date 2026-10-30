@@ -18,6 +18,14 @@ from ducklab.operations_repository import RepositoryError
 
 
 @dataclass
+class PortfolioAlert:
+    kind: str
+    store: str
+    text: str
+    href: str
+
+
+@dataclass
 class PortfolioStore:
     store_id: int
     code: str
@@ -32,6 +40,9 @@ class PortfolioStore:
     stock_loss_cents: Optional[int] = None
     days_reported: int = 0
     days_in_month: int = 0
+    open_actions: int = 0
+    overdue_actions: int = 0
+    alerts: list[PortfolioAlert] = field(default_factory=list)
 
     @property
     def status(self) -> str:
@@ -52,8 +63,24 @@ class PortfolioReport:
     salary_cents: Optional[int]
     salary_ratio: Optional[Decimal]
     payroll_visible: bool
+    open_actions: int
+    overdue_actions: int
+    alerts: list[PortfolioAlert] = field(default_factory=list)
     payroll_status: str = ""
     failures: list[str] = field(default_factory=list)
+
+
+def _alert_kind(alert: dict[str, str]) -> str:
+    """Display grouping only; conditions are evaluated by dashboard_attention."""
+    href = alert["href"]
+    if href == "/ops/expenses" and "OVER BUDGET" in alert["text"]:
+        return "Expense Over Budget"
+    return {
+        "/ops/daily": "Unreported Days",
+        "/ops/stock": "Stock Loss Over Target",
+        "/ops/manpower": "High Turnover",
+        "/ops/actions": "Overdue Actions",
+    }.get(href)
 
 
 def _total(values) -> Optional[int]:
@@ -73,9 +100,11 @@ class PortfolioService:
         authz.require_active(user)
         # Imported lazily to keep the aggregation boundary easy to fake in tests.
         from ducklab import kpi
+        from ducklab.ops_overview_state import dashboard_attention
 
         as_of = kpi.reporting_date(month, today)
         stores = self.app.list_my_stores(user)
+        alert_today = today or kpi.kl_today()
         rows: list[PortfolioStore] = []
         for store in stores:
             row = PortfolioStore(store["id"], store["code"], store["name"], False)
@@ -89,6 +118,13 @@ class PortfolioService:
                 # Setup errors and corrupt store-local data must not take down
                 # other stores. No diagnostic details are exposed to the UI.
                 row.error = str(exc)
+                if store["active"]:
+                    row.alerts.append(PortfolioAlert(
+                        kind="Setup Required",
+                        store=f"{row.code} — {row.name}",
+                        text="Setup Required",
+                        href=f"/ops?store={row.store_id}",
+                    ))
                 continue
             s, e, m, st = (report.sales, report.expenses,
                            report.manpower, report.stock)
@@ -103,10 +139,24 @@ class PortfolioService:
             # The per-store ratio is present only when its own payroll exists;
             # portfolio ratios below always use summed money, never this field.
             row.salary_ratio = m.salary_ratio_incl_support
+            if store["active"]:
+                row.open_actions = report.actions.open
+                row.overdue_actions = report.actions.counts["overdue"]
+                for alert in dashboard_attention(report, alert_today):
+                    kind = _alert_kind(alert)
+                    if kind is None:
+                        continue
+                    row.alerts.append(PortfolioAlert(
+                        kind=_alert_kind(alert),
+                        store=f"{row.code} — {row.name}",
+                        text=alert["text"],
+                        href=f"/ops?store={row.store_id}",
+                    ))
 
         configured = [r for r in rows if r.configured]
         # Role policy is global in authz: anyone without payroll permission
         # gets no payroll values, rather than values for a permitted subset.
+        active = [r for r in rows if r.configured]
         payroll_visible = authz.can_manage_config(user)
         salary_total = _total(r.salary_cents for r in configured
                               if r.salary_cents is not None)
@@ -139,6 +189,9 @@ class PortfolioService:
             salary_cents=salary_total,
             salary_ratio=salary_ratio,
             payroll_visible=payroll_visible,
+            open_actions=sum(r.open_actions for r in active),
+            overdue_actions=sum(r.overdue_actions for r in active),
+            alerts=[a for r in rows for a in r.alerts],
             payroll_status=payroll_status,
             failures=[r.code for r in rows if not r.configured],
         )

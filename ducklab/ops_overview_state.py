@@ -12,7 +12,7 @@ injectable for tests.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, TypedDict
 from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
@@ -31,6 +31,11 @@ from ducklab.operations_repository import (
 from ducklab.ops_actions_state import ActionsState
 from ducklab.ops_state import OpsState
 ALL_STORES = "All Stores"
+
+
+class PortfolioAlertGroup(TypedDict):
+    kind: str
+    items: list[dict[str, str]]
 
 # Status colors come from the one shared map in design.py
 # (ds.status_color) — keyed by the exact strings kpi.py returns.
@@ -74,6 +79,7 @@ class OverviewState(ActionsState):
     portfolio: dict = {}
     portfolio_summary: list[dict[str, str]] = []
     portfolio_rows: list[dict[str, str]] = []
+    portfolio_alerts: list[PortfolioAlertGroup] = []
 
     # sparklines (sales + stock), one figure per theme
     spark_sales_dark: go.Figure = go.Figure()
@@ -113,6 +119,7 @@ class OverviewState(ActionsState):
         self.portfolio = {}
         self.portfolio_summary = []
         self.portfolio_rows = []
+        self.portfolio_alerts = []
         self.spark_sales_dark = go.Figure()
         self.spark_sales_light = go.Figure()
         self.spark_stock_dark = go.Figure()
@@ -229,6 +236,8 @@ def compute_portfolio(user, month: str, today: date) -> dict:
         ("Total Stock Loss", ds.fmt_rm(report.stock_loss_cents), coverage),
         ("Total Salary Cost", ds.fmt_rm(report.salary_cents), coverage + salary_suffix),
         ("Salary Ratio", ds.fmt_pct(report.salary_ratio), days + salary_suffix),
+        ("Open Actions", str(report.open_actions), "Active stores"),
+        ("Overdue Actions", str(report.overdue_actions), "Active stores"),
     ]
     if not report.payroll_visible:
         for item in summary[3:]:
@@ -262,12 +271,66 @@ def compute_portfolio(user, month: str, today: date) -> dict:
             {"label": label, "value": value, "coverage": sub}
             for label, value, sub in summary],
         "portfolio_rows": rows,
+        "portfolio_alerts": [
+            {"kind": kind,
+             "items": [{"store": a.store, "text": a.text, "href": a.href}
+                       for a in report.alerts if a.kind == kind]}
+            for kind in ("Unreported Days", "Expense Over Budget",
+                         "Stock Loss Over Target", "High Turnover",
+                         "Overdue Actions", "Setup Required")
+        ],
     }
 
 
 def _bar(fraction) -> float:
     """Progress-bar width (0..1) for an engine fraction; 0 when None."""
     return min(float(fraction), 1.0) if fraction is not None else 0.0
+
+
+def dashboard_attention(rep, today: date) -> list[dict[str, str]]:
+    """The single-store Dashboard's alert evaluation, shared with All Stores."""
+    s, e, m, st = rep.sales, rep.expenses, rep.manpower, rep.stock
+    entered, dim = s.days_entered, s.days_in_month
+    complete = s.projection_state == "actual"
+    y, month_number = (int(x) for x in rep.month.split("-"))
+    in_progress = today <= date(y, month_number, dim)
+    l1_status = s.status_by_level.get("level1", "Awaiting data")
+    needs_review = sum(v for k, v in e.validation_counts.items() if k != "OK")
+    acounts = rep.actions.counts
+
+    items: list[dict[str, str]] = []
+    if complete and l1_status == kpi.SALES_BELOW:
+        items.append({"icon": "trending-down",
+                      "text": "Sales below Level 1 for a complete month",
+                      "href": "/ops/sales"})
+    over_budget = [c.name for c in e.categories
+                   if c.budget_status == kpi.CATEGORY_OVER_BUDGET]
+    for name in over_budget:
+        items.append({"icon": "receipt",
+                      "text": f"Expense category OVER BUDGET: {name}",
+                      "href": "/ops/expenses"})
+    if needs_review:
+        items.append({"icon": "flag",
+                      "text": f"{needs_review} expense line(s) need review",
+                      "href": "/ops/expenses"})
+    if acounts["overdue"]:
+        items.append({"icon": "list-checks",
+                      "text": f"{acounts['overdue']} overdue action(s)",
+                      "href": "/ops/actions"})
+    if m.turnover_status == kpi.TURNOVER_HIGH:
+        items.append({"icon": "users",
+                      "text": "HIGH TURNOVER this month",
+                      "href": "/ops/manpower"})
+    if st.status == kpi.STOCK_OVER_TARGET:
+        items.append({"icon": "boxes",
+                      "text": "Stock loss over target",
+                      "href": "/ops/stock"})
+    if not complete and in_progress:
+        items.append({"icon": "calendar-clock",
+                      "text": (f"{dim - entered} unreported day"
+                               + ("" if dim - entered == 1 else "s")),
+                      "href": "/ops/daily"})
+    return items
 
 
 def compute_overview(user, store_id: int, month: str, today: date) -> dict:
@@ -526,40 +589,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["in_progress"] = "1" if not complete else ""
 
     # --- needs attention (existing flags only) --------------------------
-    items: list[dict[str, str]] = []
-    if complete and l1_status == kpi.SALES_BELOW:
-        items.append({"icon": "trending-down",
-                      "text": "Sales below Level 1 for a complete month",
-                      "href": "/ops/sales"})
-    over_budget = [c.name for c in e.categories
-                   if c.budget_status == kpi.CATEGORY_OVER_BUDGET]
-    for name in over_budget:
-        items.append({"icon": "receipt",
-                      "text": f"Expense category OVER BUDGET: {name}",
-                      "href": "/ops/expenses"})
-    if needs_review:
-        items.append({"icon": "flag",
-                      "text": f"{needs_review} expense line(s) need "
-                              "review",
-                      "href": "/ops/expenses"})
-    if acounts["overdue"]:
-        items.append({"icon": "list-checks",
-                      "text": f"{acounts['overdue']} overdue action(s)",
-                      "href": "/ops/actions"})
-    if m.turnover_status == kpi.TURNOVER_HIGH:
-        items.append({"icon": "users",
-                      "text": "HIGH TURNOVER this month",
-                      "href": "/ops/manpower"})
-    if st.status == kpi.STOCK_OVER_TARGET:
-        items.append({"icon": "boxes",
-                      "text": "Stock loss over target",
-                      "href": "/ops/stock"})
-    if not complete and in_progress:
-        items.append({"icon": "calendar-clock",
-                      "text": (f"{dim - entered} unreported day"
-                               + ("" if dim - entered == 1 else "s")),
-                      "href": "/ops/daily"})
-    out["attention"] = items
+    out["attention"] = dashboard_attention(rep, today)
 
     # --- pace chart (same computation as /ops/sales) --------------------
     days = app_service.get_daily_records(user, store_id, month)
