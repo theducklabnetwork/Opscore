@@ -10,6 +10,7 @@ from unittest import mock
 
 from openpyxl import load_workbook
 
+from ducklab import ops_finalize
 from ducklab import ops_state
 from ducklab import store_ops_db
 from ducklab.app_service import AppService
@@ -135,11 +136,12 @@ class ReportExportEventTest(unittest.TestCase):
             state.selected_store_label = "S01 — Store A"
             state.report_mode = "live"
             with mock.patch.object(ops_state, "app_service", app), \
+                    mock.patch.object(ops_finalize, "app_service", app), \
                     mock.patch.object(ops_state.OpsState, "_actor",
                                       lambda _: admin), \
                     mock.patch.object(ops_state.OpsState, "_selected_month",
                                       lambda _: "2026-09"), \
-                    mock.patch.object(ops_state.rx, "download",
+                    mock.patch.object(ops_finalize.rx, "download",
                                       side_effect=lambda **kw: kw) as download:
                 result = state.export_report()
             self.assertEqual(result["filename"], "opscore-S01-2026-09.xlsx")
