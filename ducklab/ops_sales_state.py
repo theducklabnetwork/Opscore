@@ -102,21 +102,79 @@ class SalesState(StoresState):
     sp_hidden_count: int = 0
     sp_hidden_label: str = ""
     sp_show_hidden: bool = False
-    sp_chart: list[dict] = []
     sp_chart_ready: bool = False            # >= 3 reported days
-    sp_fig_dark: go.Figure = go.Figure()                    # Plotly pace (dark theme)
-    sp_fig_light: go.Figure = go.Figure()                   # Plotly pace (light theme)
+    sp_fig_dark: go.Figure | None = None                    # Plotly pace (dark theme)
+    sp_fig_light: go.Figure | None = None                   # Plotly pace (light theme)
     # Daily Sales vs Target (hidden without daily targets), Sales by Day,
     # Sales Calendar
     sp_dvt_ready: bool = False
-    sp_dvt_dark: go.Figure = go.Figure()
-    sp_dvt_light: go.Figure = go.Figure()
+    sp_dvt_dark: go.Figure | None = None
+    sp_dvt_light: go.Figure | None = None
     sp_weekday_ready: bool = False
-    sp_weekday_dark: go.Figure = go.Figure()
-    sp_weekday_light: go.Figure = go.Figure()
+    sp_weekday_dark: go.Figure | None = None
+    sp_weekday_light: go.Figure | None = None
     sp_cal_ready: bool = False
-    sp_cal_dark: go.Figure = go.Figure()
-    sp_cal_light: go.Figure = go.Figure()
+    sp_cal_dark: go.Figure | None = None
+    sp_cal_light: go.Figure | None = None
+
+    # Plain private attribute (no annotation): intentionally not state.
+    _chart_inputs = {}
+
+    def _chart_source(self) -> dict:
+        return self._chart_inputs
+
+    def _apply_pace_theme(self, dark: bool) -> None:
+        src = self._chart_source()
+        days, dim, targets, n = (src[k] for k in
+                                 ("days", "dim", "targets", "compare"))
+        pts = self._pace_chart(days, dim, targets.get("level1"))
+        fig = ops_charts.pace_chart(
+            [p["day"] for p in pts], [p["actual"] for p in pts],
+            [p["budget"] for p in pts], dark=dark, y_title="",
+            levels=kpi.level_pace_lines(targets, dim),
+            highlight=kpi.drawn_level(targets, n))
+        self.sp_fig_dark = fig if dark else None
+        self.sp_fig_light = None if dark else fig
+
+    def _apply_chart_theme(self, dark: bool) -> None:
+        src = self._chart_source()
+        if not src:
+            return
+        self._apply_pace_theme(dark)
+        builders = (("dvt", ops_charts.daily_vs_target),
+                    ("weekday", ops_charts.weekday_bars),
+                    ("cal", ops_charts.sales_calendar))
+        for name, builder in builders:
+            args = src.get(name)
+            if args is None:
+                continue
+            fig = builder(*args, dark=dark)
+            setattr(self, f"sp_{name}_dark", fig if dark else None)
+            setattr(self, f"sp_{name}_light", None if dark else fig)
+
+    @rx.var
+    def active_pace_fig(self) -> go.Figure:
+        return ((self.sp_fig_dark if self.is_dark else self.sp_fig_light)
+                or go.Figure())
+
+    @rx.var
+    def active_dvt_fig(self) -> go.Figure:
+        return ((self.sp_dvt_dark if self.is_dark else self.sp_dvt_light)
+                or go.Figure())
+
+    @rx.var
+    def active_weekday_fig(self) -> go.Figure:
+        return ((self.sp_weekday_dark if self.is_dark else self.sp_weekday_light)
+                or go.Figure())
+
+    @rx.var
+    def active_cal_fig(self) -> go.Figure:
+        return ((self.sp_cal_dark if self.is_dark else self.sp_cal_light)
+                or go.Figure())
+
+    @rx.event
+    def restyle_charts(self, dark: bool) -> None:
+        self._apply_chart_theme(bool(dark))
 
     def _clear_sales(self) -> None:
         self.sp_error = ""
@@ -157,14 +215,14 @@ class SalesState(StoresState):
         self.sp_rows_reported = []
         self.sp_hidden_count = 0
         self.sp_hidden_label = ""
-        self.sp_chart = []
+        self._chart_inputs = {}
         self.sp_chart_ready = False
-        self.sp_fig_dark = go.Figure()
-        self.sp_fig_light = go.Figure()
+        self.sp_fig_dark = None
+        self.sp_fig_light = None
         self.sp_dvt_ready = self.sp_weekday_ready = self.sp_cal_ready = False
         for name in ("dvt", "weekday", "cal"):
-            setattr(self, f"sp_{name}_dark", go.Figure())
-            setattr(self, f"sp_{name}_light", go.Figure())
+            setattr(self, f"sp_{name}_dark", None)
+            setattr(self, f"sp_{name}_light", None)
 
     @rx.event
     def select_compare(self, value: str | list[str]):
@@ -370,22 +428,14 @@ class SalesState(StoresState):
         self.sp_hidden_count = len(self.sp_rows) - len(self.sp_rows_reported)
         self.sp_hidden_label = ds.days_not_reported_label(
             self.sp_hidden_count)
-        self.sp_chart = self._pace_chart(days, dim, s.targets.get("level1"))
         self.sp_chart_ready = entered >= 3
-        pts = self.sp_chart
-        p_days = [p["day"] for p in pts]
-        p_actual = [p["actual"] for p in pts]
-        p_budget = [p["budget"] for p in pts]
-        levels = kpi.level_pace_lines(s.targets, dim)
-        hl = kpi.drawn_level(s.targets, n)
+        pts = self._pace_chart(days, dim, s.targets.get("level1"))
         # y units live in the card subtitle (less chart clutter)
-        self.sp_fig_dark = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                 dark=True, y_title="",
-                                                 levels=levels, highlight=hl)
-        self.sp_fig_light = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                  dark=False, y_title="",
-                                                  levels=levels, highlight=hl)
+        self._chart_inputs = {
+            "days": days, "dim": dim, "targets": s.targets, "compare": n,
+        }
         self._extra_charts(days, month, holidays, targets)
+        self._apply_chart_theme(self.is_dark)
 
     def _extra_charts(self, days, month: str, holidays: set,
                       targets) -> None:
@@ -402,21 +452,16 @@ class SalesState(StoresState):
                      for t in targets],
                     [t.result for t in targets])
             self.sp_dvt_ready = True
-            self.sp_dvt_dark = ops_charts.daily_vs_target(*args, dark=True)
-            self.sp_dvt_light = ops_charts.daily_vs_target(*args, dark=False)
+            self._chart_inputs["dvt"] = args
         avgs = kpi.average_sales_by_weekday(days, holidays)
         self.sp_weekday_ready = any(v is not None for v in avgs)
         if self.sp_weekday_ready:
-            self.sp_weekday_dark = ops_charts.weekday_bars(
-                kpi.DSC_WEEKDAYS, avgs, dark=True)
-            self.sp_weekday_light = ops_charts.weekday_bars(
-                kpi.DSC_WEEKDAYS, avgs, dark=False)
+            self._chart_inputs["weekday"] = (kpi.DSC_WEEKDAYS, avgs)
         weeks = [[None if d is None else
                   (d.day, d.strftime("%a %d %b"), sales.get(d))
                   for d in week] for week in kpi.month_weeks(month)]
         self.sp_cal_ready = True
-        self.sp_cal_dark = ops_charts.sales_calendar(weeks, dark=True)
-        self.sp_cal_light = ops_charts.sales_calendar(weeks, dark=False)
+        self._chart_inputs["cal"] = (weeks,)
 
     def _set_level(self, level, nxt, gap, total: int, pstate: str,
                    entered: int, no_target: bool) -> None:

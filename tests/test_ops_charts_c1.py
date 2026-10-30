@@ -219,7 +219,7 @@ class SalesChartsStateTests(Fixture):
     def test_sales_by_day_and_calendar(self):
         self.july()
         st = self.sales()
-        bar = st.sp_weekday_light.to_plotly_json()["data"][0]
+        bar = st.sp_weekday_dark.to_plotly_json()["data"][0]
         # Mon 6, Wed 1, Thu 2, Fri 3, Sat 4, Sun 5 Jul; no Tuesday
         self.assertEqual(list(bar["y"]), [8700.0, None, 8800.0, 7400.0,
                                           10000.0, 12000.0, 14000.0])

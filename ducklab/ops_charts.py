@@ -4,11 +4,10 @@ Pages must NOT contain raw Plotly layout code — call these builders with
 plain, already-computed values (from kpi.py / assemble_month, never
 recomputed here) and pass the returned figure dict to ``chart(...)``.
 
-Theme: every builder returns a figure dict; the page state computes one
-figure per theme (``dark=True/False``) and the page renders
-``rx.cond(S.is_dark, chart(S.fig_dark), chart(S.fig_light))`` so the
-chart follows the theme toggle instantly, no page reload. Dark and light
-figures differ ONLY in styling.
+Theme: page states retain only the active-theme figure and regenerate it
+from their private source data when the theme changes. The existing dark
+and light fields/selectors are kept for compatibility, but the inactive
+field is empty. Dark and light figures differ ONLY in styling.
 
 Semantics enforced here:
 - daily line with gaps: None/unreported = a gap (connectgaps=False),
