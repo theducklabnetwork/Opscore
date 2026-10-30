@@ -137,7 +137,7 @@ Parsing helpers (`parse_money_cents`, `parse_count`, `parse_decimal`) are shared
 
 ### Weekly schedules
 
-Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Only shift codes with working times count toward daily headcount. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_manpower_state.py` writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Only shift codes with working times count toward daily headcount. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, inherited by ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
 
 ## 6. Monthly reports and snapshots
 
