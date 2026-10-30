@@ -30,6 +30,7 @@ from ducklab.operations_repository import (
 )
 from ducklab.ops_actions_state import ActionsState
 from ducklab.ops_state import OpsState
+ALL_STORES = "All Stores"
 
 # Status colors come from the one shared map in design.py
 # (ds.status_color) — keyed by the exact strings kpi.py returns.
@@ -69,6 +70,10 @@ class OverviewState(ActionsState):
 
     header_context: str = ""
     in_progress: str = ""
+    all_stores: bool = False
+    portfolio: dict = {}
+    portfolio_summary: list[dict[str, str]] = []
+    portfolio_rows: list[dict[str, str]] = []
 
     # sparklines (sales + stock), one figure per theme
     spark_sales_dark: go.Figure = go.Figure()
@@ -104,6 +109,10 @@ class OverviewState(ActionsState):
         self.glance = []
         self.header_context = ""
         self.in_progress = ""
+        self.all_stores = False
+        self.portfolio = {}
+        self.portfolio_summary = []
+        self.portfolio_rows = []
         self.spark_sales_dark = go.Figure()
         self.spark_sales_light = go.Figure()
         self.spark_stock_dark = go.Figure()
@@ -118,6 +127,7 @@ class OverviewState(ActionsState):
             return
         self.selected_store_label = label
         self._clear_overview()
+        self._sync_store_active()
         yield OverviewState.load_overview_data()
 
     @rx.event
@@ -153,15 +163,36 @@ class OverviewState(ActionsState):
 
     @rx.event
     def load_overview_data(self) -> None:
+        all_stores = self.selected_store_label == ALL_STORES
         self._clear_overview()
+        self.all_stores = all_stores
         store_id = self._selected_store_id()
         month = self._selected_month()
-        if store_id is None or month is None:
+        if month is None or (store_id is None and not all_stores):
             return  # has_stores=False handled by the page's empty state
         try:
             user = self._actor()
+            if self.router.page.params.get("store"):
+                wanted = self.router.page.params["store"]
+                target = next((s for s in self.stores
+                               if str(s["id"]) == str(wanted)), None)
+                if target is not None:
+                    self.selected_store_label = target["label"]
+                    self.all_stores = False
+                    all_stores = False
+                    store_id = target["id"]
         except AuthenticationError:
             self.error = "Your session has expired. Please sign in again."
+            return
+        if all_stores:
+            try:
+                data = compute_portfolio(user, month, _today())
+            except (AuthorizationError, InvalidMonthError) as exc:
+                self.error = str(exc)
+                return
+            for k, v in data.items():
+                setattr(self, k, v)
+            self.loaded = True
             return
         try:
             data = compute_overview(user, store_id, month, _today())
@@ -179,6 +210,59 @@ class OverviewState(ActionsState):
         for k, v in data.items():
             setattr(self, k, v)
         self.loaded = True
+
+
+def compute_portfolio(user, month: str, today: date) -> dict:
+    """Formatted All Stores fields; all figures come from PortfolioService."""
+    from ducklab.portfolio_service import PortfolioService
+
+    report = PortfolioService(app_service).build(user, month, today)
+    coverage = (f"{report.configured_count} of {report.store_count} "
+                f"stores configured")
+    days = (f"{report.days_reported} of {report.store_days} "
+            "store-days reported")
+    salary_suffix = (f" · {report.payroll_status}"
+                     if report.payroll_status else "")
+    summary = [
+        ("Total Sales", ds.fmt_rm(report.sales_cents), coverage),
+        ("Total Expenses", ds.fmt_rm(report.expenses_cents), coverage),
+        ("Total Stock Loss", ds.fmt_rm(report.stock_loss_cents), coverage),
+        ("Total Salary Cost", ds.fmt_rm(report.salary_cents), coverage + salary_suffix),
+        ("Salary Ratio", ds.fmt_pct(report.salary_ratio), days + salary_suffix),
+    ]
+    if not report.payroll_visible:
+        for item in summary[3:]:
+            item[1:] = ["Restricted", coverage]
+    rows = []
+    for r in report.rows:
+        if r.configured:
+            if not report.payroll_visible:
+                salary_display = "Restricted"
+            elif r.salary_ratio is None:
+                salary_display = "—"
+            else:
+                salary_display = ds.fmt_pct(r.salary_ratio)
+        else:
+            salary_display = "—"
+        rows.append({
+            "store": f"{r.code} — {r.name}",
+            "status": r.status,
+            "sales": ds.fmt_rm(r.sales_cents) if r.configured else "—",
+            "achievement": ds.fmt_pct(r.achievement) if r.configured else "—",
+            "expenses": ds.fmt_rm(r.expenses_cents) if r.configured else "—",
+            "salary_ratio": salary_display,
+            "stock_loss": ds.fmt_rm(r.stock_loss_cents) if r.configured else "—",
+            "days": (f"{r.days_reported} of {r.days_in_month}"
+                     if r.configured else "—"),
+            "href": f"/ops?store={r.store_id}",
+        })
+    return {
+        "portfolio": {"coverage": coverage, "days": days},
+        "portfolio_summary": [
+            {"label": label, "value": value, "coverage": sub}
+            for label, value, sub in summary],
+        "portfolio_rows": rows,
+    }
 
 
 def _bar(fraction) -> float:

@@ -87,6 +87,7 @@ class OpsState(AuthState):
     # selectors
     stores: list[dict] = []
     store_options: list[str] = []       # display labels "CODE — Name"
+    dashboard_store_options: list[str] = []
     selected_store_label: str = ""
     month_options: list[str] = []       # labels
     selected_month_label: str = ""
@@ -276,6 +277,7 @@ class OpsState(AuthState):
         ]
         self.stores = stores
         self.store_options = [s["label"] for s in stores]
+        self.dashboard_store_options = ["All Stores", *self.store_options]
         self.has_stores = bool(stores)
         self._sync_store_active()
         self.month_options = [label for _, label in self._month_choices()]

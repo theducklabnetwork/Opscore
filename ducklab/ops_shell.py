@@ -125,11 +125,14 @@ def mobile_drawer() -> rx.Component:
     )
 
 
-def store_selector(on_store=None) -> rx.Component:
+def store_selector(on_store=None, include_all: bool = False) -> rx.Component:
+    options = OpsState.store_options
+    if include_all:
+        options = OpsState.dashboard_store_options
     return rx.cond(
         OpsState.has_stores,
         rx.select(
-            OpsState.store_options,
+            options,
             value=OpsState.selected_store_label,
             on_change=on_store if on_store is not None
             else OpsState.select_store,
@@ -152,7 +155,8 @@ def month_selector(on_month=None) -> rx.Component:
 
 
 def header(title: str, on_store=None, on_month=None,
-           description=None, actions=None, tour_key=None) -> rx.Component:
+           description=None, actions=None, tour_key=None,
+           include_all_stores: bool = False) -> rx.Component:
     return rx.vstack(
         rx.hstack(
             mobile_drawer(),
@@ -184,7 +188,7 @@ def header(title: str, on_store=None, on_month=None,
             width="100%", align="start", spacing="2",
         ),
         rx.hstack(
-            store_selector(on_store=on_store),
+            store_selector(on_store=on_store, include_all=include_all_stores),
             month_selector(on_month=on_month),
             *([rx.spacer(), actions] if actions is not None else []),
             spacing="3", width="100%",
@@ -198,14 +202,14 @@ def header(title: str, on_store=None, on_month=None,
 
 def shell(title: str, content: rx.Component,
           on_store=None, on_month=None, description=None,
-          actions=None, tour_key=None) -> rx.Component:
+          actions=None, tour_key=None, include_all_stores: bool = False) -> rx.Component:
     return rx.hstack(
         sidebar(),
         rx.box(
             rx.vstack(
                 header(title, on_store=on_store, on_month=on_month,
                        description=description, actions=actions,
-                       tour_key=tour_key),
+                       tour_key=tour_key, include_all_stores=include_all_stores),
                 # Hidden trigger: assets/tour.js marks the guided tour done
                 # by dispatching the OpsState.tour_finished event (primary
                 # path) or clicking this button (fallback).
