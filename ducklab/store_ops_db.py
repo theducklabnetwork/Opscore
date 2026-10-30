@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -288,6 +288,10 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 8 and current >= 7:
             _apply_v8(conn)
             conn.execute("PRAGMA user_version = 8")
+            current = 8
+        if current < 9 and current >= 8:
+            _apply_v9(conn)
+            conn.execute("PRAGMA user_version = 9")
         conn.commit()
     finally:
         conn.close()
@@ -486,3 +490,13 @@ def _apply_v8(conn: sqlite3.Connection) -> None:
         "('Full-Time', 'Part-Time', 'Not Set'))"
     )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (8)")
+
+
+def _apply_v9(conn: sqlite3.Connection) -> None:
+    # Half-open month ranges can use these directly. Daily records and
+    # holidays already have equivalent UNIQUE (store_id, date) indexes.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_actions_store_raised_date "
+        "ON actions (store_id, raised_date)"
+    )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (9)")

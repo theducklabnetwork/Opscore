@@ -442,11 +442,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     }
     exp_status = e.total_expenses_status
     exp_color = ds.status_color(exp_status)
-    paid_count = kpi.paid_count_in_month([x.input for x in
-                                          app_service.get_expense_transactions(
-                                              user, store_id)], month,
-                                         store_id)
-    exp_reported = paid_count > 0
+    exp_reported = e.paid_count > 0
     out["pill_expenses"] = {
         "reported": "1" if exp_reported else "",
         "value": ds.fmt_rm0(e.paid_cents),        # full value on the tile
@@ -565,10 +561,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     ]
 
     # --- secondary figures (Summary) --------------------------------------
-    # action counts for this store/month scope (raised in month or open)
-    actions = app_service.get_actions(user, store_id)
-    visible = kpi.actions_in_month_scope(actions, month)
-    acounts = kpi.action_counts([a.input for a in visible], as_of=as_of)
+    acounts = rep.actions.counts
     avg = s.average_per_day
     # full values ("RM 10,000.00"), never the short form
     glance_pairs = [
@@ -608,7 +601,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["attention"] = dashboard_attention(rep, today)
 
     # --- pace chart (same computation as /ops/sales) --------------------
-    days = app_service.get_daily_records(user, store_id, month)
+    days = rep.days
     pace = kpi.pace_series(days, dim, l1)
     p_days = [p["day"] for p in pace]
     p_actual = [p["actual"] for p in pace]

@@ -24,7 +24,7 @@ KL_TZ = ZoneInfo("Asia/Kuala_Lumpur")
 from pathlib import Path
 from typing import Optional
 
-from ducklab import store_ops_db
+from ducklab import kpi, store_ops_db
 from ducklab.operations_repository import (
     InvalidMonthError, RepositoryError, StoreNotFoundError,
 )
@@ -358,7 +358,7 @@ class OperationsWriteRepository:
         transaction — either everything is written or nothing."""
         _check_month(month)
         for d in holidays or []:
-            if not isinstance(d, date) or d.strftime("%Y-%m") != month:
+            if not isinstance(d, date) or d.isoformat()[:7] != month:
                 raise ValidationError(
                     f"Public holiday {d} is not in {month}")
         bad = set(fields) - set(self._CONFIG_FIELDS)
@@ -410,9 +410,12 @@ class OperationsWriteRepository:
                     (store_id, config_id, cat_id, cents),
                 )
             if holidays is not None:
+                start, month_end, _ = kpi.month_bounds(month)
+                next_month = month_end.fromordinal(month_end.toordinal() + 1)
                 conn.execute(
                     "DELETE FROM public_holidays WHERE store_id = ? "
-                    "AND strftime('%Y-%m', date) = ?", (store_id, month))
+                    "AND date >= ? AND date < ?",
+                    (store_id, start.isoformat(), next_month.isoformat()))
                 conn.executemany(
                     "INSERT INTO public_holidays (store_id, date) "
                     "VALUES (?, ?)",

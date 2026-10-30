@@ -218,7 +218,7 @@ parse_decimal = input_validation.parse_decimal
 
 
 def _in_month(d: Optional[date], month: str) -> bool:
-    return d is not None and d.strftime("%Y-%m") == month
+    return d is not None and d.isoformat()[:7] == month
 
 
 # --------------------------------------------------------------------------
@@ -846,14 +846,23 @@ def category_paid_mtd_cents(
     expenses: list[ExpenseInput], month: str, store_id: int, category_id: int
 ) -> int:
     """Expense Monitor!C15-24: paid-date-basis SUMIFS per category."""
-    total = 0
+    return category_paid_totals_cents(expenses, month, store_id).get(category_id, 0)
+
+
+def category_paid_totals_cents(
+    expenses: list[ExpenseInput], month: str, store_id: int
+) -> dict[int, int]:
+    """All category paid totals in one register pass, using the same rule as
+    ``category_paid_mtd_cents``. Cross-month incurred dates are unrestricted;
+    only a valid paid date inside the selected month contributes."""
+    totals: dict[int, int] = {}
     for e in expenses:
-        if e.store_id != store_id or e.category_id != category_id:
+        if e.store_id != store_id or e.category_id is None:
             continue
         pv = paid_value_cents(e)
         if pv and _in_month(e.paid_date, month):
-            total += pv
-    return total
+            totals[e.category_id] = totals.get(e.category_id, 0) + pv
+    return totals
 
 
 EXPENSE_MIX_OTHER = "Other"
@@ -1171,7 +1180,7 @@ def actions_in_month_scope(actions, month: str) -> list:
         if raised is None or raised > month_end:
             continue
         status = (a.input.status if hasattr(a, "input") else a.status)             or "Open"
-        if raised.strftime("%Y-%m") == month or status in OPEN_STATUSES:
+        if raised.isoformat()[:7] == month or status in OPEN_STATUSES:
             scoped.append(a)
     return scoped
 
