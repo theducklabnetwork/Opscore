@@ -712,23 +712,26 @@ class OperationsWriteRepository:
         return value
 
     def save_staff(self, store_id: int, staff_id: Optional[int], name: str,
-                   staff_code: str, position: str) -> int:
+                   staff_code: str, position: str,
+                   employment_type: str = "Not Set") -> int:
         name = self._require_text(name, "Name")
         staff_code = self._require_text(staff_code, "Staff ID")
         position = self._require_text(position, "Position")
+        if employment_type not in ("Full-Time", "Part-Time", "Not Set"):
+            raise ValidationError("Employment Type must be Full-Time, Part-Time, or Not Set")
         conn = self._connect()
         try:
             if staff_id is None:
                 cur = conn.execute(
-                    "INSERT INTO staff (store_id, name, staff_code, position) "
-                    "VALUES (?, ?, ?, ?)",
-                    (store_id, name, staff_code, position))
+                    "INSERT INTO staff (store_id, name, staff_code, position, employment_type) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (store_id, name, staff_code, position, employment_type))
                 staff_id = cur.lastrowid
             else:
                 cur = conn.execute(
-                    "UPDATE staff SET name = ?, staff_code = ?, position = ? "
-                    "WHERE id = ? AND store_id = ?",
-                    (name, staff_code, position, staff_id, store_id))
+                    "UPDATE staff SET name = ?, staff_code = ?, position = ?, "
+                    "employment_type = ? WHERE id = ? AND store_id = ?",
+                    (name, staff_code, position, employment_type, staff_id, store_id))
                 if not cur.rowcount:
                     raise RecordNotFoundError("Staff member not found in this store")
             conn.commit()

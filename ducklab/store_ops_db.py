@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -284,6 +284,10 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 7 and current >= 6:
             _apply_v7(conn)
             conn.execute("PRAGMA user_version = 7")
+            current = 7
+        if current < 8 and current >= 7:
+            _apply_v8(conn)
+            conn.execute("PRAGMA user_version = 8")
         conn.commit()
     finally:
         conn.close()
@@ -473,3 +477,12 @@ def _apply_v7(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE shift_codes SET color = ? WHERE code = ? AND color = ?",
                      (color, code, old_color))
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (7)")
+
+
+def _apply_v8(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "ALTER TABLE staff ADD COLUMN employment_type TEXT NOT NULL "
+        "DEFAULT 'Not Set' CHECK (employment_type IN "
+        "('Full-Time', 'Part-Time', 'Not Set'))"
+    )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (8)")

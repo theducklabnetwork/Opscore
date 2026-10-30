@@ -30,7 +30,7 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 7)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 8)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])
@@ -130,6 +130,71 @@ class ScheduleTests(unittest.TestCase):
         legend = {row["code"]: row["detail"] for row in state.schedule_legend}
         self.assertEqual(legend["M900"], "9:00 AM - 7:00 PM")
         self.assertEqual(legend["OOD"], "Off Day")
+
+    def test_employment_type_migration_preserves_staff_as_not_set(self):
+        path = Path(self.tmp.name) / "migration.db"
+        conn = store_ops_db.connect(path)
+        conn.executescript(store_ops_db._SCHEMA_V1)
+        conn.executemany(
+            "INSERT OR IGNORE INTO stock_loss_codes "
+            "(code, name, contribution_sign) VALUES (?, ?, ?)",
+            store_ops_db.STOCK_LOSS_CODES)
+        conn.execute("PRAGMA user_version = 1")
+        for version, apply in ((2, store_ops_db._apply_v2),
+                               (3, store_ops_db._apply_v3),
+                               (4, store_ops_db._apply_v4),
+                               (5, store_ops_db._apply_v5),
+                               (6, store_ops_db._apply_v6),
+                               (7, store_ops_db._apply_v7)):
+            apply(conn)
+            conn.execute(f"PRAGMA user_version = {version}")
+        conn.execute("INSERT INTO stores (code, name) VALUES ('A01', 'Alpha')")
+        conn.execute(
+            "INSERT INTO staff (store_id, name, staff_code, position) "
+            "VALUES (1, 'Alice', 'A001', 'RA')")
+        conn.commit()
+        conn.close()
+        store_ops_db.init_db(path)
+        conn = store_ops_db.connect(path)
+        row = conn.execute("SELECT employment_type FROM staff").fetchone()
+        self.assertEqual(row["employment_type"], "Not Set")
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+        self.assertIn(8, [r["version"] for r in conn.execute(
+            "SELECT version FROM schema_migrations")])
+        conn.close()
+        store_ops_db.init_db(path)  # idempotent
+
+    def test_employment_type_save_edit_and_validation(self):
+        staff_id = self.app.save_staff(
+            self.admin, self.store, None, name="Alice", staff_code="A001",
+            position="Cashier", employment_type="Full-Time")
+        self.app.save_staff(
+            self.admin, self.store, None, name="Bob", staff_code="A002",
+            position="RA", employment_type="Not Set")
+        self.app.save_staff(
+            self.admin, self.store, staff_id, name="Alice", staff_code="A001",
+            position="Cashier", employment_type="Part-Time")
+        rows = self.app.get_schedule(self.admin, self.store,
+            date(2026, 10, 1), date(2026, 10, 2))["staff"]
+        self.assertEqual({r["name"]: r["employment_type"] for r in rows},
+                         {"Alice": "Part-Time", "Bob": "Not Set"})
+        with self.assertRaises(ValidationError):
+            self.app.save_staff(
+                self.admin, self.store, staff_id, name="Alice", staff_code="A001",
+                position="Cashier", employment_type="Contractor")
+
+    def test_employment_type_permission_and_store_isolation(self):
+        with self.assertRaises(AuthorizationError):
+            self.app.save_staff(
+                self.viewer, self.store, None, name="Alice", staff_code="A001",
+                position="Cashier", employment_type="Full-Time")
+        staff_id = self.app.save_staff(
+            self.admin, self.other_store, None, name="Bob", staff_code="B001",
+            position="Cashier", employment_type="Part-Time")
+        with self.assertRaises(Exception):
+            self.app.save_staff(
+                self.admin, self.store, staff_id, name="Bob", staff_code="B001",
+                position="Cashier", employment_type="Full-Time")
 
     def test_no_cross_store_staff_assignment(self):
         staff_id = self.app.save_staff(self.admin, self.other_store, None,
