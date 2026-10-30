@@ -99,7 +99,7 @@ class Fixture(unittest.TestCase):
     def _load_stores_state(self, user):
         """Reproduce StoresState.load_page_data's setup-field logic without
         a Reflex runtime (same code path, same gating)."""
-        from ducklab.ops_stores_state import _money_str, _pct_str
+        from ducklab.ops_setup_state import _money_str, _pct_str
         can_edit = (authz.can_manage_config(user)
                     and authz.can_access_store(user, self.sa))
         cfg = self.app.get_month_config(self.admin, self.sa, "2026-10")

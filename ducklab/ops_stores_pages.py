@@ -8,10 +8,10 @@ from ducklab import design as ds
 from ducklab import ui
 from ducklab.ops_shell import shell
 from ducklab.operations_write_repository import CONCEPTS, STATES
-from ducklab.ops_stores_state import (
+from ducklab.ops_setup_state import (
     SETUP_DAILY, SETUP_MANPOWER, SETUP_PAYROLL, SETUP_SALES, SETUP_STOCK,
-    StoresState,
 )
+from ducklab.ops_stores_state import StoresState
 
 S = StoresState
 

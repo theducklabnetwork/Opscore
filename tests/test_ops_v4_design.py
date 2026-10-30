@@ -135,7 +135,7 @@ class DialogTests(unittest.TestCase):
 
     def test_setup_form_keeps_clear_and_fields(self):
         from ducklab import ops_stores_pages
-        from ducklab.ops_stores_state import SETUP_ALL
+        from ducklab.ops_setup_state import SETUP_ALL
         out = str(ops_stores_pages._setup_section())
         for _, field, _, _ in SETUP_ALL:
             self.assertIn("setup-" + field.replace("_", "-"), out)

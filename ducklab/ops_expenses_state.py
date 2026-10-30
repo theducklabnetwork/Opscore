@@ -47,7 +47,7 @@ MAX_ROWS = 100
 # All status colors: ds.status_color (design.py shared map)
 
 # cleared with × while an amount is typed (also used by Monthly Setup,
-# ops_stores_state._parse_budget_rows)
+# ops_setup_state._parse_budget_rows)
 BUDGET_CLEAR_CONFLICT = "Enter an amount, or use × to clear"
 
 

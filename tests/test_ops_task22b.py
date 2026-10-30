@@ -159,7 +159,7 @@ class OversizedInputTests(Fixture):
             self.app.get_daily_records(self.admin, self.sid, "2026-10"), [])
 
     def test_monthly_setup_rejects_huge_and_nan_percent(self):
-        import ducklab.ops_stores_state as mod
+        import ducklab.ops_setup_state as mod
         from ducklab.ops_stores_state import StoresState
         for raw in ("1e999999999", "NaN"):
             st = StoresState()

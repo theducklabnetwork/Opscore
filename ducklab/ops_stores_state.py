@@ -1,27 +1,22 @@
-"""Store Management + Monthly Setup state.
+"""Store Management page state: store CRUD, selectors and page loading.
+
+Workflows extracted for maintainability (behavior unchanged):
+- user assignment -> ducklab.ops_assignment_state (AssignmentState)
+- Monthly Setup   -> ducklab.ops_setup_state (SetupState)
 
 All operations go through AppService with the session token revalidated on
-every event; authorization uses the existing authz rules (store management
-and user assignment: super_admin only; monthly config: config managers with
-store access). Identity never comes from client input. Blank form fields are
-stored as NULL; an explicit 0 is stored as 0.
+every event; authorization uses the existing authz rules (store management:
+super_admin only). Identity never comes from client input.
 """
 
 from __future__ import annotations
-
-import logging
-from datetime import date
-from decimal import Decimal
-from typing import Optional
 
 import reflex as rx
 
 from ducklab import authz
 from ducklab import design as ds
 from ducklab import kpi
-from ducklab.input_validation import (
-    parse_client_id, parse_count, parse_decimal, parse_money_cents,
-)
+from ducklab.input_validation import parse_client_id
 from ducklab.auth_service import (
     AuthenticationError, AuthorizationError,
 )
@@ -30,94 +25,18 @@ from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import (
-    CONCEPTS, STATES, DuplicateRecordError, RecordNotFoundError,
-    ValidationError,
+    CONCEPTS, DuplicateRecordError, RecordNotFoundError, ValidationError,
 )
-from ducklab.ops_expenses_state import BUDGET_CLEAR_CONFLICT
-from ducklab.ops_stock_state import StockState
-from ducklab.ops_state import (
-    SESSION_EXPIRED, OpsState, auth_message, month_label,
+from ducklab.ops_setup_state import (
+    SetupState, _count_str, _factor_str, _money_str, _pct_str,
 )
-
-# Monthly setup field specs: (state attr, config field, kind, label)
-# kind: "money" (RM -> cents) | "pct" (percent -> fraction) | "count"
-SETUP_SALES = [
-    ("s_min_rtm", "min_rtm_target_cents", "money", "Minimum RTM (RM)"),
-    ("s_level1", "level1_base_cents", "money", "Level 1 Base (RM)"),
-    ("s_level2", "level2_pct", "pct", "Level 2 Uplift (%)"),
-    ("s_level3", "level3_pct", "pct", "Level 3 Uplift (%)"),
-    ("s_level4", "level4_pct", "pct", "Level 4 Uplift (%)"),
-    ("s_last_year", "sales_last_year_cents", "money",
-     "Sales Last Year (RM)"),
-    ("s_last_month", "sales_last_month_cents", "money",
-     "Sales Last Month (RM)"),
-]
-SETUP_MANPOWER = [
-    ("s_salary_ratio", "salary_ratio_target", "pct",
-     "Salary Ratio Target (%)"),
-    ("s_budget_hc", "budget_headcount", "count", "Budget Headcount"),
-    ("s_turnover", "turnover_threshold", "pct", "Turnover Threshold (%)"),
-    ("s_opening_hc", "opening_headcount_ft", "count",
-     "Opening Headcount"),
-    ("s_pt_factor", "part_timer_factor", "factor",
-     "Part-Timer Factor"),
-]
-SETUP_STOCK = [
-    ("s_stock_target", "stock_loss_target", "pct",
-     "Stock Loss Target (%)"),
-]
-SETUP_PAYROLL = [
-    ("s_salary", "salary_basic_allowance_cents", "money",
-     "Basic + Allowance (RM)"),
-    ("s_overtime", "overtime_cents", "money", "Overtime (RM)"),
-    ("s_support", "support_team_cost_cents", "money",
-     "Support Cost (RM)"),
-]
-# Daily Sales targets: monthly transactions, SPR (RM) and IPR (items)
-SETUP_DAILY = [
-    ("s_target_txn", "target_transactions", "count", "Target Transactions"),
-    ("s_target_spr", "target_spr_cents", "money", "Target SPR (RM)"),
-    ("s_target_ipr", "target_ipr", "ipr", "Target IPR"),
-]
-SETUP_ALL = (SETUP_SALES + SETUP_DAILY + SETUP_MANPOWER + SETUP_STOCK
-             + SETUP_PAYROLL)
-
-log = logging.getLogger("ducklab.ops_stores_state")
+from ducklab.ops_state import SESSION_EXPIRED, OpsState, auth_message
 
 
-def _money_str(cents) -> str:
-    return "" if cents is None else f"{cents / 100:.2f}"
+class StoresState(SetupState):
+    """Store Management page state (store form + selectors + loader)."""
 
-
-def _factor_str(factor) -> str:
-    """Raw decimal factor (workbook Setup!B47, e.g. 0.5) — NOT a %."""
-    return "" if factor is None else f"{float(factor):g}"
-
-
-# "Use HQ defaults": Level 2-4 uplift in percent, filled visibly into
-# the form (never applied silently on save)
-HQ_DEFAULT_UPLIFTS = {"s_level2": "10", "s_level3": "20", "s_level4": "30"}
-
-
-def _pct_str(ratio) -> str:
-    return "" if ratio is None else f"{float(ratio) * 100:g}"
-
-
-def _count_str(v) -> str:
-    return "" if v is None else str(v)
-
-
-class StoresState(StockState):
-    """Store Management + Monthly Setup page state."""
-
-    # --- stores table / form -------------------------------------------
-    store_rows: list[dict[str, str]] = []
-    can_manage_stores: bool = False
-    can_assign_users: bool = False
-    can_edit_setup: bool = False
-    stores_error: str = ""
-    stores_notice: str = ""
-
+    # --- store form drawer ---------------------------------------------
     sf_open: bool = False           # store form drawer
     sf_editing: str = ""            # store id as str, "" = create
     sf_code: str = ""
@@ -129,46 +48,6 @@ class StoresState(StockState):
     sf_branch_manager: str = ""
     sf_error: str = ""
     sf_saving: bool = False
-
-    # --- user assignment (per store) ------------------------------------
-    assign_store_id: str = ""
-    assign_rows: list[dict[str, str]] = []   # assigned users for that store
-    assign_options: list[str] = []           # "email — name (roles)" to add
-    assign_selected: str = ""
-    _assign_all: list[dict] = []             # cache: all active users
-
-    # --- monthly setup form ---------------------------------------------
-    setup_finalized: bool = False
-    setup_notice: str = ""
-    setup_error: str = ""
-    setup_saving: bool = False
-    setup_levels: list[dict[str, str]] = []  # read-only L1-L4
-    setup_levels_missing: bool = False  # saved L1 without a L2-4 uplift
-    setup_original: dict = {}  # loaded values, for changed-only saves
-    s_min_rtm: str = ""
-    s_level1: str = ""
-    s_level2: str = ""
-    s_level3: str = ""
-    s_level4: str = ""
-    s_last_year: str = ""
-    s_last_month: str = ""
-    s_salary_ratio: str = ""
-    s_budget_hc: str = ""
-    s_turnover: str = ""
-    s_opening_hc: str = ""
-    s_pt_factor: str = ""
-    s_stock_target: str = ""
-    s_salary: str = ""
-    s_overtime: str = ""
-    s_support: str = ""
-    s_target_txn: str = ""
-    s_target_spr: str = ""
-    s_target_ipr: str = ""
-    s_holidays: list[str] = []               # ISO dates in the month
-    s_holidays_original: list[str] = []
-    s_holiday_min: str = ""                  # date picker bounds (month)
-    s_holiday_max: str = ""
-    budget_rows: list[dict[str, str]] = []   # per-category budget inputs
 
     # ------------------------------------------------------------------
     # clearing
@@ -186,21 +65,6 @@ class StoresState(StockState):
         self.assign_rows = []
         self.assign_options = []
         self.assign_selected = ""
-
-    def _clear_setup(self) -> None:
-        self.setup_original = {}
-        self.setup_finalized = False
-        self.setup_notice = ""
-        self.setup_error = ""
-        self.setup_saving = False
-        self.setup_levels = []
-        self.setup_levels_missing = False
-        self.budget_rows = []
-        self.s_holidays = []
-        self.s_holidays_original = []
-        self.s_holiday_min = self.s_holiday_max = ""
-        for attr, _, _, _ in SETUP_ALL:
-            setattr(self, attr, "")
 
     # ------------------------------------------------------------------
     # selectors: clear prior-store form data on switch
@@ -461,252 +325,6 @@ class StoresState(StockState):
                 exc, AuthenticationError) else "Session expired — sign in again."
         yield StoresState.load_page_data()
 
-    # ------------------------------------------------------------------
-    # user assignment
-    # ------------------------------------------------------------------
-    @rx.event
-    def open_assign(self, store_id: str) -> None:
-        try:
-            sid = parse_client_id(store_id, "store")
-        except ValidationError as exc:
-            self.stores_error = str(exc)
-            return
-        self.assign_store_id = str(sid) if sid is not None else ""
-        self.assign_selected = ""
-        yield StoresState.load_assign_rows()
-
-    @rx.event
-    def load_assign_rows(self) -> None:
-        self.assign_rows = []
-        self.assign_options = []
-        if not self.assign_store_id:
-            return
-        try:
-            user = self._actor()
-            sid = parse_client_id(self.assign_store_id, "store")
-            authz.require_store_grantable(user, sid)
-            users = app_service.list_users(user)
-            self._assign_all = [
-                {"id": u.id, "email": u.email, "name": u.display_name,
-                 "roles": ", ".join(u.roles), "stores": u.store_ids,
-                 "is_active": u.is_active}
-                for u in users
-            ]
-            assigned = [u for u in self._assign_all if sid in u["stores"]]
-            self.assign_rows = [
-                {"id": str(u["id"]),
-                 "label": f"{u['email']} — {u['name']} ({u['roles']})",
-                 "active": "1" if u["is_active"] else "0"}
-                for u in assigned
-            ]
-            self.assign_options = [
-                f"{u['email']} — {u['name']} ({u['roles']})"
-                for u in self._assign_all
-                if u["is_active"] and sid not in u["stores"]
-            ]
-        except ValidationError as exc:
-            self.stores_error = str(exc)
-        except (AuthorizationError, AuthenticationError) as exc:
-            self.stores_error = str(exc) if not isinstance(
-                exc, AuthenticationError) else "Session expired — sign in again."
-
-    @rx.event
-    def select_assign_user(self, label: str) -> None:
-        self.assign_selected = label
-
-    @rx.event
-    def assign_user(self) -> None:
-        try:
-            user = self._actor()
-            sid = parse_client_id(self.assign_store_id, "store",
-                                  required=True)
-            target = next((u for u in self._assign_all
-                           if f"{u['email']} — {u['name']} ({u['roles']})"
-                           == self.assign_selected), None)
-            if target is None:
-                self.stores_error = "Select an existing user to assign."
-                return
-            app_service.assign_store(user, target["id"], sid)
-            self.stores_notice = f"Assigned {target['email']}."
-            self.assign_selected = ""
-        except ValidationError as exc:
-            self.stores_error = str(exc)
-        except (AuthorizationError, AuthenticationError) as exc:
-            self.stores_error = str(exc) if not isinstance(
-                exc, AuthenticationError) else "Session expired — sign in again."
-        yield StoresState.load_assign_rows()
-
-    @rx.event
-    def unassign_user(self, user_id: str) -> None:
-        try:
-            user = self._actor()
-            sid = parse_client_id(self.assign_store_id, "store",
-                                  required=True)
-            uid = parse_client_id(user_id, "user", required=True)
-            app_service.revoke_store(user, uid, sid)
-            self.stores_notice = "User unassigned."
-        except ValidationError as exc:
-            self.stores_error = str(exc)
-        except (AuthorizationError, AuthenticationError) as exc:
-            self.stores_error = str(exc) if not isinstance(
-                exc, AuthenticationError) else "Session expired — sign in again."
-        yield StoresState.load_assign_rows()
-
-    # ------------------------------------------------------------------
-    # monthly setup save
-    # ------------------------------------------------------------------
-    def _parse_fields(self) -> dict:
-        """Parse setup form strings -> config fields for ONE write.
-
-        Only fields the user CHANGED are returned (blank fields the user
-        never touched never overwrite a value saved elsewhere; a field the
-        user cleared to blank writes NULL explicitly). ALL fields are
-        validated first and every problem is reported together — nothing
-        is written until the whole form is valid.
-        """
-        out: dict = {}
-        errors: list[str] = []
-        for attr, field, kind, label in SETUP_ALL:
-            raw = getattr(self, attr).strip()
-            if raw == self.setup_original.get(attr, ""):
-                continue  # unchanged — do not send
-            if raw == "":
-                out[field] = None  # explicitly cleared
-                continue
-            try:
-                if kind == "money":
-                    cents = parse_money_cents(raw)
-                    if cents < 0:
-                        raise ValueError("negative")
-                    out[field] = cents
-                elif kind == "count":
-                    out[field] = parse_count(raw, label)
-                elif kind == "factor":
-                    out[field] = float(parse_decimal(
-                        raw, label, Decimal(0), Decimal(2)))
-                elif kind == "ipr":
-                    out[field] = float(parse_decimal(
-                        raw, label, Decimal(0), Decimal(1000)))
-                else:  # pct -> fraction (repository range 0..10 = 1000%)
-                    out[field] = float(parse_decimal(
-                        raw, label, Decimal(0), Decimal(1000)) / 100)
-            except ValueError:
-                errors.append(
-                    f"{label}: enter a non-negative number (or leave blank)")
-        return out, errors
-
-    def _parse_holidays(self) -> Optional[list[date]]:
-        """The picked public holidays, or None when unchanged."""
-        if sorted(self.s_holidays) == sorted(self.s_holidays_original):
-            return None
-        return [date.fromisoformat(d) for d in sorted(self.s_holidays)]
-
-    def _parse_budgets(self):
-        """Validate every budget row before ANY write; -> (updates, errors)."""
-        return _parse_budget_rows(self.budget_rows)
-
-    # ------------------------------------------------------------------
-    # form field setters (explicit, matching the daily page pattern)
-    # ------------------------------------------------------------------
-    @rx.event
-    def set_s_min_rtm(self, value: str) -> None:
-        self.s_min_rtm = value
-
-    @rx.event
-    def set_s_level1(self, value: str) -> None:
-        self.s_level1 = value
-
-    @rx.event
-    def set_s_level2(self, value: str) -> None:
-        self.s_level2 = value
-
-    @rx.event
-    def set_s_level3(self, value: str) -> None:
-        self.s_level3 = value
-
-    @rx.event
-    def set_s_level4(self, value: str) -> None:
-        self.s_level4 = value
-
-    @rx.event
-    def set_s_last_year(self, value: str) -> None:
-        self.s_last_year = value
-
-    @rx.event
-    def set_s_last_month(self, value: str) -> None:
-        self.s_last_month = value
-
-    @rx.event
-    def set_s_salary_ratio(self, value: str) -> None:
-        self.s_salary_ratio = value
-
-    @rx.event
-    def set_s_budget_hc(self, value: str) -> None:
-        self.s_budget_hc = value
-
-    @rx.event
-    def set_s_turnover(self, value: str) -> None:
-        self.s_turnover = value
-
-    @rx.event
-    def set_s_opening_hc(self, value: str) -> None:
-        self.s_opening_hc = value
-
-    @rx.event
-    def set_s_pt_factor(self, value: str) -> None:
-        self.s_pt_factor = value
-
-    @rx.event
-    def set_s_stock_target(self, value: str) -> None:
-        self.s_stock_target = value
-
-    @rx.event
-    def set_s_salary(self, value: str) -> None:
-        self.s_salary = value
-
-    @rx.event
-    def set_s_overtime(self, value: str) -> None:
-        self.s_overtime = value
-
-    @rx.event
-    def set_s_support(self, value: str) -> None:
-        self.s_support = value
-
-    @rx.event
-    def set_s_target_txn(self, value: str) -> None:
-        self.s_target_txn = value
-
-    @rx.event
-    def set_s_target_spr(self, value: str) -> None:
-        self.s_target_spr = value
-
-    @rx.event
-    def set_s_target_ipr(self, value: str) -> None:
-        self.s_target_ipr = value
-
-    @rx.event
-    def add_holiday(self, value: str) -> None:
-        """Date picker: add one public holiday in the selected month."""
-        month = self._selected_month()
-        try:
-            day = date.fromisoformat(value)
-        except (TypeError, ValueError):
-            return
-        if month is None or day.strftime("%Y-%m") != month:
-            self.setup_error = "Public Holidays: pick a date in this month."
-            return
-        if value not in self.s_holidays:
-            self.s_holidays = sorted([*self.s_holidays, value])
-
-    @rx.event
-    def remove_holiday(self, value: str) -> None:
-        self.s_holidays = [d for d in self.s_holidays if d != value]
-
-    @rx.var
-    def holiday_chips(self) -> list[dict[str, str]]:
-        return [{"iso": d, "label": date.fromisoformat(d).strftime("%d %b")}
-                for d in self.s_holidays]
-
     @rx.event
     def set_sf_code(self, value: str) -> None:
         self.sf_code = value
@@ -734,120 +352,3 @@ class StoresState(StockState):
     @rx.event
     def set_sf_branch_manager(self, value: str) -> None:
         self.sf_branch_manager = value
-
-    @rx.event
-    def save_setup(self) -> None:
-        self.setup_error = ""
-        self.setup_notice = ""
-        self.setup_saving = True
-        yield
-        try:
-            user = self._actor()
-            store_id = self._selected_store_id()
-            month = self._selected_month()
-            if store_id is None or month is None:
-                raise ValidationError("Select a store and month first.")
-            # Parse and validate EVERYTHING first; one bad field or
-            # budget rejects the whole save and nothing is written.
-            fields, errors = self._parse_fields()
-            budgets, budget_errors = self._parse_budgets()
-            errors += budget_errors
-            if errors:
-                raise ValidationError("; ".join(errors))
-            holidays = self._parse_holidays()
-            if not fields and not budgets and holidays is None:
-                raise ValidationError("Nothing to save — no changes made.")
-            result = app_service.configure_month_with_budgets(
-                user, store_id, month, fields, budgets, holidays)
-            self.setup_notice = (
-                "Monthly setup saved."
-                + (" Note: a finalized snapshot exists — the finalized report"
-                   " is unchanged; these edits affect live figures only."
-                   if result.get("finalized_snapshot_exists") else ""))
-        except (ValidationError, AuthorizationError, DuplicateRecordError,
-                RepositoryError) as exc:
-            self.setup_error = str(exc)
-        except AuthenticationError:
-            self.setup_error = "Session expired — sign in again."
-        except Exception as exc:
-            # Never crash the handler silently: log with traceback and
-            # tell the user nothing was saved (the write is atomic).
-            log.exception("Monthly setup save failed")
-            self.setup_error = (f"Save failed ({type(exc).__name__}); "
-                                "nothing was saved.")
-        finally:
-            self.setup_saving = False
-        yield
-        yield StoresState.load_page_data()
-
-    @rx.event
-    def use_hq_defaults(self) -> None:
-        """Fill Level 2-4 uplift with the HQ defaults (+10% / +20% / +30%)
-        in the form; nothing is saved until Save."""
-        for attr, value in HQ_DEFAULT_UPLIFTS.items():
-            setattr(self, attr, value)
-
-    @rx.event
-    def set_budget_value(self, category_id: str, value: str) -> None:
-        # typing an amount undoes the ×
-        self.budget_rows = [
-            {**r, "value": value,
-             "clear": "" if value.strip() else r.get("clear", "")}
-            if r["id"] == category_id else r
-            for r in self.budget_rows
-        ]
-
-    @rx.event
-    def clear_budget(self, category_id: str) -> None:
-        """× beside a saved budget: blank it; save writes NULL."""
-        self.budget_rows = [
-            {**r, "value": "", "clear": "1"} if r["id"] == category_id
-            else r
-            for r in self.budget_rows
-        ]
-
-    @rx.event
-    def set_budget_clear(self, category_id: str, v: bool) -> None:
-        self.budget_rows = [
-            {**r, "clear": "1" if v else ""} if r["id"] == category_id else r
-            for r in self.budget_rows
-        ]
-
-
-def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
-    """Budget rows -> (updates, errors); pure, so it is testable.
-
-    updates = {category_id: cents | None} only for rows the user changed.
-    Cleared with × writes NULL ("No budget"), never 0. Cleared AND a
-    different amount typed is rejected (nothing saved for that row).
-    Untouched rows send nothing. Blanking a saved budget WITHOUT the × is
-    rejected (a missing budget is distinct from RM 0)."""
-    updates: dict[int, Optional[int]] = {}
-    errors: list[str] = []
-    for row in rows:
-        raw = row["value"].strip()
-        if row.get("clear"):
-            if raw and raw != row.get("original", ""):
-                errors.append(f"Budget for {row['name']}: "
-                              f"{BUDGET_CLEAR_CONFLICT}")
-                continue
-            if row.get("original", ""):
-                updates[int(row["id"])] = None
-                continue
-        if raw == row.get("original", ""):
-            continue
-        if raw == "":
-            errors.append(
-                f"Budget for {row['name']}: enter a budget amount, or use "
-                "× to clear it (No budget).")
-            continue
-        try:
-            cents = parse_money_cents(raw)
-            if cents < 0:
-                raise ValueError("negative")
-        except ValueError:
-            errors.append(
-                f"Budget for {row['name']}: non-negative number")
-            continue
-        updates[int(row["id"])] = cents
-    return updates, errors

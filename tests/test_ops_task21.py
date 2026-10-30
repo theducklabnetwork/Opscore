@@ -318,7 +318,7 @@ class ClearBudgetTests(Fixture):
                 rep.expenses.total_budget_cents)
 
     def test_parse_budget_rows(self):
-        from ducklab.ops_stores_state import _parse_budget_rows
+        from ducklab.ops_setup_state import _parse_budget_rows
         rows = [
             {"id": "7", "name": "Elec", "value": "500.00",
              "original": "500.00", "clear": "1"},
@@ -353,7 +353,7 @@ class ClearBudgetTests(Fixture):
             "is distinct from RM 0.")
 
     def test_monthly_setup_clear_reads_back_none(self):
-        from ducklab.ops_stores_state import _parse_budget_rows
+        from ducklab.ops_setup_state import _parse_budget_rows
         self.app.configure_month_with_budgets(
             self.admin, self.sid, "2026-10", {}, {self.cat: rm(50000)})
         self.assertEqual(

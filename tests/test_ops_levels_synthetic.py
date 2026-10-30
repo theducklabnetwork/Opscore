@@ -251,7 +251,7 @@ class MonthlySetupTests(Fixture):
         return state
 
     def save(self, state):
-        import ducklab.ops_stores_state as mod
+        import ducklab.ops_setup_state as mod
         from ducklab.ops_stores_state import StoresState
         self.bound(mod, StoresState, lambda: list(state.save_setup()))
 
