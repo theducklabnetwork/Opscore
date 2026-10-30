@@ -386,7 +386,7 @@ class TestEndToEndIntegration(RepoFixture):
         self.assertEqual(r.stock.total_loss_cents, 0)
         self.assertEqual(r.actions.open, 0)
         self.assertIsNone(r.manpower.salary_ratio_store)
-        self.assertEqual(r.manpower.salary_ratio_status, "Awaiting payroll")
+        self.assertEqual(r.manpower.salary_ratio_status, "Awaiting Payroll")
 
 
 if __name__ == "__main__":

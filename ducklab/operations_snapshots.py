@@ -32,7 +32,12 @@ from ducklab import store_ops_db
 from ducklab.operations_repository import (
     InvalidMonthError, OperationsRepository, RepositoryError,
 )
-from ducklab.operations_service import MonthlyOperationsReport, assemble_month
+from ducklab.kpi import MonthConfig
+from ducklab.operations_repository import Store
+from ducklab.operations_service import (
+    ActionsSection, ExpenseCategoryRow, ExpensesSection, ManpowerSection,
+    MonthlyOperationsReport, SalesSection, StockSection, assemble_month,
+)
 
 PAYLOAD_FORMAT = "ducklab.snapshot.v1"
 
@@ -89,6 +94,34 @@ def deserialize_report(payload: str) -> dict:
     if data.get("format") != PAYLOAD_FORMAT:
         raise SnapshotError(f"Unknown snapshot payload format: {data.get('format')!r}")
     return _decode(data["report"])
+
+
+def snapshot_to_report(snapshot: dict) -> MonthlyOperationsReport:
+    """Rebuild the typed report from an already-authenticated snapshot.
+
+    Only the stored payload is used: no repository reads or KPI recalculation.
+    """
+    data = snapshot["report"]
+    sections = {
+        "sales": SalesSection,
+        "manpower": ManpowerSection,
+        "stock": StockSection,
+        "actions": ActionsSection,
+        "config": MonthConfig,
+        "store": Store,
+    }
+    values = {
+        name: cls(**data[name])
+        for name, cls in sections.items()
+    }
+    expenses = dict(data["expenses"])
+    expenses["categories"] = [
+        ExpenseCategoryRow(**row) for row in expenses.get("categories", [])
+    ]
+    values["expenses"] = ExpensesSection(**expenses)
+    return MonthlyOperationsReport(
+        month=data["month"], is_snapshot=True, **values,
+    )
 
 
 # --------------------------------------------------------------------------

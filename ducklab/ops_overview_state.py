@@ -409,7 +409,7 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     avg = s.average_per_day
     # full values ("RM 10,000.00"), never the short form
     glance_pairs = [
-        ("Daily Sales (Avg.)",
+        ("Average Daily Sales",
          ds.fmt_rm(int(avg) if avg is not None else None), "", "/ops/sales"),
     ]
     if exp_reported:

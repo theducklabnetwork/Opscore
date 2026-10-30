@@ -205,7 +205,7 @@ def main() -> int:
         page.wait_for_timeout(1500)
         btext = page.inner_text("#payroll-section")
         check("26. store B awaiting payroll (no salary)",
-              "Awaiting payroll" in btext)
+              "Awaiting Payroll" in btext)
         check("23. store isolation: A's salary not leaked",
               "14,500.00" not in page.inner_text("body"))
         shot(page, "05-awaiting-payroll")

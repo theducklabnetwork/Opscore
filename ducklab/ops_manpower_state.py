@@ -299,7 +299,7 @@ class ManpowerState(ExpensesState):
                     writer.writerow(("date", "shift_code"))
                     writer.writerows(rows)
                 count += 1
-            self.schedule_notice = f"{count} Files Saved: {folder.resolve()}"
+            self.schedule_notice = f"{count} files saved: {folder.resolve()}"
         except AuthenticationError:
             self.schedule_error = SESSION_EXPIRED
         except (AuthorizationError, StoreNotFoundError):
@@ -475,9 +475,9 @@ class ManpowerState(ExpensesState):
             return
         finally:
             self.schedule_saving = False
-        self.schedule_notice = "Schedule Settings Saved"
+        self.schedule_notice = "Schedule settings saved."
         if add_another and self.schedule_form_kind == "staff":
-            self.schedule_staff_confirmation = f"{staff_name} Added"
+            self.schedule_staff_confirmation = f"{staff_name} added."
             self.sf_name = ""
             self.sf_staff_code = ""
             yield ManpowerState.load_schedule_data()

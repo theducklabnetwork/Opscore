@@ -70,6 +70,13 @@ class HeadingTests(unittest.TestCase):
 
 
 class PageWordingTests(unittest.TestCase):
+    def test_report_upt_uses_report_upt_value(self):
+        from ducklab import ops_pages as p
+        section = str(p._sales_section())
+        self.assertIn('"UPT"', section)
+        self.assertIn('.sales_rx_state_?.["upt"]', section)
+        self.assertNotIn('_stat("IPR", sales["upt"]', section)
+
     def test_labels(self):
         from ducklab.ops_pages import report_page
         page = str(report_page())

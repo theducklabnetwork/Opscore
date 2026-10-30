@@ -629,10 +629,10 @@ def _account_tab() -> rx.Component:
             columns="2"),
         ui.form_section(
             "Change Password",
-            _password_field("Current password", S.pw_current,
+            _password_field("Current Password", S.pw_current,
                             S.set_pw_current, "pw-current"),
-            _password_field("New password", S.pw_new, S.set_pw_new, "pw-new"),
-            _password_field("Confirm new password", S.pw_confirm,
+            _password_field("New Password", S.pw_new, S.set_pw_new, "pw-new"),
+            _password_field("Confirm New Password", S.pw_confirm,
                             S.set_pw_confirm, "pw-confirm"),
             rx.cond(S.pw_error != "", ds.error_callout(S.pw_error)),
             rx.cond(S.pw_notice != "",
@@ -659,8 +659,7 @@ def _account_tab() -> rx.Component:
             hint="Replay the welcome tour. It starts on the Dashboard.",
             id="tour-section"),
         title="Account",
-        subtitle="Your sign-in identity. Name and email are managed by "
-                 "an administrator.",
+        subtitle="Name and email are managed by an administrator.",
         id="settings-account",
     )
 
@@ -681,13 +680,12 @@ def _about_tab() -> rx.Component:
         rx.vstack(
             _about_row("App", APP_NAME, "about-app"),
             _about_row("Version", S.about_version, "about-version"),
-            _about_row("Schema version", S.about_schema, "about-schema"),
+            _about_row("Schema Version", S.about_schema, "about-schema"),
             rx.cond(S.is_super_admin,
-                    _about_row("Database path", S.about_db_path,
+                    _about_row("Database Path", S.about_db_path,
                                "about-db-path")),
             spacing="0", width="100%"),
         title="About",
-        subtitle="Version and schema information for support.",
         id="settings-about",
     )
 
@@ -751,18 +749,18 @@ def _dsc_section() -> rx.Component:
     return ui.form_section(
         "Daily Sales Contribution",
         rx.vstack(
-            _about_row("State/Concept pairs", S.ref_pairs.to_string(),
+            _about_row("State/Concept Pairs", S.ref_pairs.to_string(),
                        "ref-pairs"),
-            _about_row("Benchmark months", S.ref_benchmark_months.to_string(),
+            _about_row("Benchmark Months", S.ref_benchmark_months.to_string(),
                        "ref-months"),
-            _about_row("Last import",
+            _about_row("Last Import",
                        rx.cond(S.ref_imported_at != "", S.ref_imported_at,
                                "Never imported"),
                        "ref-imported-at"),
             spacing="0", width="100%"),
         rx.upload(
             rx.vstack(
-                rx.button("Choose DSC Workbook (.xlsx)", variant="soft",
+                rx.button("Choose DSC Workbook", variant="soft",
                           color_scheme="gray", type="button",
                           id="dsc-choose"),
                 rx.text("… or drop it here", size="1",
@@ -826,7 +824,7 @@ def _rename_dialog() -> rx.Component:
             id="rename-section"),
         open=S.rename_open, on_open_change=S.set_rename_open,
         title="Rename Category",
-        subtitle="History is kept: transactions use the stable ID.",
+        subtitle="Transactions keep their history when a category is renamed.",
         notices=(rx.cond(S.rename_error != "",
                          ds.error_callout(S.rename_error)),),
         actions=[
@@ -881,7 +879,7 @@ def _data_tab() -> rx.Component:
                 "Restore",
                 rx.upload(
                     rx.vstack(
-                        rx.button("Choose Database File (.db)",
+                        rx.button("Choose Database File",
                                   variant="soft", color_scheme="gray",
                                   type="button", id="db-choose"),
                         rx.text("… or drop it here", size="1",
@@ -923,7 +921,6 @@ def _data_tab() -> rx.Component:
         ),
         _db_confirm_dialog(),
         title="Data",
-        subtitle="Back up and restore the application database.",
         id="settings-data",
     )
 
@@ -983,8 +980,6 @@ def _reference_tab() -> rx.Component:
         _rename_dialog(),
         _dsc_confirm_dialog(),
         title="Reference Data",
-        subtitle="Expense categories per store and the Daily Sales "
-                 "Contribution workbook that drives daily targets.",
         id="settings-reference",
     )
 
@@ -1013,6 +1008,5 @@ def settings_page() -> rx.Component:
             default_value="account",
             width="100%",
         ),
-        description="Your account and application information.",
         tour_key="settings",
     )

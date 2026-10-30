@@ -194,7 +194,7 @@ def _dialog() -> rx.Component:
         close_id="a-close",
         notices=[
             rx.cond(~A.can_write_actions, rx.callout(
-                "Read Only",
+                "You have read-only access.",
                 icon="lock", color_scheme="gray", variant="soft",
                 width="100%")),
             rx.cond(A.form_error != "", ds.error_callout(A.form_error)),

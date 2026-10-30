@@ -135,6 +135,23 @@ class TestChangePassword(SettingsFixture):
             self.app.auth.authenticate_token(token)
 
 
+class TestWording(unittest.TestCase):
+    def test_settings_labels_and_redundant_subtitles(self):
+        page = str(mod.settings_page())
+        for label in ("Current Password", "New Password",
+                      "Confirm New Password", "Schema Version",
+                      "Database Path", "State/Concept Pairs",
+                      "Benchmark Months", "Last Import"):
+            self.assertIn(f'"{label}"', page)
+        for gone in ("Your account and application information.",
+                     "Back up and restore the application database.",
+                     "Version and schema information for support."):
+            self.assertNotIn(gone, page)
+        for warning in ("Restoring replaces everything",
+                        "This cannot be", "signed out"):
+            self.assertIn(warning, page)
+
+
 class TestVersion(unittest.TestCase):
     def test_version_from_env(self):
         with mock.patch.dict("os.environ",

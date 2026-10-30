@@ -116,8 +116,8 @@ class DailyAchievementLabelTests(Fixture):
 class DayStatusTests(unittest.TestCase):
     def test_four_statuses(self):
         d = date(2026, 10, 1)
-        self.assertEqual(ds.day_status(None), "Not reported")
-        self.assertEqual(ds.day_status(kpi.DailyInput(d)), "Not reported")
+        self.assertEqual(ds.day_status(None), "Not Reported")
+        self.assertEqual(ds.day_status(kpi.DailyInput(d)), "Not Reported")
         self.assertEqual(ds.day_status(kpi.DailyInput(d, sales_cents=0)),
                          "Zero sales")
         self.assertEqual(ds.day_status(kpi.DailyInput(d, sales_cents=100)),
@@ -150,7 +150,7 @@ class DailyRowsTests(Fixture):
         status = {n: st._day_row(date(2026, 10, n), days.get(n), {}, 0.5)
                   ["status"] for n in (1, 2, 3, 4)}
         self.assertEqual(status, {1: "Complete", 2: "Zero sales",
-                                  3: "Partial", 4: "Not reported"})
+                                  3: "Partial", 4: "Not Reported"})
 
 
 class SalesPageTests(Fixture):

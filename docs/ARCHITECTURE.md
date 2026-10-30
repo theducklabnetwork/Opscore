@@ -124,7 +124,7 @@ Pure functions with no database or UI access. The main groups:
 | Sales | Days entered, sales to date, projected month-end sales (actual if every day is entered, otherwise sales ÷ days entered × days in month) |
 | Target levels | Level 1 = base. Levels 2 to 4 = Level 1 × (1 + uplift). Level 4 is never below the minimum RTM target. Highest level reached. Sales needed per remaining day. |
 | Growth | SSSG/Year and SSSG/Month against last year and last month |
-| Basket | SPR = sales ÷ transactions, UPT/IPR = units ÷ transactions, ASP = sales ÷ units. Blank when the divisor is 0 or missing. |
+| Basket | SPR = sales ÷ transactions. IPR is total items per receipt; UPT is total SKU per transaction. ASP = sales ÷ units. Blank when the divisor is 0 or missing. |
 | Daily targets | Each day's target = Level 1 × that day's contribution share (weekday or public holiday, by State and Concept). A shortfall carries forward to the next *reported* day only. |
 | Expenses | Paid, incurred and pending totals, budget status, lines needing review |
 | Manpower | Salary ratio and status, salary budget, headcount variance, turnover |

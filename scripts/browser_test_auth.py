@@ -77,7 +77,7 @@ def main() -> int:
         page.wait_for_timeout(1500)
         check("landing shows user",
               page.locator("text=Test Admin").count() > 0
-              or page.locator("text=No stores").count() > 0)
+              or page.locator("text=No Stores").count() > 0)
         page.screenshot(path=str(OUT / "ops_authenticated.png"), full_page=True)
 
         # 7. Logout works and clears access.

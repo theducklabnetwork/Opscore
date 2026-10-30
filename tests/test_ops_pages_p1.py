@@ -218,7 +218,7 @@ class PageWordingTests(unittest.TestCase):
         from ducklab.ops_sales_pages import sales_page
         self.check(str(sales_page()),
                    ("Target:", "Sales", "Projected Sales", "Achievement",
-                    "Level Reached", "Daily Sales (Avg.)", "Basket", "SPR",
+                    "Level Reached", "Average Daily Sales", "Basket", "SPR",
                     "Sales Trend", "Targets", "Gap", "Transactions",
                     "Daily Sales", "PH", "Contribution", "Adjusted Target",
                     "IPR", "Result"),
@@ -228,12 +228,28 @@ class PageWordingTests(unittest.TestCase):
                     "Sales against the monthly", "Achievement to date",
                     "Needed per remaining day"))
 
+    def test_sales_ipr_uses_sales_ipr_values(self):
+        from ducklab import ops_sales_pages as p
+        self.assertIn(("IPR", True), p._DAILY_COLS)
+        self.assertNotIn(("UPT", True), p._DAILY_COLS)
+        self.assertEqual(p._DAILY_COLS[8], ("IPR", True))
+        row = dict(date="1", weekday="", ph="", contribution="", target="",
+                   adjusted="", sales="", transactions="", txn_pct="",
+                   txn_pct_neg="", spr="", spr_pct="", spr_pct_neg="",
+                   ipr="IPR-VALUE", ipr_pct="", ipr_pct_neg="", result="",
+                   result_color="gray", iso="2026-10-01")
+        self.assertIn('"IPR-VALUE"', str(p._daily_row(row)))
+        basket = str(p._basket())
+        self.assertIn('"IPR"', basket)
+        self.assertIn('.sp_upt_rx_state_', basket)
+        self.assertIn('id:"basket-ipr-state"', basket)
+
     def test_manpower(self):
         from ducklab.ops_manpower_pages import manpower_page
         self.check(str(manpower_page()),
                    ("Opening Headcount", "New Hires", "Resignations",
                     "Closing Headcount", "Budget Headcount", "Variance",
-                    "Turnover", "Productivity", "Effective Staff (Avg.)",
+                    "Turnover", "Productivity", "Average Effective Staff",
                     "Sales per Staff", "Salary", "Target", "Salary Cost",
                     "Basic + Allowance", "Overtime", "Support Cost",
                     "Salary Budget", "Edit Payroll", "Annual Leave",

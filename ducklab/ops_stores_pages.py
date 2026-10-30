@@ -54,16 +54,16 @@ def _stores_table() -> rx.Component:
             S.store_rows.length() > 0,
             ui.data_table(
                 ["Code", "Name", "Concept", "State", "Zone", "Zone PIC",
-                 "Branch manager", "Status", "Actions"],
+                 "Branch Manager", "Status", "Actions"],
                 rx.foreach(S.store_rows, _store_row),
                 phone=("Code", "Status", "Actions"),
             ),
-            ui.empty_state("No stores", "Create your first store to begin.",
+            ui.empty_state("No Stores", "Create your first store to begin.",
                            icon="store"),
         ),
         ui.note("Deactivation preserves all historical records."),
         title="Stores",
-        extra=rx.button(rx.icon("plus", size=14), "New store",
+        extra=rx.button(rx.icon("plus", size=14), "New Store",
                         on_click=S.open_store_form(""),
                         disabled=~S.can_manage_stores, id="store-new"),
         id="stores-table",
@@ -105,14 +105,13 @@ def _store_form_dialog() -> rx.Component:
                 _sf_field("Zone", S.sf_zone, S.set_sf_zone, "sf-zone"),
                 _sf_field("Zone PIC", S.sf_zone_pic, S.set_sf_zone_pic,
                           "sf-zone-pic"),
-                _sf_field("Branch manager", S.sf_branch_manager,
+                _sf_field("Branch Manager", S.sf_branch_manager,
                           S.set_sf_branch_manager, "sf-bm"),
             ),
         ),
         open=S.sf_open,
         on_open_change=lambda v: S.close_store_form(),
         title=rx.cond(S.sf_editing != "", "Edit Store", "New Store"),
-        subtitle="Deactivation preserves all historical records.",
         close_id="store-form-close",
         notices=[rx.cond(S.sf_error != "", ds.error_callout(S.sf_error))],
         actions=ui.dialog_actions(
@@ -129,7 +128,7 @@ def _store_form_dialog() -> rx.Component:
 def _assigned_user(r) -> rx.Component:
     return rx.hstack(
         rx.text(r["label"], size="2", color=ds.TEXT),
-        rx.cond(r["active"] == "0", ui.status_chip("disabled", "gray")),
+        rx.cond(r["active"] == "0", ui.status_chip("Disabled", "gray")),
         rx.spacer(),
         rx.button("Unassign", size="1", variant="soft", color_scheme="red",
                   on_click=S.unassign_user(r["id"]),
@@ -160,8 +159,7 @@ def _assign_panel() -> rx.Component:
                           id="assign-submit"),
                 spacing="3", align="center", wrap="wrap"),
             title="User Assignment",
-            subtitle="Assign existing users to this store. User creation is "
-                     "handled by an administrator elsewhere.",
+            subtitle="Assign existing users to this store.",
             id="assign-panel",
         ),
     )
@@ -268,7 +266,7 @@ def _setup_section() -> rx.Component:
                 _setup_grid(SETUP_SALES[:2]),
                 _setup_grid(SETUP_SALES[2:5]),
                 rx.hstack(
-                    rx.button("Use HQ defaults (+10% / +20% / +30%)",
+                    rx.button("Use HQ Defaults",
                               on_click=S.use_hq_defaults, variant="soft",
                               size="2", type="button", id="setup-hq-levels",
                               disabled=~S.can_edit_setup),
@@ -279,16 +277,16 @@ def _setup_section() -> rx.Component:
                     spacing="3", align="center", wrap="wrap"),
                 _levels_panel(),
                 _setup_grid(SETUP_SALES[5:]),
-                hint="Levels 2–4 uplift is required when a Level 1 target "
-                     "is set. Last year / last month are the bases for the "
+                hint="Set Levels 2–4 when Level 1 has a target. HQ Defaults "
+                     "add 10%, 20% and 30%. Last year and last month drive "
                      "growth comparisons.",
             ),
             ui.form_section(
                 "Daily Sales",
                 ui.form_grid(*[_setup_field(spec) for spec in SETUP_DAILY],
                              _holidays_field(), columns="3"),
-                hint="Daily targets split Level 1 by the Daily Sales "
-                     "Contribution for the store's State and Concept.",
+                hint="Daily targets use the store's State and Concept "
+                     "contributions.",
             ),
             ui.form_section("Manpower", _setup_grid(SETUP_MANPOWER)),
             ui.form_section("Stock", _setup_grid(SETUP_STOCK)),
@@ -303,8 +301,8 @@ def _setup_section() -> rx.Component:
                             "store.")),
             ),
             ui.form_section("Month-End Inputs", _setup_grid(SETUP_PAYROLL),
-                            hint="Leave blank until payroll closes: it then "
-                                 "shows as awaiting payroll, never RM 0."),
+                            hint="Leave blank until payroll closes to show "
+                                 "Awaiting Payroll, never RM 0."),
         ),
         rx.hstack(
             rx.button(
@@ -318,9 +316,7 @@ def _setup_section() -> rx.Component:
             border_top=f"1px solid {ui.CARD_BORDER}", padding_top="1em",
         ),
         title="Monthly Setup",
-        subtitle="Leave a field blank if it is not set; enter 0 only for a "
-                 "genuine zero. Targets and budgets feed the Stock, "
-                 "Manpower, Expenses and Monthly Report pages.",
+        subtitle="Leave blank if not set. Enter 0 only for a genuine zero.",
         id="setup-section",
     )
 
@@ -349,7 +345,5 @@ def stores_page() -> rx.Component:
         ),
         on_store=S.select_store,
         on_month=S.select_month,
-        description="Stores, who can access them, and each store's monthly "
-                    "targets, budgets and month-end inputs.",
         tour_key="stores",
     )

@@ -256,7 +256,7 @@ class EngineFixture(unittest.TestCase):
             "Within budget", "Over budget", "OVER BUDGET", "Watch",
             "No budget", "No payments yet",
             "Within target", "Failure: over target", "Over target",
-            "Awaiting payroll", "Awaiting HC", "Normal", "HIGH TURNOVER",
+            "Awaiting Payroll", "Awaiting HC", "Normal", "HIGH TURNOVER",
             "On budget", "Over budget (+1)", "Under budget",
             "OK", "Incomplete", "Unknown category", "Missing paid date",
             "Check paid date", "Missing paid by", "Missing recorder",

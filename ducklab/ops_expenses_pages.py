@@ -35,8 +35,8 @@ def _kpi_cards() -> rx.Component:
         rx.cond(
             E.exp_month_finalized,
             rx.callout(
-                "Finalized snapshot exists — expense edits affect live "
-                "calculations only, never preserved snapshots.",
+                "A finalized snapshot exists for this month. Edits affect "
+                "live results only; preserved snapshots are never modified.",
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
@@ -70,7 +70,7 @@ def _kpi_cards() -> rx.Component:
 
 def _budget_row(row) -> rx.Component:
     return rx.el.tr(
-        ui.td(rx.text(row["name"], weight="medium")),
+        ui.td(rx.text(row["name"], weight="medium"), wrap=True),
         ui.td(row["budget"], numeric=True),
         ui.td(row["paid"], numeric=True),
         ui.td(row["remaining"], numeric=True),
@@ -389,7 +389,7 @@ def expenses_page() -> rx.Component:
                     ds.error_callout(E.error_message)),
             rx.cond(
                 E.report_status == "empty",
-                ui.empty_state("No store or month selected",
+                ui.empty_state("No Store Or Month Selected",
                                E.error_message, icon="store"),
                 rx.vstack(
                     _kpi_cards(),

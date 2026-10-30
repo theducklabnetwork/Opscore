@@ -114,7 +114,7 @@ def _hero_card(title, pill, href, spark=None, bar=None) -> rx.Component:
         *([spark] if spark is not None else []),
         spacing="3", align="start", width="100%",
     )
-    empty = rx.text("No data", size=rx.breakpoints(initial="6", lg="7"),
+    empty = rx.text("No Data", size=rx.breakpoints(initial="6", lg="7"),
                     weight="medium", color=ds.TEXT_FAINT,
                     style={"lineHeight": "1.15"})
     return rx.link(
@@ -317,6 +317,24 @@ def _mode_controls() -> rx.Component:
             ),
         ),
         rx.spacer(),
+        rx.cond(
+            R.can_finalize & (R.report_mode == "live"),
+            rx.button(
+                rx.icon("lock", size=14), "Finalize Month",
+                color_scheme="indigo", on_click=R.open_finalize,
+                disabled=(~R.selected_store_active) | (~R.live_preflight_ok),
+                id="finalize-month",
+            ),
+        ),
+        rx.cond(
+            R.can_finalize & (R.report_mode == "finalized"),
+            rx.button(
+                rx.icon("file-pen-line", size=14), "Correct Month",
+                color_scheme="indigo", on_click=R.open_correct,
+                disabled=(~R.selected_store_active) | (~R.live_preflight_ok),
+                id="correct-month",
+            ),
+        ),
         rx.button(rx.icon("download", size=14), "Export",
                   variant="outline", on_click=R.export_report,
                   disabled=R.report_status != "ok", id="export-report"),
@@ -474,6 +492,66 @@ def _actions_section() -> rx.Component:
     )
 
 
+def _finalize_warning(text) -> rx.Component:
+    return rx.hstack(
+        rx.icon("triangle-alert", size=15, color=ds.WARNING, flex_shrink="0"),
+        rx.text(text, size="2", color=ds.TEXT),
+        spacing="2", align="start", width="100%",
+    )
+
+
+def _finalize_dialog() -> rx.Component:
+    correcting = R.finalize_action == "correct"
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title(
+                rx.cond(correcting, "Correct Month", "Finalize Month")),
+            rx.dialog.description(
+                R.finalize_month_label + " · Next version: Version "
+                + R.finalize_next_version.to(str)),
+            rx.cond(
+                correcting,
+                ui.note("A new version will be created from current live data, "
+                        "not from the selected finalized version. Existing "
+                        "snapshots remain unchanged."),
+            ),
+            rx.cond(
+                R.finalize_error != "",
+                ds.error_callout(R.finalize_error),
+            ),
+            rx.vstack(
+                rx.text("Warnings (these do not block finalization)",
+                        size="2", weight="medium", color=ds.TEXT),
+                rx.cond(
+                    R.finalize_warnings.length() > 0,
+                    rx.foreach(R.finalize_warnings, _finalize_warning),
+                    rx.text("No operational warnings.", size="2",
+                            color=ds.TEXT_MUTED),
+                ),
+                spacing="3", width="100%",
+            ),
+            rx.hstack(
+                rx.dialog.close(
+                    rx.button("Cancel", variant="soft", color_scheme="gray",
+                              disabled=R.finalize_saving,
+                              id="finalize-cancel")),
+                rx.button(
+                    rx.cond(R.finalize_saving, rx.spinner(size="1"),
+                            rx.icon("save", size=14)),
+                    "Finalize Version " + R.finalize_next_version.to(str),
+                    color_scheme="indigo", on_click=R.save_finalization,
+                    disabled=R.finalize_saving | (R.finalize_error != ""),
+                    id="finalize-confirm",
+                ),
+                justify="end", spacing="3", width="100%",
+            ),
+            spacing="5", max_width="520px", id="finalize-dialog",
+        ),
+        open=R.finalize_dialog_open,
+        on_open_change=R.set_finalize_dialog_open,
+    )
+
+
 def report_page() -> rx.Component:
     return shell(
         "Monthly Report",
@@ -482,7 +560,7 @@ def report_page() -> rx.Component:
             rx.cond(R.report_status == "loading",
                     ds.loading_state("Calculating report…")),
             rx.cond(R.report_status == "empty",
-                    ui.empty_state("No report available", R.error_message,
+                    ui.empty_state("No Report Available", R.error_message,
                                    icon="file-question")),
             rx.cond(R.report_status == "error",
                     ds.error_callout(R.error_message)),
@@ -505,6 +583,7 @@ def report_page() -> rx.Component:
                     spacing=ui.GAP, width="100%",
                 ),
             ),
+            _finalize_dialog(),
             spacing=ui.GAP, width="100%",
         ),
         tour_key="report",

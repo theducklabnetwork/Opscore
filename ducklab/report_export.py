@@ -1,4 +1,4 @@
-"""Excel export of the live monthly operations report.
+"""Excel export of live and finalized monthly operations reports.
 
 All KPI values come from ``operations_service`` / ``kpi``. This module only
 arranges those results and their source records in an openpyxl workbook.
@@ -21,7 +21,11 @@ PERCENT_FORMAT = "0.00%"
 DATE_FORMAT = "yyyy-mm-dd"
 
 
-def export_filename(report: MonthlyOperationsReport) -> str:
+def export_filename(report: MonthlyOperationsReport,
+                    snapshot: dict | None = None) -> str:
+    if snapshot is not None:
+        return (f"opscore-{report.store.code}-{report.month}-finalized-"
+                f"v{snapshot['version']}.xlsx")
     return f"opscore-{report.store.code}-{report.month}.xlsx"
 
 
@@ -54,7 +58,7 @@ def _sheet(workbook, title, headers, rows, formats=None, widths=None):
     return sheet
 
 
-def _summary_rows(report, include_payroll):
+def _summary_rows(report, include_payroll, snapshot=None):
     money_rows = {
         "Sales MTD", "Month-End Sales", "Level 1 Target", "Sales per Receipt",
         "Average Selling Price", "Expenses Paid", "Expenses Incurred",
@@ -111,6 +115,17 @@ def _summary_rows(report, include_payroll):
         ("Actions Overdue", actions.counts.get("overdue", 0)),
         ("Action Completion", _decimal(actions.completion_pct)),
     ]
+    if snapshot is not None:
+        from ducklab import design as ds
+        rows = [
+            ("Store", f"{report.store.code} — {report.store.name}"),
+            ("Month", report.month),
+            ("Mode", "Finalized"),
+            ("Version", snapshot["version"]),
+            ("Finalized Date and Time", ds.fmt_kl_datetime(snapshot["created_at"])),
+            ("Status", "Superseded" if snapshot["superseded_by"] is not None
+             else "Current"),
+        ] + [row for row in rows if not row[0].startswith("Action")]
     return [(label, value, PERCENT_FORMAT if label in percentage_rows
              else MONEY_FORMAT if label in money_rows else "0.00"
              if label in {"Units per Transaction", "Average Effective Staff"}
@@ -119,12 +134,14 @@ def _summary_rows(report, include_payroll):
 
 def build_workbook(report: MonthlyOperationsReport,
                    repo: OperationsRepository,
-                   include_payroll: bool = True) -> Workbook:
-    """Build an export for an already-assembled live report."""
+                   include_payroll: bool = True,
+                   snapshot: dict | None = None) -> Workbook:
+    """Build an export; finalized reports never read current records."""
     workbook = Workbook()
     workbook.remove(workbook.active)
     summary = _sheet(
-        workbook, "Summary", ["KPI", "Value"], _summary_rows(report, include_payroll),
+        workbook, "Summary", ["KPI", "Value"],
+        _summary_rows(report, include_payroll, snapshot),
         widths={"KPI": 30, "Value": 22},
     )
     for row in summary.iter_rows(min_row=2):
@@ -132,6 +149,15 @@ def build_workbook(report: MonthlyOperationsReport,
             row[1].number_format = row[2].value
     summary.delete_cols(3)
 
+    if snapshot is None:
+        _source_record_sheets(workbook, report, repo)
+    _summary_detail_sheets(workbook, report, repo, include_payroll)
+    if snapshot is None:
+        _action_sheet(workbook, report, repo)
+    return workbook
+
+
+def _source_record_sheets(workbook, report, repo):
     store_id, month = report.store.id, report.month
     _, month_end, days_in_month = kpi.month_bounds(month)
     start = month_end.replace(day=1)
@@ -187,6 +213,8 @@ def build_workbook(report: MonthlyOperationsReport,
                 "Description": 32, "Recorded By": 20, "Receipt Ref": 20, "Remarks": 30},
     )
 
+
+def _summary_detail_sheets(workbook, report, repo, include_payroll):
     manpower = report.manpower
     salary_rows = [
         ("Opening Headcount", manpower.opening_headcount),
@@ -221,6 +249,9 @@ def build_workbook(report: MonthlyOperationsReport,
     _sheet(workbook, "Stock Loss", ["Code", "Description", "Amount"], stock_rows,
            formats={"C": MONEY_FORMAT}, widths={"Description": 34, "Amount": 18})
 
+
+def _action_sheet(workbook, report, repo):
+    store_id, month = report.store.id, report.month
     action_rows = [[
         action.raised_date, action.input.pillar, action.issue, action.priority,
         action.input.status, action.pic, action.input.due_date,
@@ -236,11 +267,11 @@ def build_workbook(report: MonthlyOperationsReport,
                 "Due Date": 14, "Corrective Action": 36, "Completion Date": 18,
                 "Remarks": 30},
     )
-    return workbook
 
 
 def export_bytes(report: MonthlyOperationsReport, repo: OperationsRepository,
-                 include_payroll: bool = True) -> bytes:
+                 include_payroll: bool = True,
+                 snapshot: dict | None = None) -> bytes:
     output = BytesIO()
-    build_workbook(report, repo, include_payroll).save(output)
+    build_workbook(report, repo, include_payroll, snapshot).save(output)
     return output.getvalue()

@@ -262,7 +262,8 @@ A suggested routine for an ABM with two or more stores:
 | Projected Sales | Expected month-end sales at the current pace |
 | SSSG/Year, SSSG/Month | Sales growth against last year and last month |
 | SPR | Sales per receipt (sales ÷ transactions) |
-| IPR / UPT | Items per receipt (units ÷ transactions) |
+| IPR | Total items per receipt |
+| UPT | Total SKU per transaction |
 | ASP | Average selling price (sales ÷ units) |
 | Salary Ratio | Salary cost ÷ sales |
 | Turnover | Resignations ÷ opening headcount |

@@ -54,7 +54,7 @@ def _efficiency_section() -> rx.Component:
     return ui.section_card(
         ui.stat_grid(
             ui.stat("Sales", EFF["sales_mtd"], size="6"),
-            ui.stat("Effective Staff (Avg.)", EFF["avg_effective"],
+            ui.stat("Average Effective Staff", EFF["avg_effective"],
                     size="6"),
             ui.stat("Sales per Staff", EFF["sales_per_staff"], size="6"),
             columns=rx.breakpoints(initial="1", sm="3"),
@@ -95,7 +95,7 @@ def _payroll_section() -> rx.Component:
             columns=rx.breakpoints(initial="2", md="5"),
         ),
         rx.cond(
-            PAY["status"] == "Awaiting payroll",
+            PAY["status"] == "Awaiting Payroll",
             rx.callout("Awaiting Payroll", icon="clock",
                        color_scheme="gray", variant="soft", width="100%",
                        id="awaiting-payroll"),
@@ -113,9 +113,8 @@ def _payroll_section() -> rx.Component:
         rx.cond(
             M.mp_finalized,
             rx.callout(
-                "A finalized snapshot exists for this month. Editing "
-                "configuration or payroll updates live results only; "
-                "preserved snapshots are never modified.",
+                "A finalized snapshot exists for this month. Edits affect "
+                "live results only; preserved snapshots are never modified.",
                 icon="archive", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
@@ -276,7 +275,7 @@ def manpower_page() -> rx.Component:
                 rx.tabs.content(
                     rx.cond(
                         ~M.mp_config_exists,
-                        ui.empty_state("Monthly configuration required",
+                        ui.empty_state("Monthly Configuration Required",
                                        M.mp_error, icon="settings"),
                         rx.vstack(
                             _headcount_section(),

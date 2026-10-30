@@ -145,11 +145,23 @@ class TileTests(Fixture):
 
 # 2-7 -------------------------------------------------------------------------
 class PageWordingTests(unittest.TestCase):
+    def test_daily_upt_uses_daily_upt_values(self):
+        from ducklab import ops_daily_pages as p
+        self.assertIn(("UPT", True), p._COLS)
+        self.assertNotIn(("IPR", True), p._COLS)
+        self.assertEqual(p._COLS[5], ("UPT", True))
+        row = dict(date="1", weekday="", sales="s", transactions="t",
+                   units="u", spr="p", upt="UPT-VALUE", asp="a", staff="f",
+                   sales_per_staff="x", loss_missing="0", loss="l",
+                   expenses="e", iso="2026-10-01", status="Complete",
+                   status_color="green")
+        self.assertIn('"UPT-VALUE"', str(p._day_row(row)))
+
     def test_page_and_dialog(self):
         from ducklab import ops_daily_pages as p
         page = str(p.daily_page())
         for text in ("New Entry", "Sales", "Achievement", "Projected Sales",
-                     "Projected Achievement", "Daily Sales (Avg.)",
+                     "Projected Achievement", "Average Daily Sales",
                      "Transactions", "Units Sold", "Total Loss",
                      "Sales per Staff"):
             self.assertIn(f'"{text}"', page, text)
