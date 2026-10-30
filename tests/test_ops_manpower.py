@@ -197,14 +197,14 @@ class TestPayroll(ManpowerFixture):
         self.assertIsNone(cfg.support_team_cost_cents)
 
     def test_sub_cent_rejected(self):
-        # UI boundary: _parse_money refuses sub-cent precision before any
+        # UI boundary: parse_money_cents refuses sub-cent precision before any
         # value reaches the repository (integer-cent storage).
-        from ducklab.ops_daily_state import _parse_money
+        from ducklab.input_validation import parse_money_cents
         with self.assertRaises(ValueError):
-            _parse_money("10.001")
+            parse_money_cents("10.001")
         with self.assertRaises(ValueError):
-            _parse_money("RM 1.234")
-        self.assertEqual(_parse_money("1,234.56"), rm("1234.56"))
+            parse_money_cents("RM 1.234")
+        self.assertEqual(parse_money_cents("1,234.56"), rm("1234.56"))
 
     def test_payroll_recalc_and_store_isolation(self):
         for sid in (self.sa, self.sb):
@@ -337,21 +337,21 @@ class TestStateValidation(ManpowerFixture):
     """Form-level parsing used by the manpower configuration editor."""
 
     def test_parse_helpers(self):
-        from ducklab.ops_manpower_state import _parse_decimal
-        self.assertEqual(_parse_decimal("0.5", "x", Decimal(0), Decimal(2)),
+        from ducklab.input_validation import parse_decimal
+        self.assertEqual(parse_decimal("0.5", "x", Decimal(0), Decimal(2)),
                          Decimal("0.5"))
         with self.assertRaises(ValueError):
-            _parse_decimal("3", "x", Decimal(0), Decimal(2))
+            parse_decimal("3", "x", Decimal(0), Decimal(2))
         with self.assertRaises(ValueError):
-            _parse_decimal("abc", "x", Decimal(0), Decimal(2))
-        from ducklab.ops_daily_state import _parse_money, _parse_count
-        self.assertEqual(_parse_money("12,000.00"), rm("12000.00"))
+            parse_decimal("abc", "x", Decimal(0), Decimal(2))
+        from ducklab.input_validation import parse_count, parse_money_cents
+        self.assertEqual(parse_money_cents("12,000.00"), rm("12000.00"))
         with self.assertRaises(ValueError):
-            _parse_money("10.001")   # sub-cent
+            parse_money_cents("10.001")   # sub-cent
         with self.assertRaises(ValueError):
-            _parse_money("nope")
+            parse_money_cents("nope")
         with self.assertRaises(ValueError):
-            _parse_count("-1", "Headcount")
+            parse_count("-1", "Headcount")
 
 
 if __name__ == "__main__":

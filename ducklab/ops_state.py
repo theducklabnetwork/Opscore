@@ -18,6 +18,7 @@ from ducklab import authz
 from ducklab import design as ds
 from ducklab import kpi
 from ducklab import report_presenter
+from ducklab.input_validation import parse_client_id
 from ducklab.auth_pages import AuthState, app_service
 from ducklab.auth_service import AuthenticationError, AuthorizationError, User
 from ducklab.operations_repository import (
@@ -54,22 +55,6 @@ def _page_tour_script(page_key: str, user: User) -> rx.event.EventSpec:
             f"'{role}')")
     return rx.call_script(
         f"window.ducklabTour && window.ducklabTour.start({page_key!r})")
-
-
-def parse_client_id(raw, what: str, required: bool = False) -> Optional[int]:
-    """Parse an id sent over the socket ('' -> None unless ``required``).
-    Anything that is not a positive whole number is rejected with
-    ValidationError before any state changes."""
-    s = str(raw if raw is not None else "").strip()
-    if not s and not required:
-        return None
-    try:
-        value = int(s)
-    except ValueError:
-        value = 0
-    if value <= 0:
-        raise ValidationError(f"Unknown {what} — reopen it from the list.")
-    return value
 
 
 def month_label(month: str) -> str:

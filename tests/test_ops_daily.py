@@ -11,7 +11,7 @@ from pathlib import Path
 from ducklab import kpi
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
-from ducklab.ops_daily_state import _parse_count, _parse_money
+from ducklab.input_validation import parse_count, parse_money_cents
 from ducklab.operations_repository import ConfigNotFoundError
 from ducklab.operations_write_repository import ValidationError
 
@@ -52,26 +52,26 @@ class DailyFixture(unittest.TestCase):
 
 class TestParsing(unittest.TestCase):
     def test_money_exact(self):
-        self.assertEqual(_parse_money("100000"), rm(100000))
-        self.assertEqual(_parse_money("10,000.00"), rm(10000))
-        self.assertEqual(_parse_money("RM 12.34"), rm(12.34))
+        self.assertEqual(parse_money_cents("100000"), rm(100000))
+        self.assertEqual(parse_money_cents("10,000.00"), rm(10000))
+        self.assertEqual(parse_money_cents("RM 12.34"), rm(12.34))
 
     def test_money_rejects_sub_cent(self):
         with self.assertRaises(ValueError):
-            _parse_money("1.005")
+            parse_money_cents("1.005")
 
     def test_money_rejects_garbage(self):
         for bad in ("abc", "", "1,2,3.x"):
             with self.assertRaises(ValueError):
-                _parse_money(bad)
+                parse_money_cents(bad)
 
     def test_count(self):
-        self.assertEqual(_parse_count("7", "x"), 7)
-        self.assertEqual(_parse_count("0", "x"), 0)
+        self.assertEqual(parse_count("7", "x"), 7)
+        self.assertEqual(parse_count("0", "x"), 0)
         with self.assertRaises(ValueError):
-            _parse_count("-1", "x")
+            parse_count("-1", "x")
         with self.assertRaises(ValueError):
-            _parse_count("1.5", "x")
+            parse_count("1.5", "x")
 
 
 class TestDailyWrites(DailyFixture):

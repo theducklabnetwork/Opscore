@@ -14,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from ducklab import kpi
+from ducklab.input_validation import parse_money_cents
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
 from ducklab.operations_write_repository import ValidationError
@@ -166,8 +167,8 @@ class Fixture(unittest.TestCase):
     def test_money_parser_rejects_subcent_inf_nan(self):
         for bad in ("10.005", "inf", "-inf", "nan"):
             with self.assertRaises(ValueError):
-                kpi.parse_money_cents(bad)
-        self.assertEqual(kpi.parse_money_cents("100,000.00"), 10000000)
+                parse_money_cents(bad)
+        self.assertEqual(parse_money_cents("100,000.00"), 10000000)
 
     # 5/6 ----------------------------------------------------------------
     def test_daily_clears_manpower_and_stock(self):

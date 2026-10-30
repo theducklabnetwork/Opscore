@@ -21,6 +21,7 @@ from ducklab.auth_service import (
     AuthenticationError, AuthorizationError, User,
 )
 from ducklab.auth_pages import app_service
+from ducklab.input_validation import parse_count, parse_money_cents
 from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
@@ -144,7 +145,7 @@ class DailyState(OpsState):
             v = self.stock_form.get(c["code"], "").strip()
             if v:
                 try:
-                    losses[c["code"]] = _parse_money(v)
+                    losses[c["code"]] = parse_money_cents(v)
                 except ValueError:
                     return "—"
         return ds.fmt_rm(kpi.total_loss_cents(losses, signs))
@@ -226,8 +227,8 @@ class DailyState(OpsState):
     def form_effective_staff(self) -> str:
         """FT + PT × configured factor (preview; stored values unchanged)."""
         try:
-            ft = _parse_count(self.f_ft_working, "ft_working")
-            pt = _parse_count(self.f_pt_working, "pt_working")
+            ft = parse_count(self.f_ft_working, "ft_working")
+            pt = parse_count(self.f_pt_working, "pt_working")
         except ValueError:
             return "—"
         if self.pt_factor is None and pt:
@@ -670,8 +671,8 @@ class DailyState(OpsState):
             for attr, col, kind, label in SALES_FIELDS + MANPOWER_FIELDS:
                 raw = getattr(self, attr).strip()
                 if raw:
-                    fields[col] = (_parse_money(raw) if kind == "money"
-                                   else _parse_count(raw, label))
+                    fields[col] = (parse_money_cents(raw) if kind == "money"
+                                   else parse_count(raw, label))
                 elif self.clear_fields.get(attr):
                     fields[col] = None  # explicit clear -> NULL
         except ValueError as exc:
@@ -688,7 +689,7 @@ class DailyState(OpsState):
             orig = self.stock_original.get(code, "").strip()
             if raw:
                 try:
-                    stock[code] = _parse_money(raw)
+                    stock[code] = parse_money_cents(raw)
                 except ValueError as exc:
                     self.form_error = f"{c['label']}: {exc}"
                     self.form_open = True
@@ -758,12 +759,6 @@ def _entry_date_error(iso_date, month: Optional[str]) -> str:
         return (f"{d.isoformat()} is outside the selected month "
                 f"({month_label(month)}).")
     return ""
-
-
-# Shared parsers live in kpi.py; these thin wrappers keep existing call
-# sites (and imports from other ops_*_state modules) stable.
-_parse_money = kpi.parse_money_cents
-_parse_count = kpi.parse_count
 
 
 def _sales_summary(days, sales=None) -> dict[str, str]:
