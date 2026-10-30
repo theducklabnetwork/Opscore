@@ -242,5 +242,83 @@ class TestBackupScript(unittest.TestCase):
                         "backup script must be executable")
 
 
+class TestStagingKeepsRuntimeAssets(unittest.TestCase):
+    """Regression: staged releases must keep assets/*.png.
+
+    ducklab/ducklab.py calls rx.asset("favicon-48.png") / rx.asset("favicon-96.png")
+    at module import time; Reflex raises FileNotFoundError for a missing local
+    asset, so a staged release whose filters dropped the PNGs could not even
+    import the app (found in the release-pipeline test gate). The blanket
+    *.png exclusion exists to keep screenshots out of releases; runtime
+    assets must be included before it (rsync filters are first-match-wins).
+    """
+
+    @staticmethod
+    def _filters(script_text):
+        """Ordered (include|exclude, pattern) list as the script declares it."""
+        return re.findall(r"--(include|exclude)\s*=\s*'([^']+)'|--(include|exclude)\s+'([^']+)'",
+                          script_text)
+
+    @staticmethod
+    def _normalized_filters(script_text):
+        return [(k1 or k2, p1 or p2)
+                for k1, p1, k2, p2 in
+                TestStagingKeepsRuntimeAssets._filters(script_text)]
+
+    @staticmethod
+    def _matches(pat, relpath):
+        from fnmatch import fnmatch
+        core = pat.rstrip("/")
+        anchored = "/" in core
+        if pat.endswith("/"):                    # directory pattern
+            if anchored:
+                return (relpath == core or relpath.startswith(core + "/")
+                        or fnmatch(relpath, core + "/*"))
+            return any(fnmatch(seg, core) for seg in relpath.split("/"))
+        if anchored:
+            return fnmatch(relpath, pat)
+        return fnmatch(relpath.rsplit("/", 1)[-1], pat)
+
+    @classmethod
+    def _kept(cls, filters, relpath):
+        """rsync first-match-wins evaluation."""
+        for kind, pat in filters:
+            if cls._matches(pat, relpath):
+                return kind == "include"
+        return True
+
+    def _assert_assets_kept(self, script_name):
+        filters = self._normalized_filters((DEPLOY / script_name).read_text())
+        for asset in (ROOT / "assets").glob("*.png"):
+            rel = asset.relative_to(ROOT).as_posix()
+            self.assertTrue(self._kept(filters, rel),
+                            f"{script_name} staging filters drop runtime asset {rel}")
+
+    def _assert_junk_pngs_dropped(self, script_name):
+        filters = self._normalized_filters((DEPLOY / script_name).read_text())
+        for junk in ("docs/screenshots/ops.png", "tests/pw-debug.png",
+                     "ducklab/debug.png"):
+            self.assertFalse(self._kept(filters, junk),
+                             f"{script_name} staging filters must still drop {junk}")
+
+    def test_release_sh_keeps_runtime_asset_pngs(self):
+        self._assert_assets_kept("release.sh")
+
+    def test_release_sh_still_drops_junk_pngs(self):
+        self._assert_junk_pngs_dropped("release.sh")
+
+    def test_publish_source_keeps_runtime_asset_pngs(self):
+        self._assert_assets_kept("publish-source.sh")
+
+    def test_publish_source_still_drops_junk_pngs(self):
+        self._assert_junk_pngs_dropped("publish-source.sh")
+
+    def test_publish_source_audit_exempts_assets(self):
+        # The post-staging "screenshots/logs/tmp" audit must not flag the
+        # runtime icons under assets/.
+        text = (DEPLOY / "publish-source.sh").read_text()
+        self.assertIn('! -path "$WORK/assets/*"', text)
+
+
 if __name__ == "__main__":
     unittest.main()
