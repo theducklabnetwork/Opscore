@@ -107,7 +107,9 @@ rsync_args=(
     --exclude 'node_modules/' --exclude '.mypy_cache/' --exclude '.ruff_cache/'
     # vcs metadata
     --exclude '.git/' --exclude '.gitignore'
-    # sensitive test artifacts
+    # sensitive test artifacts (assets/*.png is required at app import
+    # time; rsync is first-match-wins so the include precedes the exclude)
+    --include 'assets/*.png'
     --exclude 'docs/screenshots/' --exclude '*.png' --exclude '*.har'
     --exclude '*.log' --exclude '*.tmp' --exclude '*~' --exclude '.DS_Store'
 )
@@ -136,7 +138,7 @@ audit "vcs metadata"          "$(find "$WORK" -name '.git' | head)"
 audit "runtime caches"        "$(find "$WORK" \( -name '__pycache__' -o -name '.pytest_cache' -o -name '.states' -o -name '.web' \) | head)"
 audit "symlinks (none allowed)" "$(find "$WORK" -type l | head)"
 audit "non-regular entries (devices/fifos/sockets)" "$(find "$WORK" ! -type f ! -type d | head)"
-audit "screenshots/logs/tmp"  "$(find "$WORK" \( -name '*.png' -o -name '*.log' -o -name '*.tmp' -o -name '*~' \) | head)"
+audit "screenshots/logs/tmp"  "$(find "$WORK" \( -name '*.png' ! -path "$WORK/assets/*" \) -o -name '*.log' -o -name '*.tmp' -o -name '*~' | head)"
 # Secret-content scan: common credential patterns in staged text files.
 # This script's own regex literals would self-match; exclude it explicitly.
 audit "credential-like content" "$(grep -rIlE '(BEGIN [A-Z ]*PRIVATE KEY|AWS_SECRET_ACCESS_KEY|api[_-]?key["'"'"']?[[:space:]]*[:=])' "$WORK" 2>/dev/null | grep -v 'test\|docs\|publish-source.sh' | head)"

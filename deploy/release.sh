@@ -165,6 +165,11 @@ stage_source() {
     elif [[ -d "$src" ]]; then
         # rsync -a copies symlinks AS symlinks (never follows them); the
         # post-stage audit rejects any link that escapes the release dir.
+        # assets/*.png holds runtime favicon/icon assets: ducklab/ducklab.py
+        # calls rx.asset(...) at module import time and a staged copy without
+        # them dies with FileNotFoundError. rsync filters are
+        # first-match-wins, so the include MUST precede the blanket *.png
+        # screenshot exclusion.
         rsync -a --delete \
             --exclude '.git/' --exclude '.venv*/' --exclude '.web/' \
             --exclude '.states/' --exclude '__pycache__/' --exclude '*.pyc' \
@@ -175,6 +180,7 @@ stage_source() {
             --exclude 'id_ed25519*' --exclude '*.keystore' \
             --exclude '.pytest_cache/' --exclude 'node_modules/' \
             --exclude '*.log' --exclude '*.tmp' --exclude '*~' \
+            --include 'assets/*.png' \
             --exclude 'docs/screenshots/' --exclude '*.png' --exclude '*.har' \
             "$src/ducklab" "$src/rxconfig.py" "$src/assets" "$src/scripts" \
             "$src/deploy" "$src/requirements.txt" "$src/requirements.lock" \
