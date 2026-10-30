@@ -14,27 +14,31 @@ from __future__ import annotations
 import reflex as rx
 
 from ducklab import authz
-from ducklab import design as ds
-from ducklab import kpi
 from ducklab.input_validation import parse_client_id
 from ducklab.auth_service import (
     AuthenticationError, AuthorizationError,
 )
 from ducklab.auth_pages import app_service
 from ducklab.operations_repository import (
-    ConfigNotFoundError, RepositoryError, StoreNotFoundError,
+    RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import (
     CONCEPTS, DuplicateRecordError, RecordNotFoundError, ValidationError,
 )
-from ducklab.ops_setup_state import (
-    SetupState, _count_str, _factor_str, _money_str, _pct_str,
-)
-from ducklab.ops_state import SESSION_EXPIRED, OpsState, auth_message
+from ducklab.ops_assignment_state import AssignmentState
+from ducklab.ops_setup_state import SetupState
+from ducklab.ops_shared_state import SESSION_EXPIRED, SharedOpsState
 
 
-class StoresState(SetupState):
+class StoresState(SharedOpsState):
     """Store Management page state (store form + selectors + loader)."""
+
+    # --- stores table / page state (shared names are per-class copies;
+    # the page renders both this class's and AssignmentState's surface) ---
+    store_rows: list[dict[str, str]] = []
+    can_manage_stores: bool = False
+    stores_error: str = ""
+    stores_notice: str = ""
 
     # --- store form drawer ---------------------------------------------
     sf_open: bool = False           # store form drawer
@@ -61,10 +65,6 @@ class StoresState(SetupState):
         self.sf_zone = self.sf_zone_pic = self.sf_branch_manager = ""
         self.sf_error = ""
         self.sf_saving = False
-        self.assign_store_id = ""
-        self.assign_rows = []
-        self.assign_options = []
-        self.assign_selected = ""
 
     # ------------------------------------------------------------------
     # selectors: clear prior-store form data on switch
@@ -74,33 +74,38 @@ class StoresState(SetupState):
         if label == self.selected_store_label:
             return
         self.selected_store_label = label
-        self._clear_manpower()
-        self._clear_stock()
-        self._clear_setup()
         self._clear_stores()
-        self._clear_report()
-        yield StoresState.refresh_report()
+        self._clear_shared_status()
+        yield StoresState.resync_selection()
         yield StoresState.load_page_data()
+        yield AssignmentState.refresh_flags()
+        yield AssignmentState.reset_assign()
+        yield SetupState.reset_setup()
+        yield SetupState.load_setup_data()
 
     @rx.event
     def select_month(self, label: str):
         if label == self.selected_month_label:
             return
         self.selected_month_label = label
-        self._clear_manpower()
-        self._clear_stock()
-        self._clear_setup()
-        self._clear_report()
-        yield StoresState.refresh_report()
+        self._clear_stores()
+        self._clear_shared_status()
+        yield StoresState.resync_selection()
         yield StoresState.load_page_data()
+        yield AssignmentState.refresh_flags()
+        yield AssignmentState.reset_assign()
+        yield SetupState.reset_setup()
+        yield SetupState.load_setup_data()
 
     @rx.event
     def load_stores(self):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        yield OpsState.load_ops()
+        yield StoresState.load_selectors()
         yield StoresState.load_page_data()
+        yield AssignmentState.refresh_flags()
+        yield SetupState.load_setup_data()
 
     # ------------------------------------------------------------------
     # loading
@@ -116,13 +121,6 @@ class StoresState(SetupState):
             self.report_status = "error"
             return
         self.can_manage_stores = authz.can_manage_users(user)
-        self.can_assign_users = authz.can_manage_users(user)
-        store_id = self._selected_store_id()
-        month = self._selected_month()
-        self.can_edit_setup = (
-            self.selected_store_active and
-            store_id is not None and authz.can_manage_config(user)
-            and authz.can_access_store(user, store_id))
 
         # stores table (detail via read repo; super admin sees all)
         try:
@@ -140,80 +138,6 @@ class StoresState(SetupState):
              "active": "1" if s.active else "0",
              "active_label": "Active" if s.active else "Disabled"}
             for s in stores
-        ]
-
-        # monthly setup for the current selection
-        if store_id is None or month is None:
-            return
-        try:
-            try:
-                cfg = app_service.get_month_config(user, store_id, month)
-            except ConfigNotFoundError:
-                cfg = None
-            self.setup_finalized = bool(
-                app_service.list_report_versions(user, store_id, month))
-            cats = app_service.get_expense_categories(user, store_id)
-            budgets = app_service.get_expense_budgets(user, store_id, month)
-            holidays = app_service.get_public_holidays(user, store_id, month)
-        except (AuthenticationError, AuthorizationError,
-                StoreNotFoundError) as exc:
-            # never show blank setup fields for an auth failure
-            self._clear_setup()
-            self.can_edit_setup = False
-            self.setup_error = auth_message(exc)
-            return
-        if cfg is not None:
-            # Payroll values (salary/overtime/support/ratio target) enter
-            # state ONLY when the user may edit setup (can_edit_setup,
-            # which is gated on authz.can_manage_config).
-            payroll_vals = (
-                {"s_salary_ratio": _pct_str(cfg.salary_ratio_target),
-                 "s_salary": _money_str(cfg.salary_basic_allowance_cents),
-                 "s_overtime": _money_str(cfg.overtime_cents),
-                 "s_support": _money_str(cfg.support_team_cost_cents)}
-                if self.can_edit_setup else
-                {"s_salary_ratio": "", "s_salary": "", "s_overtime": "",
-                 "s_support": ""})
-            vals = {
-                "s_min_rtm": _money_str(cfg.min_rtm_target_cents),
-                "s_level1": _money_str(cfg.level1_base_cents),
-                "s_level2": _pct_str(cfg.level2_pct),
-                "s_level3": _pct_str(cfg.level3_pct),
-                "s_level4": _pct_str(cfg.level4_pct),
-                "s_last_year": _money_str(cfg.sales_last_year_cents),
-                "s_last_month": _money_str(cfg.sales_last_month_cents),
-                "s_budget_hc": _count_str(cfg.budget_headcount),
-                "s_turnover": _pct_str(cfg.turnover_threshold),
-                "s_opening_hc": _count_str(cfg.opening_headcount_ft),
-                "s_pt_factor": _factor_str(cfg.part_timer_factor),
-                "s_stock_target": _pct_str(cfg.stock_loss_target),
-                "s_target_txn": _count_str(cfg.target_transactions),
-                "s_target_spr": _money_str(cfg.target_spr_cents),
-                "s_target_ipr": _factor_str(cfg.target_ipr),
-            }
-            vals.update(payroll_vals)
-            for attr, v in vals.items():
-                setattr(self, attr, v)
-            self.setup_original = dict(vals)
-            levels = kpi.sales_target_levels_cents(cfg)
-            self.setup_levels_missing = kpi.levels_missing(cfg)
-            self.setup_levels = [
-                {"level": f"Level {n}",
-                 "value": ds.fmt_rm(levels.get(f"level{n}"))}
-                for n in (1, 2, 3, 4)
-            ]
-        self.s_holidays = [d.isoformat() for d in holidays]
-        self.s_holidays_original = list(self.s_holidays)
-        first, last, _ = kpi.month_bounds(month)
-        self.s_holiday_min, self.s_holiday_max = (first.isoformat(),
-                                                  last.isoformat())
-        # expense budgets (rows always shown when categories exist)
-        self.budget_rows = [
-            {"id": str(c.id), "name": c.name,
-             "value": _money_str(budgets.get(c.id)),
-             "original": _money_str(budgets.get(c.id)),
-             "clear": ""}
-            for c in cats
         ]
 
     # ------------------------------------------------------------------
@@ -302,6 +226,7 @@ class StoresState(SetupState):
         finally:
             self.sf_saving = False
         yield StoresState.load_page_data()
+        yield SetupState.load_setup_data()
 
     @rx.event
     def toggle_store_active(self, store_id: str) -> None:
@@ -324,6 +249,7 @@ class StoresState(SetupState):
             self.stores_error = str(exc) if not isinstance(
                 exc, AuthenticationError) else "Session expired — sign in again."
         yield StoresState.load_page_data()
+        yield SetupState.load_setup_data()
 
     @rx.event
     def set_sf_code(self, value: str) -> None:

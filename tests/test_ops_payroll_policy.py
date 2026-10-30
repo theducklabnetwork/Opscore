@@ -81,11 +81,11 @@ class Fixture(unittest.TestCase):
 
     # 3 ------------------------------------------------------------------
     def test_stores_state_payroll_gated(self):
-        """load_page_data fills payroll fields only when can_edit_setup
+        """load_setup_data fills payroll fields only when can_edit_setup
         (gated on can_manage_config). Viewers get empty strings."""
-        from ducklab.ops_stores_state import StoresState
+        from ducklab.ops_setup_state import SetupState
         from ducklab import auth_pages
-        import ducklab.ops_stores_state as mod
+        import ducklab.ops_setup_state as mod
         # simulate the page-data load for the viewer
         st_viewer = self._load_stores_state(self.viewer)
         self.assertEqual(st_viewer["s_salary"], "")
@@ -97,7 +97,7 @@ class Fixture(unittest.TestCase):
         self.assertEqual(st_admin["s_support"], "2000.00")
 
     def _load_stores_state(self, user):
-        """Reproduce StoresState.load_page_data's setup-field logic without
+        """Reproduce SetupState.load_setup_data's setup-field logic without
         a Reflex runtime (same code path, same gating)."""
         from ducklab.ops_setup_state import _money_str, _pct_str
         can_edit = (authz.can_manage_config(user)

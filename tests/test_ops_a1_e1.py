@@ -305,8 +305,8 @@ class ValidationLabelTests(Fixture):
 
 class ClearXBudgetTests(unittest.TestCase):
     def test_monthly_setup_x(self):
-        from ducklab.ops_stores_state import StoresState
-        st = StoresState()
+        from ducklab.ops_setup_state import SetupState
+        st = SetupState()
         st.budget_rows = [{"id": "3", "name": "Elec", "value": "500.00",
                            "original": "500.00", "clear": ""}]
         st.clear_budget("3")

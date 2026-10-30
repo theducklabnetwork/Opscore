@@ -9,7 +9,7 @@ from ducklab import store_ops_db
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
 from ducklab.operations_write_repository import ValidationError
-from ducklab.ops_manpower_state import ManpowerState
+from ducklab.ops_schedule_state import ScheduleState
 
 
 class ScheduleTests(unittest.TestCase):
@@ -68,7 +68,7 @@ class ScheduleTests(unittest.TestCase):
                                      date(2026, 10, 11))
         self.assertEqual(len(data["entries"]), 2)
         self.assertEqual(self.app.get_schedule_target(self.admin, self.store, monday), 2)
-        state = ManpowerState()
+        state = ScheduleState()
         state.schedule_staff = [{k: str(v) for k, v in row.items()}
                                 for row in data["staff"]]
         state.schedule_codes = [{k: str(v or "") for k, v in row.items()}
@@ -115,7 +115,7 @@ class ScheduleTests(unittest.TestCase):
             name="Amy", staff_code="A001", position="Supervisor")
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 26), date(2026, 11, 1))
-        state = ManpowerState()
+        state = ScheduleState()
         state.schedule_staff = [{k: str(v) for k, v in row.items()}
                                 for row in data["staff"]]
         state.schedule_codes = [{k: str(v or "") for k, v in row.items()}

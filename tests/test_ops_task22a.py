@@ -545,13 +545,13 @@ class BudgetClearConflictTests(Fixture):
 
     def test_monthly_setup_save_writes_nothing(self):
         import ducklab.ops_setup_state as mod
-        from ducklab.ops_stores_state import StoresState
-        st = StoresState()
+        from ducklab.ops_setup_state import SetupState
+        st = SetupState()
         st.budget_rows = [{"id": str(self.cat), "name": "Elec",
                            "value": "600.00", "original": "500.00",
                            "clear": "1"}]
         st.setup_original = {}
-        self.run_bound(self.bind(mod, StoresState),
+        self.run_bound(self.bind(mod, SetupState),
                        lambda: list(st.save_setup()))
         self.assertEqual(
             st.setup_error,

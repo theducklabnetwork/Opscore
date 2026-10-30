@@ -41,8 +41,8 @@ from ducklab.operations_repository import (
 )
 from ducklab.operations_write_repository import ValidationError
 from ducklab.ops_schedule_state import ScheduleState
-from ducklab.ops_state import (
-    ACCESS_DENIED, SESSION_EXPIRED, OpsState, auth_message, month_label,
+from ducklab.ops_shared_state import (
+    ACCESS_DENIED, SESSION_EXPIRED, SharedOpsState, auth_message, month_label,
 )
 
 # All status colors: ds.status_color (design.py shared map)
@@ -91,10 +91,10 @@ def _config_form_values(cfg, can_payroll: bool) -> dict[str, str]:
     return values
 
 
-class ManpowerState(ScheduleState):
+class ManpowerState(SharedOpsState):
     """Manpower Efficiency page state (inherits selectors + guards).
 
-    The weekly schedule workflow is inherited from ScheduleState
+    The weekly schedule workflow is yielded from ScheduleState
     (ops_schedule_state.py); this class adds headcount/payroll KPIs and
     the monthly configuration editor.
     """
@@ -163,7 +163,6 @@ class ManpowerState(ScheduleState):
         self.cfg_open = False
         self.cfg_error = ""
         self.cfg_saving = False
-        self._clear_schedule()
 
     @rx.event
     def toggle_staff_hidden_days(self):
@@ -178,10 +177,11 @@ class ManpowerState(ScheduleState):
             return
         self.selected_store_label = label
         self._clear_manpower()
-        self._clear_report()
-        yield ManpowerState.refresh_report()
+        self._clear_shared_status()
+        yield ManpowerState.resync_selection()
         yield ManpowerState.load_manpower_data()
-        yield ManpowerState.load_schedule_data()
+        yield ScheduleState.reset_schedule()
+        yield ScheduleState.load_schedule_data()
 
     @rx.event
     def select_month(self, label: str):
@@ -189,10 +189,11 @@ class ManpowerState(ScheduleState):
             return
         self.selected_month_label = label
         self._clear_manpower()
-        self._clear_report()
-        yield ManpowerState.refresh_report()
+        self._clear_shared_status()
+        yield ManpowerState.resync_selection()
         yield ManpowerState.load_manpower_data()
-        yield ManpowerState.load_schedule_data()
+        yield ScheduleState.reset_schedule()
+        yield ScheduleState.load_schedule_data()
 
     # ------------------------------------------------------------------
     # loading
@@ -202,9 +203,10 @@ class ManpowerState(ScheduleState):
         guard = self.require_auth()
         if guard is not None:
             return guard
-        yield OpsState.load_ops()
+        yield ManpowerState.load_selectors()
         yield ManpowerState.load_manpower_data()
-        yield ManpowerState.load_schedule_data()
+        yield ScheduleState.reset_schedule()
+        yield ScheduleState.load_schedule_data()
 
     @rx.event
     def load_manpower_data(self) -> None:
@@ -560,7 +562,7 @@ class ManpowerState(ScheduleState):
                      "remains untouched.")
         self.mp_notice = note
         yield ManpowerState.load_manpower_data()
-        yield ManpowerState.refresh_report()
+        yield ManpowerState.resync_selection()
 
     def _parse_config_form(self) -> dict:
         """Changed staffing fields + verbatim payroll fields.

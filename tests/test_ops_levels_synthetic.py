@@ -245,15 +245,15 @@ class FourLevelsRequiredTests(Fixture):
 
 class MonthlySetupTests(Fixture):
     def setup_state(self):
-        from ducklab.ops_stores_state import StoresState
-        state = StoresState()
+        from ducklab.ops_setup_state import SetupState
+        state = SetupState()
         state.setup_original = {}
         return state
 
     def save(self, state):
+        from ducklab.ops_setup_state import SetupState
         import ducklab.ops_setup_state as mod
-        from ducklab.ops_stores_state import StoresState
-        self.bound(mod, StoresState, lambda: list(state.save_setup()))
+        self.bound(mod, SetupState, lambda: list(state.save_setup()))
 
     def test_form_error_and_visible_hq_defaults(self):
         state = self.setup_state()
@@ -272,12 +272,12 @@ class MonthlySetupTests(Fixture):
                          (Decimal("0.1"), Decimal("0.2"), Decimal("0.3")))
 
     def test_missing_uplift_warning_on_setup_and_sales(self):
-        import ducklab.ops_stores_state as mod
-        from ducklab.ops_stores_state import StoresState
+        from ducklab.ops_setup_state import SetupState
+        import ducklab.ops_setup_state as mod
         self.app.write.repo.save_month_config(self.sid, "2026-10",
                                                level1_base_cents=rm(200000))
         setup = self.setup_state()
-        self.bound(mod, StoresState, setup.load_page_data)
+        self.bound(mod, SetupState, setup.load_setup_data)
         self.assertTrue(setup.setup_levels_missing)
         self.assertEqual([level["level"] for level in setup.setup_levels],
                          ["Level 1", "Level 2", "Level 3", "Level 4"])

@@ -30,16 +30,15 @@ from ducklab.operations_repository import (
     RepositoryError, StoreNotFoundError,
 )
 from ducklab.operations_write_repository import ValidationError
-from ducklab.ops_expenses_state import ExpensesState
-from ducklab.ops_state import (
-    ACCESS_DENIED, SESSION_EXPIRED, month_label,
+from ducklab.ops_shared_state import (
+    ACCESS_DENIED, SESSION_EXPIRED, SharedOpsState, month_label,
 )
 
 # All status colors: ds.status_color (design.py shared map)
 
 
-class ScheduleState(ExpensesState):
-    """Weekly schedule state (inherits selectors + guards)."""
+class ScheduleState(SharedOpsState):
+    """Weekly schedule state (flat base: shared selectors + guards)."""
 
     # --- weekly schedule --------------------------------------------------
     can_write_schedule: bool = False
@@ -83,6 +82,11 @@ class ScheduleState(ExpensesState):
         self.schedule_form_open = False
         self.schedule_form_error = ""
         self.schedule_saving = False
+
+    @rx.event
+    def reset_schedule(self) -> None:
+        """Clear the whole schedule panel (store/month switch)."""
+        self._clear_schedule()
 
     @rx.var
     def schedule_week_choices(self) -> list[dict[str, str]]:

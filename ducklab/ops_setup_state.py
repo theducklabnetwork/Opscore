@@ -15,6 +15,9 @@ from typing import Optional
 
 import reflex as rx
 
+from ducklab import authz
+from ducklab import design as ds
+from ducklab import kpi
 from ducklab.input_validation import (
     parse_count, parse_decimal, parse_money_cents,
 )
@@ -22,11 +25,15 @@ from ducklab.auth_service import (
     AuthenticationError, AuthorizationError,
 )
 from ducklab.auth_pages import app_service
-from ducklab.operations_repository import RepositoryError
+from ducklab.operations_repository import (
+    ConfigNotFoundError, RepositoryError, StoreNotFoundError,
+)
 from ducklab.operations_write_repository import (
     DuplicateRecordError, ValidationError,
 )
-from ducklab.ops_assignment_state import AssignmentState
+from ducklab.ops_shared_state import (
+    SESSION_EXPIRED, SharedOpsState, auth_message,
+)
 from ducklab.ops_expenses_state import BUDGET_CLEAR_CONFLICT
 
 # Monthly setup field specs: (state attr, config field, kind, label)
@@ -97,7 +104,7 @@ def _count_str(v) -> str:
     return "" if v is None else str(v)
 
 
-class SetupState(AssignmentState):
+class SetupState(SharedOpsState):
     """Monthly Setup workflow state."""
 
     # --- monthly setup form ---------------------------------------------
@@ -148,6 +155,101 @@ class SetupState(AssignmentState):
         self.s_holiday_min = self.s_holiday_max = ""
         for attr, _, _, _ in SETUP_ALL:
             setattr(self, attr, "")
+
+    @rx.event
+    def reset_setup(self) -> None:
+        """Clear the Monthly Setup form (store/month switch)."""
+        self._clear_setup()
+
+    # ------------------------------------------------------------------
+    # loading
+    # ------------------------------------------------------------------
+    @rx.event
+    def load_setup_data(self) -> None:
+        """Load the Monthly Setup form for the selected store/month."""
+        try:
+            user = self._actor()
+        except AuthenticationError:
+            self.setup_error = SESSION_EXPIRED
+            return
+        store_id = self._selected_store_id()
+        month = self._selected_month()
+        self.can_edit_setup = (
+            self.selected_store_active and
+            store_id is not None and authz.can_manage_config(user)
+            and authz.can_access_store(user, store_id))
+        if store_id is None or month is None:
+            return
+        try:
+            try:
+                cfg = app_service.get_month_config(user, store_id, month)
+            except ConfigNotFoundError:
+                cfg = None
+            self.setup_finalized = bool(
+                app_service.list_report_versions(user, store_id, month))
+            cats = app_service.get_expense_categories(user, store_id)
+            budgets = app_service.get_expense_budgets(user, store_id, month)
+            holidays = app_service.get_public_holidays(user, store_id, month)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            # never show blank setup fields for an auth failure
+            self._clear_setup()
+            self.can_edit_setup = False
+            self.setup_error = auth_message(exc)
+            return
+        if cfg is not None:
+            # Payroll values (salary/overtime/support/ratio target) enter
+            # state ONLY when the user may edit setup (can_edit_setup,
+            # which is gated on authz.can_manage_config).
+            payroll_vals = (
+                {"s_salary_ratio": _pct_str(cfg.salary_ratio_target),
+                 "s_salary": _money_str(cfg.salary_basic_allowance_cents),
+                 "s_overtime": _money_str(cfg.overtime_cents),
+                 "s_support": _money_str(cfg.support_team_cost_cents)}
+                if self.can_edit_setup else
+                {"s_salary_ratio": "", "s_salary": "", "s_overtime": "",
+                 "s_support": ""})
+            vals = {
+                "s_min_rtm": _money_str(cfg.min_rtm_target_cents),
+                "s_level1": _money_str(cfg.level1_base_cents),
+                "s_level2": _pct_str(cfg.level2_pct),
+                "s_level3": _pct_str(cfg.level3_pct),
+                "s_level4": _pct_str(cfg.level4_pct),
+                "s_last_year": _money_str(cfg.sales_last_year_cents),
+                "s_last_month": _money_str(cfg.sales_last_month_cents),
+                "s_budget_hc": _count_str(cfg.budget_headcount),
+                "s_turnover": _pct_str(cfg.turnover_threshold),
+                "s_opening_hc": _count_str(cfg.opening_headcount_ft),
+                "s_pt_factor": _factor_str(cfg.part_timer_factor),
+                "s_stock_target": _pct_str(cfg.stock_loss_target),
+                "s_target_txn": _count_str(cfg.target_transactions),
+                "s_target_spr": _money_str(cfg.target_spr_cents),
+                "s_target_ipr": _factor_str(cfg.target_ipr),
+            }
+            vals.update(payroll_vals)
+            for attr, v in vals.items():
+                setattr(self, attr, v)
+            self.setup_original = dict(vals)
+            levels = kpi.sales_target_levels_cents(cfg)
+            self.setup_levels_missing = kpi.levels_missing(cfg)
+            self.setup_levels = [
+                {"level": f"Level {n}",
+                 "value": ds.fmt_rm(levels.get(f"level{n}"))}
+                for n in (1, 2, 3, 4)
+            ]
+        self.s_holidays = [d.isoformat() for d in holidays]
+        self.s_holidays_original = list(self.s_holidays)
+        first, last, _ = kpi.month_bounds(month)
+        self.s_holiday_min, self.s_holiday_max = (first.isoformat(),
+                                                  last.isoformat())
+        # expense budgets (rows always shown when categories exist)
+        self.budget_rows = [
+            {"id": str(c.id), "name": c.name,
+             "value": _money_str(budgets.get(c.id)),
+             "original": _money_str(budgets.get(c.id)),
+             "clear": ""}
+            for c in cats
+        ]
 
     # ------------------------------------------------------------------
     # monthly setup save
@@ -347,10 +449,7 @@ class SetupState(AssignmentState):
         finally:
             self.setup_saving = False
         yield
-        # Local import: the page-level loader lives on the StoresState
-        # subclass (importing it at module level would be circular).
-        from ducklab.ops_stores_state import StoresState
-        yield StoresState.load_page_data()
+        yield SetupState.load_setup_data()
 
     @rx.event
     def use_hq_defaults(self) -> None:
