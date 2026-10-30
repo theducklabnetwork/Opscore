@@ -170,8 +170,7 @@ def header(title: str, on_store=None, on_month=None,
             )] if tour_key is not None else []),
             rx.box(  # wrapper: click bubbles to sync theme into state
                 rx.color_mode.button(variant="ghost", id="theme-toggle"),
-                on_click=AuthState.set_is_dark(
-                    rx.color_mode_cond(True, False)),
+                on_click=AuthState.toggle_is_dark,
             ),
             rx.menu.root(
                 rx.menu.trigger(

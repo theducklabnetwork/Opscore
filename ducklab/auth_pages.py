@@ -45,12 +45,16 @@ class AuthState(rx.State):
     has_users: bool = True
 
     @rx.event
-    def set_is_dark(self, value) -> None:
-        """Sync the client color mode into state (bool or 'dark'/'light')."""
-        if isinstance(value, str):
-            self.is_dark = value == "dark"
-        else:
-            self.is_dark = bool(value)
+    async def toggle_is_dark(self) -> None:
+        """Toggle the server theme and restyle charts without reloading data."""
+        self.is_dark = not self.is_dark
+        # Restyle both concrete child states; the inactive page has no
+        # source data and is therefore a no-op.
+        from ducklab.ops_overview_state import OverviewState
+        from ducklab.ops_sales_state import SalesState
+        for cls in (OverviewState, SalesState):
+            state = await self.get_state(cls)
+            state._apply_chart_theme(self.is_dark)
 
     def _actor(self) -> auth_service.User:
         """Authenticated identity from trusted server-side context only.

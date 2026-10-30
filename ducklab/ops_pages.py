@@ -251,15 +251,11 @@ def _hero_card(title, pill, href, spark=None, bar=None) -> rx.Component:
     )
 
 
-def _spark(ready, dark_fig, light_fig) -> rx.Component:
+def _spark(ready, active_fig) -> rx.Component:
     """Sparkline once 3 days are reported (a 1-2 day sparkline is only a
     sliver); nothing before that."""
     return rx.cond(
-        ready,
-        rx.box(rx.cond(O.is_dark, ops_charts.sparkline_chart(dark_fig),
-                       ops_charts.sparkline_chart(light_fig)),
-               width="100%"),
-    )
+        ready, rx.box(ops_charts.sparkline_chart(active_fig), width="100%"))
 
 
 def _hero_row() -> rx.Component:
@@ -267,14 +263,14 @@ def _hero_row() -> rx.Component:
         rx.heading("Monthly Overview", size="4", weight="medium", color=ds.TEXT),
         rx.grid(
             _hero_card("Sales", O.pill_sales, "/ops/sales",
-                       spark=_spark(O.spark_sales_ready, O.spark_sales_dark,
-                                    O.spark_sales_light),
+                       spark=_spark(O.spark_sales_ready,
+                                    O.active_spark_sales_fig),
                        bar=_sales_bar(O.pill_sales)),
             _hero_card("Expenses", O.pill_expenses, "/ops/expenses"),
             _hero_card("Salary Ratio", O.pill_manpower, "/ops/manpower"),
             _hero_card("Stock Loss", O.pill_stock, "/ops/stock",
-                       spark=_spark(O.spark_stock_ready, O.spark_stock_dark,
-                                    O.spark_stock_light)),
+                       spark=_spark(O.spark_stock_ready,
+                                    O.active_spark_stock_fig)),
             columns=rx.breakpoints(initial="1", sm="2", lg="4"),
             spacing="4", width="100%",
         ),
@@ -318,9 +314,7 @@ def _target_row(t) -> rx.Component:
 def _main_row() -> rx.Component:
     pace = ui.chart_card(
         "Sales Trend",
-        rx.cond(O.is_dark,
-                ops_charts.chart(O.pace_fig_dark, height="340px"),
-                ops_charts.chart(O.pace_fig_light, height="340px")),
+        ops_charts.chart(O.active_pace_fig, height="340px"),
         ready=O.pace_has_data,
         id="overview-pace",
     )

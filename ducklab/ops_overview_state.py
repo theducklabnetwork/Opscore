@@ -82,18 +82,61 @@ class OverviewState(ActionsState):
     portfolio_alerts: list[PortfolioAlertGroup] = []
 
     # sparklines (sales + stock), one figure per theme
-    spark_sales_dark: go.Figure = go.Figure()
-    spark_sales_light: go.Figure = go.Figure()
-    spark_stock_dark: go.Figure = go.Figure()
-    spark_stock_light: go.Figure = go.Figure()
+    spark_sales_dark: go.Figure | None = None
+    spark_sales_light: go.Figure | None = None
+    spark_stock_dark: go.Figure | None = None
+    spark_stock_light: go.Figure | None = None
     # a sparkline needs 3 reported days; fewer -> "Not enough data yet"
     spark_sales_ready: bool = False
     spark_stock_ready: bool = False
 
     # pace chart (same data as /ops/sales)
-    pace_fig_dark: go.Figure = go.Figure()
-    pace_fig_light: go.Figure = go.Figure()
+    pace_fig_dark: go.Figure | None = None
+    pace_fig_light: go.Figure | None = None
     pace_has_data: bool = False
+
+    # Plain private attribute (no annotation): intentionally not state.
+    _chart_inputs = {}
+
+    def _chart_source(self) -> dict:
+        return self._chart_inputs
+
+    def _apply_chart_theme(self, dark: bool) -> None:
+        src = self._chart_source()
+        if not src or self.all_stores:
+            return
+        pace = kpi.pace_series(src["days"], src["dim"], src["level1"])
+        levels = kpi.level_pace_lines(src["targets"], src["dim"])
+        fig = ops_charts.pace_chart(
+            [p["day"] for p in pace], [p["actual"] for p in pace],
+            [p["budget"] for p in pace], dark=dark, y_title="", levels=levels)
+        self.pace_fig_dark = fig if dark else None
+        self.pace_fig_light = None if dark else fig
+        for name, values in (("sales", src["sales_daily"]),
+                             ("stock", src["loss_daily"])):
+            fig = ops_charts.sparkline(src["spark_days"], values, dark=dark)
+            setattr(self, f"spark_{name}_dark", fig if dark else None)
+            setattr(self, f"spark_{name}_light",
+                    None if dark else fig)
+
+    @rx.var
+    def active_pace_fig(self) -> go.Figure:
+        return ((self.pace_fig_dark if self.is_dark else self.pace_fig_light)
+                or go.Figure())
+
+    @rx.var
+    def active_spark_sales_fig(self) -> go.Figure:
+        return ((self.spark_sales_dark if self.is_dark
+                 else self.spark_sales_light) or go.Figure())
+
+    @rx.var
+    def active_spark_stock_fig(self) -> go.Figure:
+        return ((self.spark_stock_dark if self.is_dark
+                 else self.spark_stock_light) or go.Figure())
+
+    @rx.event
+    def restyle_charts(self, dark: bool) -> None:
+        self._apply_chart_theme(bool(dark))
 
     def _clear_overview(self) -> None:
         self.loaded = False
@@ -105,8 +148,8 @@ class OverviewState(ActionsState):
         self.pill_stock = {}
         self.cc = {}
         self.attention = []
-        self.pace_fig_dark = go.Figure()
-        self.pace_fig_light = go.Figure()
+        self.pace_fig_dark = None
+        self.pace_fig_light = None
         self.pace_has_data = False
         self.targets = []
         self.targets_title = "Targets"
@@ -120,12 +163,13 @@ class OverviewState(ActionsState):
         self.portfolio_summary = []
         self.portfolio_rows = []
         self.portfolio_alerts = []
-        self.spark_sales_dark = go.Figure()
-        self.spark_sales_light = go.Figure()
-        self.spark_stock_dark = go.Figure()
-        self.spark_stock_light = go.Figure()
+        self.spark_sales_dark = None
+        self.spark_sales_light = None
+        self.spark_stock_dark = None
+        self.spark_stock_light = None
         self.spark_sales_ready = False
         self.spark_stock_ready = False
+        self._chart_inputs = {}
 
     # --- selector overrides -------------------------------------------------
     @rx.event
@@ -202,7 +246,8 @@ class OverviewState(ActionsState):
             self.loaded = True
             return
         try:
-            data = compute_overview(user, store_id, month, _today())
+            data = compute_overview(user, store_id, month, _today(),
+                                    dark=self.is_dark)
         except ConfigNotFoundError:
             self.error = ("No monthly configuration exists for this store "
                           "and month. An administrator must configure the "
@@ -214,6 +259,7 @@ class OverviewState(ActionsState):
         except (StoreNotFoundError, InvalidMonthError, RepositoryError) as exc:
             self.error = str(exc)
             return
+        self._chart_inputs = data.pop("_chart_inputs", {})
         for k, v in data.items():
             setattr(self, k, v)
         self.loaded = True
@@ -349,11 +395,13 @@ def dashboard_attention(rep, today: date) -> list[dict[str, str]]:
     return items
 
 
-def compute_overview(user, store_id: int, month: str, today: date) -> dict:
+def compute_overview(user, store_id: int, month: str, today: date,
+                     dark: bool = True) -> dict:
     """Pure overview computation (testable without a Reflex runtime).
 
     Returns a dict of OverviewState fields. Every value/status comes from
     assemble_month via AppService.preview_month — nothing recomputed.
+    Only the requested theme is placed in serialized state.
     Raises ConfigNotFoundError/AuthorizationError/... for the caller.
     """
     # One overdue/reporting reference date for Report, Overview and
@@ -609,12 +657,10 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     out["pace_has_data"] = any(v is not None for v in p_actual)
     levels = kpi.level_pace_lines(s.targets, dim)
     # no axis title: the card title ("Sales Trend") says it
-    out["pace_fig_dark"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                 dark=True, y_title="",
-                                                 levels=levels)
-    out["pace_fig_light"] = ops_charts.pace_chart(p_days, p_actual, p_budget,
-                                                  dark=False, y_title="",
-                                                  levels=levels)
+    pace_fig = ops_charts.pace_chart(p_days, p_actual, p_budget,
+                                     dark=dark, y_title="", levels=levels)
+    out["pace_fig_dark"] = pace_fig if dark else None
+    out["pace_fig_light"] = None if dark else pace_fig
 
     # sparklines: raw daily sales (RM) and per-day Total Loss (RM),
     # same gap rules as daily_line — no new aggregation.
@@ -632,14 +678,14 @@ def compute_overview(user, store_id: int, month: str, today: date) -> dict:
     spark_days = list(range(1, dim + 1))
     out["spark_sales_ready"] = sum(v is not None for v in sales_daily) >= 3
     out["spark_stock_ready"] = sum(v is not None for v in loss_daily) >= 3
-    out["spark_sales_dark"] = ops_charts.sparkline(spark_days, sales_daily,
-                                                   dark=True)
-    out["spark_sales_light"] = ops_charts.sparkline(spark_days, sales_daily,
-                                                    dark=False)
-    out["spark_stock_dark"] = ops_charts.sparkline(spark_days, loss_daily,
-                                                   dark=True)
-    out["spark_stock_light"] = ops_charts.sparkline(spark_days, loss_daily,
-                                                    dark=False)
-    
+    for name, values in (("sales", sales_daily), ("stock", loss_daily)):
+        fig = ops_charts.sparkline(spark_days, values, dark=dark)
+        out[f"spark_{name}_dark"] = fig if dark else None
+        out[f"spark_{name}_light"] = None if dark else fig
+    out["_chart_inputs"] = {
+        "days": days, "dim": dim, "level1": l1, "targets": s.targets,
+        "sales_daily": sales_daily, "loss_daily": loss_daily,
+        "spark_days": spark_days,
+    }
     out["finalized_notice"] = finalized_notice
     return out

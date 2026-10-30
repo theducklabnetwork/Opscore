@@ -151,15 +151,14 @@ def _basket() -> rx.Component:
     )
 
 
-def _themed(dark, light, height: str = "340px") -> rx.Component:
-    return rx.cond(S.is_dark, ops_charts.chart(dark, height),
-                   ops_charts.chart(light, height))
+def _themed(active, height: str = "340px") -> rx.Component:
+    return ops_charts.chart(active, height)
 
 
 def _pace_chart() -> rx.Component:
     return ui.chart_card(
         "Sales Trend",
-        _themed(S.sp_fig_dark, S.sp_fig_light),
+        _themed(S.active_pace_fig),
         ready=S.sp_chart_ready,
         id="pace-section",
     )
@@ -168,21 +167,21 @@ def _pace_chart() -> rx.Component:
 def _daily_vs_target() -> rx.Component:
     # hidden when daily targets are unavailable (no Level 1 / no DSC match)
     return rx.cond(S.sp_dvt_ready, ui.section_card(
-        _themed(S.sp_dvt_dark, S.sp_dvt_light),
+        _themed(S.active_dvt_fig),
         title="Daily Sales vs Target", id="dvt-section"))
 
 
 def _sales_by_day() -> rx.Component:
     return ui.chart_card(
         "Sales by Day",
-        _themed(S.sp_weekday_dark, S.sp_weekday_light, "280px"),
+        _themed(S.active_weekday_fig, "280px"),
         ready=S.sp_weekday_ready, id="weekday-section")
 
 
 def _sales_calendar() -> rx.Component:
     return ui.chart_card(
         "Sales Calendar",
-        _themed(S.sp_cal_dark, S.sp_cal_light, "300px"),
+        _themed(S.active_cal_fig, "300px"),
         ready=S.sp_cal_ready, id="calendar-section")
 
 
