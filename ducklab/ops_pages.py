@@ -79,6 +79,29 @@ def _portfolio_row(row) -> rx.Component:
     )
 
 
+def _portfolio_alert(alert) -> rx.Component:
+    return rx.link(
+        rx.hstack(
+            rx.text(alert["store"], size="2", weight="medium"),
+            rx.text(alert["text"], size="2", color=ds.TEXT_MUTED),
+            spacing="2", wrap="wrap",
+        ),
+        href=alert["href"], underline="hover", color="inherit",
+    )
+
+
+def _portfolio_alert_group(group) -> rx.Component:
+    return rx.vstack(
+        rx.heading(group["kind"], size="3", weight="medium", color=ds.TEXT),
+        rx.cond(
+            group["items"].length() > 0,
+            rx.foreach(group["items"], _portfolio_alert),
+            rx.text("No alerts", size="2", color=ds.TEXT_FAINT),
+        ),
+        spacing="2", align="start", width="100%",
+    )
+
+
 def _portfolio_view() -> rx.Component:
     return rx.vstack(
         ui.section_card(
@@ -87,9 +110,17 @@ def _portfolio_view() -> rx.Component:
                            lambda item: ui.stat(item["label"], item["value"],
                                                 sub=item["coverage"], size="6",
                                                 size_narrow="5")),
-                columns=rx.breakpoints(initial="1", sm="2", lg="5"),
+                columns=rx.breakpoints(initial="1", sm="2", lg="7"),
             ),
             title="All Stores Summary", id="portfolio-summary",
+        ),
+        ui.section_card(
+            rx.grid(
+                rx.foreach(O.portfolio_alerts, _portfolio_alert_group),
+                columns=rx.breakpoints(initial="1", sm="2", lg="3"),
+                spacing="5", width="100%",
+            ),
+            title="Alerts", id="portfolio-alerts",
         ),
         ui.section_card(
             ui.data_table(

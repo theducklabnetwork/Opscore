@@ -2,7 +2,7 @@
 
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest import mock
@@ -109,6 +109,67 @@ class PortfolioTests(unittest.TestCase):
                                side_effect=AuthorizationError("revoked")):
             with self.assertRaises(AuthorizationError):
                 PortfolioService(self.app).build(self.viewer, "2026-10")
+
+    def test_alerts_reuse_dashboard_logic_and_link_to_stores(self):
+        today = date(2026, 10, 21)
+        self.app.configure_month(
+            self.admin, self.a, "2026-10", opening_headcount_ft=1,
+            turnover_threshold=0.01, stock_loss_target=0.001)
+        category = self.app.add_expense_category(
+            self.admin, self.a, "Electricity", sort_order=1)
+        self.app.set_expense_budget(
+            self.admin, self.a, "2026-10", category, rm(1))
+        self.app.record_expense(
+            self.admin, self.a, incurred_date=date(2026, 10, 1),
+            paid_date=date(2026, 10, 1), category_id=category,
+            description="Bill", amount_cents=rm(2), paid_by="Petty Cash",
+            status="Paid", verification="Verified", recorded_by="DEV")
+        self.app.record_daily(self.admin, self.a, date(2026, 10, 2),
+                              resigned_ft=1)
+        self.app.save_action(
+            self.admin, self.a, None, today,
+            raised_date=today - timedelta(days=2),
+            pillar="General Operations", issue="Overdue", priority="High",
+            status="Open", pic="DEV", due_date=today - timedelta(days=1),
+            corrective_action=None, completion_date=None, remarks=None)
+
+        result = PortfolioService(self.app).build(self.admin, "2026-10", today)
+        kinds = {a.kind for a in result.alerts}
+        self.assertEqual(kinds, {
+            "Unreported Days", "Expense Over Budget",
+            "Stock Loss Over Target", "High Turnover", "Overdue Actions",
+            "Setup Required",
+        })
+        expected_hrefs = {f"/ops?store={sid}" for sid in (self.a, self.b, self.c)}
+        self.assertEqual({a.href for a in result.alerts}, expected_hrefs)
+        self.assertEqual((result.open_actions, result.overdue_actions), (1, 1))
+
+        from ducklab.ops_overview_state import compute_portfolio
+        with mock.patch("ducklab.portfolio_service.PortfolioService.build",
+                        return_value=result):
+            data = compute_portfolio(self.admin, "2026-10", today)
+        groups = {g["kind"]: g["items"] for g in data["portfolio_alerts"]}
+        self.assertEqual(groups["Setup Required"][0]["store"], "C03 — Gamma")
+        self.assertIn({"label": "Open Actions", "value": "1",
+                       "coverage": "Active stores"}, data["portfolio_summary"])
+        self.assertIn({"label": "Overdue Actions", "value": "1",
+                       "coverage": "Active stores"}, data["portfolio_summary"])
+
+    def test_inactive_stores_excluded_from_current_alerts_and_actions(self):
+        today = date(2026, 10, 21)
+        self.app.save_action(
+            self.admin, self.a, None, today,
+            raised_date=today, pillar="General Operations", issue="Open",
+            priority="High", status="Open", pic="DEV", due_date=today,
+            corrective_action=None, completion_date=None, remarks=None)
+        self.app.set_store_active(self.admin, self.a, False)
+        self.app.set_store_active(self.admin, self.c, False)
+        result = PortfolioService(self.app).build(self.admin, "2026-10", today)
+        self.assertEqual(result.sales_cents, rm(5000))
+        self.assertEqual((result.open_actions, result.overdue_actions), (0, 0))
+        self.assertEqual({a.store for a in result.alerts}, {"B02 — Beta"})
+        self.assertTrue(all(a.href == f"/ops?store={self.b}"
+                            for a in result.alerts))
 
     def test_dashboard_option_and_comparison_links(self):
         from ducklab.ops_pages import dashboard_page
