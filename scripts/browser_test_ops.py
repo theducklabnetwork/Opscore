@@ -121,6 +121,32 @@ def main() -> int:
         check("finalized version note shown", True)
         page.screenshot(path=str(OUT / "report_finalized.png"), full_page=True)
 
+        # --- finalize, explicitly select new version, then correct from live
+        page.click("#report-mode >> text=Live")
+        page.wait_for_selector("#finalize-month:not([disabled])")
+        page.click("#finalize-month")
+        page.wait_for_selector("#finalize-dialog")
+        check("finalize dialog shows next version",
+              "Finalize Version 2" in page.locator("#finalize-confirm").inner_text())
+        page.click("#finalize-confirm")
+        page.wait_for_selector("#version-selector")
+        page.wait_for_selector("text=Finalized version 2")
+        check("successful finalize selects new current version",
+              "Version 2" in page.locator("#version-selector").inner_text()
+              and "Current" in page.locator("#version-selector").inner_text())
+        page.click("#correct-month")
+        page.wait_for_selector("#finalize-dialog")
+        check("correction dialog says it uses live data",
+              "current live data" in page.locator("#finalize-dialog").inner_text())
+        page.click("#finalize-confirm")
+        page.wait_for_selector("text=Finalized version 3")
+        page.click("#version-selector")
+        options = page.locator("[role='option']").all_inner_texts()
+        check("old version superseded after correction",
+              any("Version 2" in text and "Superseded" in text for text in options)
+              and any("Version 3" in text and "Current" in text for text in options))
+        page.keyboard.press("Escape")
+
         # --- missing config empty state --------------------------------------
         page.click("#report-mode >> text=Live")
         page.wait_for_selector("#sales-section >> text=RM 20,000.00", timeout=15000)

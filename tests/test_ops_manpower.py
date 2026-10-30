@@ -184,7 +184,7 @@ class TestPayroll(ManpowerFixture):
         rep = self.app.preview_month(self.admin, self.sa, "2026-10",
                                      as_of=date(2026, 10, 31))
         self.assertIsNone(rep.manpower.total_salary_cents)
-        self.assertEqual(rep.manpower.salary_ratio_status, "Awaiting payroll")
+        self.assertEqual(rep.manpower.salary_ratio_status, "Awaiting Payroll")
 
     def test_explicit_null_clearing(self):
         cfg = self.app.get_month_config(self.admin, self.sa, "2026-10")

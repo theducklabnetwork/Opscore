@@ -166,7 +166,7 @@ class SyntheticManpowerTests(unittest.TestCase):
     def test_salary_statuses_and_turnover(self):
         awaiting = MonthConfig(month="2026-04", salary_ratio_target=Decimal("0.15"))
         self.assertIsNone(kpi.total_salary_cents(awaiting))
-        self.assertEqual(kpi.salary_ratio_status(awaiting, rm(100000)), "Awaiting payroll")
+        self.assertEqual(kpi.salary_ratio_status(awaiting, rm(100000)), "Awaiting Payroll")
         self.assertEqual(kpi.salary_ratio_status(CFG, rm(100000)), "Within target")
         over = MonthConfig(**{**CFG.__dict__, "salary_ratio_target": Decimal("0.1")})
         self.assertEqual(kpi.salary_ratio_status(over, rm(100000)), "Failure: over target")

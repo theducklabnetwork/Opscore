@@ -58,7 +58,7 @@ class DashboardDataTests(Fixture):
                          [("Daily Target", "RM 8,065"),
                           ("Required Daily Sales", "RM 7,619")])
         self.assertEqual([g["label"] for g in ov["glance"]],
-                         ["Daily Sales (Avg.)", "Open Actions"])
+                         ["Average Daily Sales", "Open Actions"])
         # alert text without dash or sentence
         self.assertIn({"icon": "calendar-clock", "text": "21 unreported days",
                        "href": "/ops/daily"}, ov["attention"])
@@ -87,7 +87,7 @@ class DashboardDataTests(Fixture):
         ov = self.overview("2026-10")
         self.assertEqual(ov["pill_expenses"]["value"], "RM 1,234")
         self.assertEqual([g["label"] for g in ov["glance"]],
-                         ["Daily Sales (Avg.)", "Incurred", "Unpaid",
+                         ["Average Daily Sales", "Incurred", "Unpaid",
                           "Open Actions"])
 
 

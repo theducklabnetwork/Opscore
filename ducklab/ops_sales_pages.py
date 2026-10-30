@@ -73,7 +73,7 @@ def _level_reached() -> rx.Component:
 def _avg_day(span_md: str) -> rx.Component:
     # closes the last row: full width on phones (2 columns)
     return rx.box(
-        _tile("Daily Sales (Avg.)", S.sp_avg_day_exact),
+        _tile("Average Daily Sales", S.sp_avg_day_exact),
         grid_column=rx.breakpoints(initial="span 2", md=span_md),
         min_width="0", id="sales-avg-day",
     )
@@ -88,7 +88,7 @@ def _kpi_tiles() -> rx.Component:
             _tile("Sales", S.sp_sales_mtd_exact, id="sales-mtd"),
             _achievement(),
             _level_reached(),
-            rx.box(_tile("Daily Sales (Avg.)", S.sp_avg_day_exact),
+            rx.box(_tile("Average Daily Sales", S.sp_avg_day_exact),
                    min_width="0", id="sales-avg-day"),
             columns=rx.breakpoints(initial="2", md="4"),
         ),

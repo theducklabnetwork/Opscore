@@ -166,7 +166,7 @@ class OversizedInputTests(Fixture):
             self.bound(mod, StoresState, lambda: list(st.save_setup()))
             self.assertEqual(
                 st.setup_error,
-                "Level 2 uplift (%): enter a non-negative number "
+                "Level 2 Uplift (%): enter a non-negative number "
                 "(or leave blank)")
             self.assertFalse(st.setup_saving)
             self.assertEqual(self.config().level2_pct,

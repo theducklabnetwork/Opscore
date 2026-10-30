@@ -95,7 +95,7 @@ def _builder() -> rx.Component:
         rx.flex(rx.foreach(M.schedule_legend, _generated_legend_item),
                 gap="12px", wrap="wrap", width="100%"),
         title="Weekly Schedule",
-        subtitle="Red Days Are Below Target Manpower.",
+        subtitle="Red days are below target manpower.",
         id="schedule-builder",
     )
 

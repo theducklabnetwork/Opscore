@@ -229,7 +229,7 @@ def stock_page() -> rx.Component:
             rx.cond(S.st_error != "", ds.error_callout(S.st_error)),
             rx.cond(
                 ~S.st_config_exists,
-                ui.empty_state("Stock monitoring unavailable", S.st_error,
+                ui.empty_state("Stock Monitoring Unavailable", S.st_error,
                                icon="boxes"),
             ),
             rx.cond(

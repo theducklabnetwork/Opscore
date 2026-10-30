@@ -309,7 +309,7 @@ class ActionsState(StoresState):
         finally:
             self.saving = False
         self.form_open = False
-        self.notice = "Action Saved"
+        self.notice = "Action saved."
         yield
         yield ActionsState.load_actions_data()
 

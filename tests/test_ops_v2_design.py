@@ -119,7 +119,7 @@ class RecordDayTests(Fixture):
 
     def _rows(self, reported):
         return [{"iso": f"2026-10-{d:02d}",
-                 "status": "Complete" if d in reported else "Not reported"}
+                 "status": "Complete" if d in reported else "Not Reported"}
                 for d in range(1, 32)]
 
     def test_today_when_in_month_and_open(self):

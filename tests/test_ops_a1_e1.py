@@ -58,7 +58,8 @@ class ActionWordingTests(unittest.TestCase):
         for text in ("Details", "Issue", "Pillar", "Priority", "Status",
                      "Schedule",
                      "Owner", "Raised", "Due", "Completed", "Follow Up",
-                     "Next Step", "Remarks", "Save Action", "Read Only"):
+                     "Next Step", "Remarks", "Save Action",
+                     "You have read-only access."):
             self.assertIn(f'"{text}"', dialog, text)
         for gone in ("Issue / observation", "Owner & dates",
                      "Person in charge", "Raised date", "Due date",
@@ -169,7 +170,7 @@ class DailyExpensesTests(Fixture):
         self.assertEqual(by_iso["2026-10-03"]["expenses"], "—")
         # unreported day keeps its paid amount
         self.assertEqual(by_iso["2026-10-07"]["expenses"], "RM 40.00")
-        self.assertEqual(by_iso["2026-10-07"]["status"], "Not reported")
+        self.assertEqual(by_iso["2026-10-07"]["status"], "Not Reported")
         self.assertEqual(st.day_kpis["expenses"], "RM 240.00")
         # Daily Entry: read-only line, no expense fields
         self.bound(lambda: st.open_entry("2026-10-05"))

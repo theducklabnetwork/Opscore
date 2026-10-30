@@ -31,7 +31,7 @@ def _kpi_summary() -> rx.Component:
     sales = _tile("Sales", K["mtd"], id="kpi-mtd")
     achievement = _tile("Achievement", K["achievement"],
                         id="kpi-achievement")
-    tail = [_tile("Daily Sales (Avg.)", K["avg_daily"]),
+    tail = [_tile("Average Daily Sales", K["avg_daily"]),
             _tile("Transactions", K["transactions"]),
             _tile("Units Sold", K["units"]),
             _tile("Total Loss", K["loss"]),
@@ -42,8 +42,8 @@ def _kpi_summary() -> rx.Component:
         rx.cond(
             DailyState.month_finalized,
             rx.callout(
-                "Finalized snapshot exists — edits affect live calculations "
-                "only, never preserved snapshots.",
+                "A finalized snapshot exists for this month. Edits affect "
+                "live results only; preserved snapshots are never modified.",
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%"),
         ),
@@ -57,7 +57,7 @@ def _kpi_summary() -> rx.Component:
                 _tile("Projected Sales", K["projected"], id="kpi-projected"),
                 _tile("Projected Achievement", K["proj_achievement"],
                       id="kpi-proj-achievement"),
-                _tile("Daily Sales (Avg.)", K["avg_daily"]),
+                _tile("Average Daily Sales", K["avg_daily"]),
                 _tile("Transactions", K["transactions"]),
                 _tile("Units Sold", K["units"]),
                 _tile("Total Loss", K["loss"]),
@@ -69,7 +69,7 @@ def _kpi_summary() -> rx.Component:
     )
 
 
-_COLS = ["Date", ("Sales", True), ("Trans.", True), ("Units", True),
+_COLS = ["Date", ("Sales", True), ("Transactions", True), ("Units", True),
          ("SPR", True), ("UPT", True), ("ASP", True), ("Staff", True),
          # Sales per Staff (also on Manpower) hides at 768-1535px so the
          # table fits beside Expenses
@@ -321,7 +321,7 @@ def daily_page() -> rx.Component:
             ),
             rx.cond(
                 DailyState.report_status == "empty",
-                ds.empty_state("No store or month selected",
+                ds.empty_state("No Store Or Month Selected",
                                DailyState.error_message,
                                icon="store"),
                 rx.vstack(

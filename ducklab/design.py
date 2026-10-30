@@ -213,7 +213,7 @@ STATUS_COLOR: dict[str, str] = {
     # manpower
     "Within target": "green", "Failure: over target": "red",
     "Over target": "red", "Above target": "red",
-    "Awaiting payroll": "gray", "Awaiting HC": "gray",
+    "Awaiting Payroll": "gray", "Awaiting HC": "gray",
     "Normal": "green", "HIGH TURNOVER": "red",
     "On budget": "green", "Over budget (+1)": "red", "Under budget": "amber",
     # expense line validation
@@ -239,7 +239,7 @@ STATUS_COLOR: dict[str, str] = {
     "Complete": "green", "Partial": "amber", "Zero sales": "blue",
     # legacy lowercase day statuses (kept for older callers)
     "complete": "green", "partial": "amber", "unreported": "gray",
-    "Not reported": "gray", "Zero": "green", "Loss": "red",
+    "Not Reported": "gray", "Zero": "green", "Loss": "red",
     "Net negative": "blue", "No sales": "amber",
     # action priorities (display strings)
     "Low": "gray", "Medium": "blue", "High": "amber", "Critical": "red",
@@ -271,7 +271,7 @@ def status_color(status: str, default: str = "gray") -> str:
 # ---------------------------------------------------------------------------
 DAY_COMPLETE = "Complete"
 DAY_PARTIAL = "Partial"
-DAY_NOT_REPORTED = "Not reported"
+DAY_NOT_REPORTED = "Not Reported"
 DAY_ZERO_SALES = "Zero sales"
 DAY_STATUSES = (DAY_COMPLETE, DAY_PARTIAL, DAY_NOT_REPORTED, DAY_ZERO_SALES)
 

@@ -220,14 +220,14 @@ class StatusColorMapTests(unittest.TestCase):
             "Paid", "Pending", "Cancelled",
             # manpower
             "Within target", "Failure: over target", "Over target",
-            "Awaiting payroll", "Awaiting HC", "Normal", "HIGH TURNOVER",
+            "Awaiting Payroll", "Awaiting HC", "Normal", "HIGH TURNOVER",
             "Vacancy", "On budget", "Over budget (+1)", "Under budget",
             # actions + priorities
             "Open", "In progress", "Blocked", "Done",
             "Low", "Medium", "High", "Critical",
             # stock (kpi.stock_status_label) / day display strings
             "No sales recorded", "Factor not set",
-            "Not reported", "Zero", "Loss",
+            "Not Reported", "Zero", "Loss",
             "Net negative", "No sales",
             "complete", "partial", "unreported",
             # misc

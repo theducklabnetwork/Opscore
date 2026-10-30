@@ -330,8 +330,8 @@ class StockState(ManpowerState):
                     "date": d.isoformat(), "label": d.strftime("%d %b"),
                     "weekday": d.strftime("%a"), "sales": "—", "loss": "—",
                     "ratio": "—", "missing": "—", "extra": "—",
-                    "status": "Not reported",
-                    "status_color": ds.status_color("Not reported"),
+                    "status": "Not Reported",
+                    "status_color": ds.status_color("Not Reported"),
                 })
                 trend_vals.append(None)
                 continue

@@ -39,36 +39,36 @@ from ducklab.ops_state import (
 # Monthly setup field specs: (state attr, config field, kind, label)
 # kind: "money" (RM -> cents) | "pct" (percent -> fraction) | "count"
 SETUP_SALES = [
-    ("s_min_rtm", "min_rtm_target_cents", "money", "Minimum RTM target (RM)"),
-    ("s_level1", "level1_base_cents", "money", "Level 1 base target (RM)"),
-    ("s_level2", "level2_pct", "pct", "Level 2 uplift (%)"),
-    ("s_level3", "level3_pct", "pct", "Level 3 uplift (%)"),
-    ("s_level4", "level4_pct", "pct", "Level 4 uplift (%)"),
+    ("s_min_rtm", "min_rtm_target_cents", "money", "Minimum RTM (RM)"),
+    ("s_level1", "level1_base_cents", "money", "Level 1 Base (RM)"),
+    ("s_level2", "level2_pct", "pct", "Level 2 Uplift (%)"),
+    ("s_level3", "level3_pct", "pct", "Level 3 Uplift (%)"),
+    ("s_level4", "level4_pct", "pct", "Level 4 Uplift (%)"),
     ("s_last_year", "sales_last_year_cents", "money",
-     "Sales same month last year (RM)"),
+     "Sales Last Year (RM)"),
     ("s_last_month", "sales_last_month_cents", "money",
-     "Sales last month (RM)"),
+     "Sales Last Month (RM)"),
 ]
 SETUP_MANPOWER = [
     ("s_salary_ratio", "salary_ratio_target", "pct",
-     "Salary ratio target (% of sales)"),
-    ("s_budget_hc", "budget_headcount", "count", "Budget headcount"),
-    ("s_turnover", "turnover_threshold", "pct", "High-turnover threshold (%)"),
+     "Salary Ratio Target (%)"),
+    ("s_budget_hc", "budget_headcount", "count", "Budget Headcount"),
+    ("s_turnover", "turnover_threshold", "pct", "Turnover Threshold (%)"),
     ("s_opening_hc", "opening_headcount_ft", "count",
-     "Opening full-time headcount"),
+     "Opening Headcount"),
     ("s_pt_factor", "part_timer_factor", "factor",
-     "Part-timer conversion factor (e.g. 0.5)"),
+     "Part-Timer Factor"),
 ]
 SETUP_STOCK = [
     ("s_stock_target", "stock_loss_target", "pct",
-     "Stock loss target (% of sales)"),
+     "Stock Loss Target (%)"),
 ]
 SETUP_PAYROLL = [
     ("s_salary", "salary_basic_allowance_cents", "money",
-     "Basic salary + allowances (RM)"),
+     "Basic + Allowance (RM)"),
     ("s_overtime", "overtime_cents", "money", "Overtime (RM)"),
     ("s_support", "support_team_cost_cents", "money",
-     "Support team cost (RM, optional)"),
+     "Support Cost (RM)"),
 ]
 # Daily Sales targets: monthly transactions, SPR (RM) and IPR (items)
 SETUP_DAILY = [
@@ -271,7 +271,7 @@ class StoresState(StockState):
              "zone_pic": s.zone_pic or "—",
              "branch_manager": s.branch_manager or "—",
              "active": "1" if s.active else "0",
-             "active_label": "Active" if s.active else "Inactive"}
+             "active_label": "Active" if s.active else "Disabled"}
             for s in stores
         ]
 

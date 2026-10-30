@@ -295,7 +295,7 @@ class OverviewTests(Fixture):
             self.assertNotRegex(row["value"], r"\.\d\d$", row)
         # Summary: full values, not the short form
         glance = {r["label"]: r["value"] for r in ov["glance"]}
-        self.assertEqual(glance["Daily Sales (Avg.)"], "RM 10,000.00")
+        self.assertEqual(glance["Average Daily Sales"], "RM 10,000.00")
         self.assertEqual(ops_charts.fmt_money_compact(rm(6774.19)),
                          "RM 6,774")
         self.assertEqual(ops_charts.fmt_money_compact(rm(23500)),
