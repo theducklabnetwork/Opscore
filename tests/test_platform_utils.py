@@ -53,7 +53,7 @@ class TestBackendProcesses(unittest.TestCase):
         process.poll.return_value = None
         with mock.patch.object(platform_utils.sys, "platform", "linux"), \
                 mock.patch.object(platform_utils.subprocess, "Popen", return_value=process) as popen, \
-                mock.patch.object(platform_utils.os, "killpg") as killpg:
+                mock.patch.object(platform_utils.os, "killpg", create=True) as killpg:
             log = mock.Mock()
             result = platform_utils.start_backend(["backend"], cwd=Path("/app"), env={}, log=log)
             self.assertIs(result, process)
