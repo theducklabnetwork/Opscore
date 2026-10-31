@@ -18,7 +18,7 @@ os.environ["OPSCORE_DESKTOP"] = "1"
 
 from ducklab import platform_utils
 
-APP_ROOT = Path(__file__).resolve().parent.parent
+APP_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 DATA_DIR = platform_utils.data_dir()
 DB_PATH = DATA_DIR / "store_ops.db"
 LOCK_PATH = DATA_DIR / "launcher.lock"
@@ -117,9 +117,14 @@ def start_backend() -> tuple[subprocess.Popen, str]:
         "REFLEX_TELEMETRY_DISABLED": "1",
         "NO_COLOR": "1",
     }
+    backend_command = (
+        [str(Path(sys.executable).resolve()), "--backend"]
+        if getattr(sys, "frozen", False)
+        else [str(APP_ROOT / "packaging" / "opscore-backend")]
+    )
     with LOG_PATH.open("ab") as log:
         process = platform_utils.start_backend(
-            [str(APP_ROOT / "packaging" / "opscore-backend")],
+            backend_command,
             cwd=APP_ROOT,
             env=environment,
             log=log,
@@ -265,9 +270,19 @@ def focus_existing() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Open Opscore in a native desktop window")
+    parser.add_argument("--backend", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--backend-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--chromium", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.backend:
+        import importlib.util
+
+        backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
+        spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
+        backend = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(backend)
+        backend.main()
+        return 0
 
     DATA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     if sys.platform != "win32":
