@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -17,8 +16,10 @@ import urllib.request
 
 os.environ["OPSCORE_DESKTOP"] = "1"
 
+from ducklab import platform_utils
+
 APP_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = Path.home() / ".local" / "share" / "opscore"
+DATA_DIR = platform_utils.data_dir()
 DB_PATH = DATA_DIR / "store_ops.db"
 LOCK_PATH = DATA_DIR / "launcher.lock"
 URL_PATH = DATA_DIR / "current.json"
@@ -36,25 +37,11 @@ def stop_backend() -> None:
     BACKEND = None
     if process is None or process.poll() is not None:
         return
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return
-    try:
-        process.wait(timeout=20)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.wait(timeout=5)
+    platform_utils.stop_process_tree(process)
 
 
 def acquire_lock():
-    lock_file = LOCK_PATH.open("a+")
-    try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        lock_file.close()
-        return None
-    return lock_file
+    return platform_utils.acquire_single_instance(LOCK_PATH)
 
 
 def active_app() -> tuple[str, str] | None:
@@ -131,14 +118,11 @@ def start_backend() -> tuple[subprocess.Popen, str]:
         "NO_COLOR": "1",
     }
     with LOG_PATH.open("ab") as log:
-        process = subprocess.Popen(
+        process = platform_utils.start_backend(
             [str(APP_ROOT / "packaging" / "opscore-backend")],
             cwd=APP_ROOT,
             env=environment,
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
+            log=log,
         )
     global BACKEND
     BACKEND = process
@@ -149,7 +133,7 @@ def start_backend() -> tuple[subprocess.Popen, str]:
 
 def focus_chromium() -> bool:
     """Raise the Chromium app window on a second desktop-entry activation."""
-    if not shutil.which("wmctrl"):
+    if sys.platform == "win32" or not shutil.which("wmctrl"):
         return False
     return subprocess.run(
         ["wmctrl", "-a", "Opscore"],
@@ -198,7 +182,7 @@ def chromium_window(url: str) -> int:
         "--disable-features=Translate",
     ]
     # Root containers have no sandbox helper; normal desktop launches keep Chromium's sandbox.
-    if os.geteuid() == 0:
+    if sys.platform != "win32" and os.geteuid() == 0:
         flags.append("--no-sandbox")
     process = subprocess.Popen([browser, *flags])
     try:
@@ -248,6 +232,9 @@ def native_window(url: str) -> int:
 
 
 def open_window(url: str, force_chromium: bool = False) -> int:
+    if sys.platform == "win32" and not force_chromium:
+        platform_utils.open_in_browser(url)
+        return 0
     if force_chromium:
         return chromium_window(url) or 0
     try:
@@ -259,11 +246,10 @@ def open_window(url: str, force_chromium: bool = False) -> int:
         result = chromium_window(url)
         if result is not None:
             return result
-    opener = shutil.which("xdg-open")
-    if opener is None:
+    process = platform_utils.open_in_browser(url)
+    if process is None:
         raise RuntimeError(f"No GTK, Chromium/Chrome, or xdg-open available; see {LOG_PATH}")
-    print(f"Opening Opscore with xdg-open: {url}", file=sys.stderr)
-    process = subprocess.Popen([opener, url])
+    print(f"Opening Opscore with the system browser: {url}", file=sys.stderr)
     try:
         return process.wait()
     finally:
@@ -284,7 +270,8 @@ def main() -> int:
     args = parser.parse_args()
 
     DATA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    DATA_DIR.chmod(0o700)
+    if sys.platform != "win32":
+        DATA_DIR.chmod(0o700)
     lock = acquire_lock()
     if lock is None:
         focus_existing()
