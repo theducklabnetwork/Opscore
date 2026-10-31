@@ -308,6 +308,69 @@ def run_worker_child() -> None:
         raise SystemExit(1)
 
 
+def ensure_frontend_link(runtime_web: Path) -> None:
+    """Point the runtime web dir's build at the read-only prebuilt frontend.
+
+    Reflex serves <web dir>/build statically; the bundle's copy may live in
+    read-only Program Files, so link it instead of duplicating it per user.
+    A stale link (for example after the install moves) is recreated.
+    """
+    link = runtime_web / "build"
+    target = APP_ROOT / ".web" / "build"
+    if link.is_symlink() or link.is_junction():
+        if link.resolve() == target.resolve():
+            return
+        # Remove only the link itself, never the bundle it points at.
+        if sys.platform == "win32":
+            os.rmdir(link)
+        else:
+            link.unlink()
+    elif link.exists():
+        # A plain directory could only be a stray copy; the frontend is
+        # derived data, safe to replace with a link to the bundle.
+        shutil.rmtree(link)
+    if sys.platform == "win32":
+        # Directory junctions need no admin rights, unlike os.symlink.
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            capture_output=True,
+            creationflags=0x08000000,  # CREATE_NO_WINDOW
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Unable to link the prebuilt frontend into "
+                f"{runtime_web}: {result.stderr.decode(errors='replace').strip()}"
+            )
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def prepare_frozen_backend_env() -> None:
+    """Keep the frozen backend out of the read-only install folder.
+
+    Reflex workers on Windows are spawned: they re-import the app from
+    scratch, so the runtime monkey patches packaging/opscore_backend.py
+    installs (which Linux's forked workers inherit) never reach them. Only
+    the process environment carries over, so the frozen backend uses Reflex's
+    supported environment switches instead:
+
+    - REFLEX_SKIP_COMPILE, set through Reflex's own env-var API (the same one
+      run_uvicorn_backend_prod passes to prod backends), so no worker
+      compiles the frontend.
+    - REFLEX_WEB_WORKDIR, Reflex's supported .web relocation, so its runtime
+      writes (stateful pages marker, upload marker) land in per-user data.
+      Skipping the compile also stops cwd-relative build artifacts such as
+      the reflex.lock directory from appearing in the install folder.
+    """
+    from reflex_base.environment import environment
+
+    environment.REFLEX_SKIP_COMPILE.set(True)
+    runtime_web = DATA_DIR / "reflex-web"
+    runtime_web.mkdir(parents=True, exist_ok=True)
+    os.environ["REFLEX_WEB_WORKDIR"] = str(runtime_web)
+    ensure_frontend_link(runtime_web)
+
+
 def run_frozen_backend() -> int:
     """Run the backend from the windowed executable with persistent diagnostics."""
     import traceback
@@ -315,6 +378,7 @@ def run_frozen_backend() -> int:
     redirect_output_to_log()
     try:
         print("Starting Opscore backend", flush=True)
+        prepare_frozen_backend_env()
         backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
         spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
         backend = importlib.util.module_from_spec(spec)
