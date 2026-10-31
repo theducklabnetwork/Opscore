@@ -270,32 +270,66 @@ def focus_existing() -> None:
     focus_chromium()
 
 
+def redirect_output_to_log() -> None:
+    """Send stdout and stderr to opscore.log (append mode, line-buffered)."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    log_fd = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    os.dup2(log_fd, 1)
+    os.dup2(log_fd, 2)
+    if log_fd > 2:
+        os.close(log_fd)
+    sys.stdout = io.open(
+        1, "w", encoding="utf-8", errors="replace", buffering=1, closefd=False
+    )
+    sys.stderr = io.open(
+        2, "w", encoding="utf-8", errors="replace", buffering=1, closefd=False
+    )
+
+
+def run_worker_child() -> None:
+    """Run a frozen multiprocessing worker child with diagnostics in the log."""
+    import multiprocessing
+    import traceback
+
+    try:
+        redirect_output_to_log()
+        print(f"Opscore worker child started (pid {os.getpid()})", flush=True)
+        # Hands the child to multiprocessing; never returns for a worker.
+        multiprocessing.freeze_support()
+    except SystemExit:
+        raise
+    except BaseException:
+        print(
+            f"Opscore worker child crashed in pid {os.getpid()}:",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc()
+        raise SystemExit(1)
+
+
 def run_frozen_backend() -> int:
     """Run the backend from the windowed executable with persistent diagnostics."""
     import traceback
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    with LOG_PATH.open("ab") as log:
-        os.dup2(log.fileno(), 1)
-        os.dup2(log.fileno(), 2)
-        sys.stdout = io.open(1, "w", encoding="utf-8", errors="replace", closefd=False)
-        sys.stderr = io.open(2, "w", encoding="utf-8", errors="replace", closefd=False)
+    redirect_output_to_log()
+    try:
+        print("Starting Opscore backend", flush=True)
+        backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
+        spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
+        backend = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(backend)
+        original_argv = sys.argv
+        sys.argv = [original_argv[0]]
         try:
-            print("Starting Opscore backend", flush=True)
-            backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
-            spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
-            backend = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(backend)
-            original_argv = sys.argv
-            sys.argv = [original_argv[0]]
-            try:
-                backend.main()
-            finally:
-                sys.argv = original_argv
-            return 0
-        except Exception:
-            traceback.print_exc()
-            return 1
+            backend.main()
+        finally:
+            sys.argv = original_argv
+        return 0
+    except Exception:
+        print(f"Opscore backend crashed in pid {os.getpid()}:", flush=True)
+        traceback.print_exc()
+        return 1
 
 
 def main() -> int:
@@ -369,4 +403,14 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    # A frozen exe re-executed as a multiprocessing worker child (Granian
+    # workers on Windows) must hand control to multiprocessing before any
+    # launcher logic (arg parsing, imports, single-instance lock) can run.
+    if "--multiprocessing-fork" in sys.argv:
+        run_worker_child()
+    # freeze_support() runs the child's real entry point and only returns in
+    # genuine user invocations; without it a frozen worker re-runs main().
+    multiprocessing.freeze_support()
     sys.exit(main())
