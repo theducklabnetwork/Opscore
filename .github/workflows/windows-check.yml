@@ -39,4 +39,4 @@ jobs:
         shell: pwsh
         env:
           DUCKLAB_DB_PATH: ${{ runner.temp }}\windows-check.db
-        run: python -m pytest tests/ -q
+        run: python -m pytest tests/ -q --tb=line -rfE --continue-on-collection-errors

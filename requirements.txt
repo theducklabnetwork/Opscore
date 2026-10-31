@@ -18,3 +18,4 @@ openpyxl==3.1.5
 plotly==6.3.1
 pywebview==6.2.1
 starlette==1.10.0
+tzdata==2026.6; sys_platform == "win32"
