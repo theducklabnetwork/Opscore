@@ -8,11 +8,16 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOY = ROOT / "deploy"
+
+
+if sys.platform == "win32":
+    raise unittest.SkipTest("Linux deployment artifacts are not supported on Windows")
 
 
 class TestDeployArtifactsExist(unittest.TestCase):

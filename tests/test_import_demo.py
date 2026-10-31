@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import closing
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -54,7 +55,7 @@ class TestImportDemo(unittest.TestCase):
     def _counts(self):
         tables = ("stores", "auth_user_store_assignments", "monthly_configs",
                   "public_holidays", "daily_records")
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn:
             return {table: conn.execute(
                 f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 for table in tables}

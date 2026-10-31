@@ -26,12 +26,14 @@ class TestReleaseArtifactsExist(unittest.TestCase):
             p = DEPLOY / name if name != "requirements.lock" else ROOT / name
             self.assertTrue(p.is_file(), f"missing {name}")
 
+    @unittest.skipIf(sys.platform == "win32", "Unix executable bits are not supported on Windows")
     def test_scripts_are_executable(self):
         for name in ("release.sh", "simulate.sh", "operator-install.sh",
                      "ducklab-backup.sh"):
             self.assertTrue((DEPLOY / name).stat().st_mode & 0o111,
                             f"{name} not executable")
 
+    @unittest.skipIf(sys.platform == "win32", "Bash scripts are not supported on Windows")
     def test_shell_syntax_valid(self):
         for name in ("release.sh", "release_lib.sh", "simulate.sh",
                      "operator-install.sh", "ducklab-backup.sh"):
@@ -64,6 +66,7 @@ class TestVenvDefectFix(unittest.TestCase):
         self.assertIn("bad shebang", text)
         self.assertIn("release_create_venv", text)
 
+    @unittest.skipIf(sys.platform == "win32", "Unix venv shebangs are not supported on Windows")
     def test_venv_integrity_detects_foreign_shebang(self):
         """Functional test: a relocated venv must be rejected.
 

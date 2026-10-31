@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 
@@ -87,7 +88,8 @@ class TestImportScript(unittest.TestCase):
             admin = app.auth.bootstrap_first_admin("a@x.dev", "A", "Sup3rSecure!x")
             first = imp.do_import(db, wb, replace=False)
             sid = first["store_id"]
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 record_id = conn.execute(
                     "SELECT id FROM daily_records WHERE store_id=? LIMIT 1",
                     (sid,)).fetchone()[0]
@@ -95,9 +97,11 @@ class TestImportScript(unittest.TestCase):
                     "INSERT INTO daily_stock_losses "
                     "(daily_record_id, code, amount_cents) VALUES (?, 'DMO', 70)",
                     (record_id,))
+                conn.commit()
             second = imp.do_import(db, wb, replace=True)
             self.assertEqual(second["daily_rows"], 2)
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM daily_stock_losses").fetchone()[0], 0)
                 self.assertEqual(conn.execute(
@@ -117,7 +121,8 @@ class TestImportScript(unittest.TestCase):
             admin = app.auth.bootstrap_first_admin("a@x.dev", "A", "Sup3rSecure!x")
             result = imp.do_import(db, wb, replace=False)
             sid = result["store_id"]
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 record_id = conn.execute(
                     "SELECT id FROM daily_records WHERE store_id=? LIMIT 1",
                     (sid,)).fetchone()[0]
@@ -128,11 +133,13 @@ class TestImportScript(unittest.TestCase):
                 before = conn.execute(
                     "SELECT id, date, sales_cents FROM daily_records "
                     "WHERE store_id=? ORDER BY date", (sid,)).fetchall()
+                conn.commit()
             with mock.patch.object(
                     imp, "_expense_exists", side_effect=RuntimeError("late failure")):
                 with self.assertRaisesRegex(RuntimeError, "late failure"):
                     imp.do_import(db, wb, replace=True)
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
+                conn.execute("BEGIN IMMEDIATE")
                 self.assertEqual(conn.execute(
                     "SELECT id, date, sales_cents FROM daily_records "
                     "WHERE store_id=? ORDER BY date", (sid,)).fetchall(), before)

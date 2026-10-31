@@ -5,6 +5,7 @@ Temp DBs only. Run: python -m unittest tests.test_first_launch_o1 -v
 
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from ducklab import store_ops_db
@@ -58,9 +59,10 @@ class TestCreateAccountBootstrap(FirstLaunchFixture):
 
     def test_bootstrap_audit_event_recorded(self):
         u = self.auth.bootstrap_first_admin("owner@ducklab.com", "Owner", PW)
-        rows = self.conn().execute(
-            "SELECT event_type FROM auth_audit_events WHERE user_id = ? "
-            "AND event_type = 'bootstrap_first_admin'", (u.id,)).fetchall()
+        with closing(self.conn()) as conn:
+            rows = conn.execute(
+                "SELECT event_type FROM auth_audit_events WHERE user_id = ? "
+                "AND event_type = 'bootstrap_first_admin'", (u.id,)).fetchall()
         self.assertEqual(len(rows), 1)
 
 
@@ -79,9 +81,10 @@ class TestTourFlag(FirstLaunchFixture):
         self.assertTrue(updated.tour_done)
         self.assertTrue(self.auth.get_user(self.admin.id).tour_done)
         # Column value in the DB.
-        row = self.conn().execute(
-            "SELECT tour_done FROM auth_users WHERE id = ?",
-            (self.admin.id,)).fetchone()
+        with closing(self.conn()) as conn:
+            row = conn.execute(
+                "SELECT tour_done FROM auth_users WHERE id = ?",
+                (self.admin.id,)).fetchone()
         self.assertEqual(row["tour_done"], 1)
 
     def test_tour_done_is_per_user(self):
@@ -106,10 +109,11 @@ class TestTourFlag(FirstLaunchFixture):
     def test_tour_done_audited(self):
         self.auth.mark_tour_done(self.admin.id)
         self.auth.reset_tour(self.admin.id)
-        rows = self.conn().execute(
-            "SELECT event_type FROM auth_audit_events WHERE user_id = ? "
-            "AND event_type IN ('tour_done', 'tour_reset') ORDER BY id",
-            (self.admin.id,)).fetchall()
+        with closing(self.conn()) as conn:
+            rows = conn.execute(
+                "SELECT event_type FROM auth_audit_events WHERE user_id = ? "
+                "AND event_type IN ('tour_done', 'tour_reset') ORDER BY id",
+                (self.admin.id,)).fetchall()
         self.assertEqual([r["event_type"] for r in rows],
                          ["tour_done", "tour_reset"])
 
