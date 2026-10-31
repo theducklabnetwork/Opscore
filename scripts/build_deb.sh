@@ -46,7 +46,7 @@ NFPM="$WORK/tools/nfpm"
 
 printf '==> Preparing standalone Python 3.14\n'
 "$UV" python install 3.14
-PYTHON_BIN=$(env -u VIRTUAL_ENV "$UV" python find --managed-python 3.14)
+PYTHON_BIN=$(cd / && env -u VIRTUAL_ENV "$UV" python find --managed-python 3.14)
 if [[ $PYTHON_BIN == *"/.venv/"* || ! -x $PYTHON_BIN ]]; then
     printf 'uv did not provide a standalone managed Python 3.14 interpreter.\n' >&2
     exit 1
