@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -268,6 +270,29 @@ def focus_existing() -> None:
     focus_chromium()
 
 
+def run_frozen_backend() -> int:
+    """Run the backend from the windowed executable with persistent diagnostics."""
+    import traceback
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with LOG_PATH.open("ab") as log:
+        os.dup2(log.fileno(), 1)
+        os.dup2(log.fileno(), 2)
+        sys.stdout = io.open(1, "w", encoding="utf-8", errors="replace", closefd=False)
+        sys.stderr = io.open(2, "w", encoding="utf-8", errors="replace", closefd=False)
+        try:
+            print("Starting Opscore backend", flush=True)
+            backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
+            spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
+            backend = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(backend)
+            backend.main()
+            return 0
+        except Exception:
+            traceback.print_exc()
+            return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Open Opscore in a native desktop window")
     parser.add_argument("--backend", action="store_true", help=argparse.SUPPRESS)
@@ -275,14 +300,7 @@ def main() -> int:
     parser.add_argument("--chromium", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.backend:
-        import importlib.util
-
-        backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
-        spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
-        backend = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(backend)
-        backend.main()
-        return 0
+        return run_frozen_backend()
 
     DATA_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     if sys.platform != "win32":
