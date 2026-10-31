@@ -72,8 +72,8 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Wording pass (remove leftover subtitles and helper sentences) | Pending |
 | Finalize button on the Monthly Report page | Pending |
 
-**Test suite:** 936 passing, 112 subtests passing (as of v0.1.1).
-**Database schema:** version 7.
+**Test suite:** 1032 passing, 115 subtests passing (as of v1.0).
+**Database schema:** version 9.
 
 ---
 
@@ -131,7 +131,7 @@ Access is deny-by-default and enforced server-side in `ducklab/authz.py`. Store 
 
 ```bash
 cd ~/ducklab-dev && git checkout main && git pull
-scripts/build_deb.sh 0.1.1
+scripts/build_deb.sh 1.0
 ```
 
 The package lands in `dist/` as `opscore_<version>_amd64.deb`. The version defaults to today's date. The build bundles Python 3.14 and the prebuilt frontend, so the installed app needs no internet, Node or system Python.
@@ -145,7 +145,7 @@ sudo apt remove opscore
 
 Opscore then appears in the app menu. It opens in its own window on `127.0.0.1:47811`. Closing the window stops the app. Clicking the icon again focuses the open window.
 
-Before upgrading, download a backup in **Settings → Data**. Version 0.1.1 automatically migrates an existing 0.1.0 database from schema 5 to 7 on first launch. Existing records and accounts are preserved.
+Before upgrading, download a backup in **Settings → Data**. Migrations run automatically on first launch and preserve existing records and accounts. Current schema version: 9 (see `deploy/MIGRATIONS.md` for the full history).
 
 ### Where the data lives
 

@@ -2,7 +2,7 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **7** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **9** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -33,6 +33,12 @@ application schema version: **7** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
   Efficiency scheduling. Seeds the standard shift codes; no staff are seeded.
 - **v7** — soft default colors for the standard shift codes. Only codes still
   using their v6 default colors are updated; customized colors are preserved.
+- **v8** — additive: `staff` gains `employment_type` (`Full-Time` /
+  `Part-Time` / `Not Set`, default `Not Set`) for schedule-staffing
+  integration. Existing staff keep `Not Set`; no other table changes.
+- **v9** — additive: index `idx_actions_store_raised_date` on
+  `actions (store_id, raised_date)` for half-open month-range queries.
+  No data changes.
 
 ## Desktop upgrades
 
