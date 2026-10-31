@@ -1,9 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller one-folder build for the Windows Opscore launcher/backend."""
 
+from importlib import metadata
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parents[1]
 block_cipher = None
@@ -25,7 +26,28 @@ datas += [
 ]
 datas += collect_data_files("tzdata") + collect_data_files("webview")
 
-hiddenimports = collect_submodules("ducklab") + [
+binaries = []
+bundled_hiddenimports = []
+reflex_modules = sorted(
+    module
+    for module in metadata.packages_distributions()
+    if module == "reflex" or module.startswith("reflex_")
+)
+reflex_distributions = {
+    distribution
+    for module, distributions in metadata.packages_distributions().items()
+    if module in reflex_modules
+    for distribution in distributions
+}
+for package in [*reflex_modules, "granian"]:
+    package_datas, package_binaries, package_hiddenimports = collect_all(package)
+    datas += package_datas
+    binaries += package_binaries
+    bundled_hiddenimports += package_hiddenimports
+for distribution in reflex_distributions:
+    datas += copy_metadata(distribution)
+
+hiddenimports = bundled_hiddenimports + collect_submodules("ducklab") + [
     "tzdata",
     "webview",
     "webview.platforms.edgechromium",
@@ -37,7 +59,7 @@ hiddenimports = collect_submodules("ducklab") + [
 analysis = Analysis(
     [str(ROOT / "packaging" / "opscore_desktop.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
