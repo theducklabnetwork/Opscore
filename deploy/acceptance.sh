@@ -5,7 +5,7 @@
 # reseeding between suites is required). The server is started in its own
 # session so it survives the caller's shell.
 set -uo pipefail
-DIR="$1"; PORT="$2"; DEV=/home/duck/project/ducklab
+DIR="$1"; PORT="$2"; DEV="${DUCKLAB_DEV:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ACCEPT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/ducklab-accept.XXXXXX")"
 trap 'stop; rm -rf "$ACCEPT_TMP"' EXIT
 DB="$ACCEPT_TMP/accept-$PORT.db"
