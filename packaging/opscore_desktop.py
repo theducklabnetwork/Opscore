@@ -286,7 +286,12 @@ def run_frozen_backend() -> int:
             spec = importlib.util.spec_from_file_location("opscore_backend", backend_path)
             backend = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(backend)
-            backend.main()
+            original_argv = sys.argv
+            sys.argv = [original_argv[0]]
+            try:
+                backend.main()
+            finally:
+                sys.argv = original_argv
             return 0
         except Exception:
             traceback.print_exc()
