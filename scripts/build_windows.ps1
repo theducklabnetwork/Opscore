@@ -45,7 +45,7 @@ function Remove-IfPresent([string]$Path) {
 }
 
 New-Item -ItemType Directory -Path $Dist -Force | Out-Null
-Remove-IfPresent $Work
+# Keep the work directory so an interrupted build can reuse its runtime and downloads.
 New-Item -ItemType Directory -Path $App, $Downloads -Force | Out-Null
 
 Write-Host "==> Downloading standalone CPython $PythonVersion (install_only)"
@@ -56,30 +56,66 @@ $Asset = $Release.assets | Where-Object { $_.name -eq $AssetName } | Select-Obje
 Assert-Build ($null -ne $Asset) "python-build-standalone asset not found: $AssetName"
 Assert-Build ($Asset.digest -match '^sha256:[0-9a-f]{64}$') "GitHub did not provide a SHA-256 digest for $AssetName"
 $Archive = Join-Path $Downloads $AssetName
-Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $Archive
-$ActualHash = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
 $ExpectedHash = $Asset.digest.Substring(7)
+if (Test-Path -LiteralPath $Archive) {
+    $CachedHash = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($CachedHash -eq $ExpectedHash) {
+        Write-Host "    Reusing the downloaded Python archive"
+    }
+    else {
+        Remove-Item -LiteralPath $Archive -Force
+    }
+}
+if (-not (Test-Path -LiteralPath $Archive)) {
+    Invoke-WebRequest -Uri $Asset.browser_download_url -OutFile $Archive
+}
+$ActualHash = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
 Assert-Build ($ActualHash -eq $ExpectedHash) "Checksum mismatch for $AssetName"
 
-$Tar = Get-Command tar -ErrorAction SilentlyContinue
-Assert-Build ($null -ne $Tar) "tar.exe is required (included with current Windows 10/11)."
-& $Tar.Source -xzf $Archive -C $Work
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not extract the standalone Python archive."
-}
-$ExtractedPython = Join-Path $Work "python"
-Assert-Build (Test-Path -LiteralPath (Join-Path $ExtractedPython "python.exe")) "The archive did not contain python\python.exe."
-Move-Item -LiteralPath $ExtractedPython -Destination (Join-Path $App "python")
 $Python = Join-Path $App "python\python.exe"
 $PythonW = Join-Path $App "python\pythonw.exe"
-
-Write-Host "==> Installing locked Windows dependencies"
-& $Python -I -m pip install --no-cache-dir -r (Join-Path $Root "requirements.lock") -r (Join-Path $Root "requirements-windows.txt")
-if ($LASTEXITCODE -ne 0) {
-    throw "Dependency installation failed."
+$DependenciesStamp = Join-Path $Work "dependencies-installed.txt"
+if (-not (Test-Path -LiteralPath $Python)) {
+    $Tar = Get-Command tar -ErrorAction SilentlyContinue
+    Assert-Build ($null -ne $Tar) "tar.exe is required (included with current Windows 10/11)."
+    Remove-IfPresent (Join-Path $Work "python")
+    & $Tar.Source -xzf $Archive -C $Work
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not extract the standalone Python archive."
+    }
+    $ExtractedPython = Join-Path $Work "python"
+    Assert-Build (Test-Path -LiteralPath (Join-Path $ExtractedPython "python.exe")) "The archive did not contain python\python.exe."
+    Move-Item -LiteralPath $ExtractedPython -Destination (Join-Path $App "python")
+    Remove-IfPresent $DependenciesStamp
 }
-$BundledVersion = & $Python -I -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'
-Assert-Build ($BundledVersion -eq "3.14") "Expected bundled Python 3.14, got $BundledVersion."
+else {
+    Write-Host "    Reusing the extracted Python runtime"
+}
+
+# python --version avoids Windows PowerShell 5.1's native-argument quote removal.
+$BundledVersionOutput = (& $Python --version) -join " "
+if ($LASTEXITCODE -ne 0 -or $BundledVersionOutput -notmatch '^Python 3\.14\.\d+') {
+    throw "Expected bundled Python 3.14, got $BundledVersionOutput."
+}
+
+$RequirementsHash = @(
+    (Get-FileHash -LiteralPath (Join-Path $Root "requirements.lock") -Algorithm SHA256).Hash
+    (Get-FileHash -LiteralPath (Join-Path $Root "requirements-windows.txt") -Algorithm SHA256).Hash
+    $AssetName
+) -join "`n"
+$DependenciesInstalled = (Test-Path -LiteralPath $DependenciesStamp) -and
+    ((Get-Content -LiteralPath $DependenciesStamp -Raw) -eq $RequirementsHash)
+if (-not $DependenciesInstalled) {
+    Write-Host "==> Installing locked Windows dependencies"
+    & $Python -I -m pip install --no-cache-dir -r (Join-Path $Root "requirements.lock") -r (Join-Path $Root "requirements-windows.txt")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dependency installation failed."
+    }
+    Set-Content -LiteralPath $DependenciesStamp -Value $RequirementsHash -Encoding Ascii -NoNewline
+}
+else {
+    Write-Host "==> Reusing installed Windows dependencies"
+}
 
 Write-Host "==> Copying application (without databases or development data)"
 New-Item -ItemType Directory -Path (Join-Path $App "ducklab"), (Join-Path $App "assets"), (Join-Path $App "packaging") -Force | Out-Null
@@ -94,6 +130,8 @@ Assert-Build (Test-Path -LiteralPath $PythonW) "The windowed Python launcher is 
 Write-Host "==> Building the production frontend once"
 # Reflex installs its own Bun and locked frontend dependencies in a clean tree.
 # Those build tools and node_modules are removed before the folder is published.
+Remove-IfPresent (Join-Path $App ".web")
+Remove-IfPresent (Join-Path $App "reflex.lock")
 if (Test-Path -LiteralPath (Join-Path $Root ".web")) {
     Copy-Item -LiteralPath (Join-Path $Root ".web") -Destination (Join-Path $App ".web") -Recurse
     Remove-IfPresent (Join-Path $App ".web\env.json")
@@ -135,7 +173,9 @@ assert all(
 ), endpoints
 assert "8000" not in raw, endpoints
 '@
-& $Python -c $VerifyEndpoints (Join-Path $App ".web\env.json")
+$VerifyEndpointsScript = Join-Path $Work "verify_endpoints.py"
+Set-Content -LiteralPath $VerifyEndpointsScript -Value $VerifyEndpoints -Encoding Ascii
+& $Python $VerifyEndpointsScript (Join-Path $App ".web\env.json")
 if ($LASTEXITCODE -ne 0) {
     throw "Frontend was not exported for the fixed desktop port 47811."
 }
@@ -174,7 +214,15 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText((Join-Path $App "Opscore.cmd"), $Launcher, $Utf8NoBom)
 
 Write-Host "==> Validating the self-contained folder"
-& $Python -I -c 'import reflex, granian, argon2, openpyxl, webview; import sys; assert sys.version_info[:2] == (3, 14)'
+$ValidateRuntime = @'
+import sys
+
+assert sys.version_info[:2] == (3, 14)
+import reflex, granian, argon2, openpyxl, webview
+'@
+$ValidateRuntimeScript = Join-Path $Work "validate_runtime.py"
+Set-Content -LiteralPath $ValidateRuntimeScript -Value $ValidateRuntime -Encoding Ascii
+& $Python -I $ValidateRuntimeScript
 if ($LASTEXITCODE -ne 0) {
     throw "Bundled runtime validation failed."
 }
