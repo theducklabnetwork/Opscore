@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -409,6 +410,23 @@ def run_frozen_backend() -> int:
         return 1
 
 
+def windows_port_available() -> bool:
+    """Check the fixed port without Windows' delayed localhost connect."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 47811))
+        return True
+    except OSError as error:
+        return error.errno == 10035 or isinstance(error, TimeoutError)
+
+
+def port_in_use_error() -> RuntimeError:
+    return RuntimeError(
+        "Port 47811 is already used by another application. "
+        "Close that application, then open Opscore again."
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Open Opscore in a native desktop window")
     parser.add_argument("--backend", action="store_true", help=argparse.SUPPRESS)
@@ -435,33 +453,22 @@ def main() -> int:
             return 0
         # A live service that does not answer our health API owns the fixed
         # port; never replace it or silently choose a different API endpoint.
-        try:
-            with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
-                response.read(1)
-        except urllib.error.HTTPError as error:
-            raise RuntimeError(
-                "Port 47811 is already used by another application. "
-                "Close that application, then open Opscore again."
-            ) from error
-        except urllib.error.URLError as error:
-            unavailable_errnos = {111, 104, 101}
-            if sys.platform == "win32":
-                unavailable_errnos.add(10061)  # WSAECONNREFUSED
-            if getattr(error.reason, "errno", None) not in unavailable_errnos:
-                raise RuntimeError(
-                    "Port 47811 is already used by another application. "
-                    "Close that application, then open Opscore again."
-                ) from error
-        except OSError as error:
-            raise RuntimeError(
-                "Port 47811 is already used by another application. "
-                "Close that application, then open Opscore again."
-            ) from error
+        if sys.platform == "win32":
+            if not windows_port_available():
+                raise port_in_use_error()
         else:
-            raise RuntimeError(
-                "Port 47811 is already used by another application. "
-                "Close that application, then open Opscore again."
-            )
+            try:
+                with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
+                    response.read(1)
+            except urllib.error.HTTPError as error:
+                raise port_in_use_error() from error
+            except urllib.error.URLError as error:
+                if getattr(error.reason, "errno", None) not in (111, 104, 101):
+                    raise port_in_use_error() from error
+            except OSError as error:
+                raise port_in_use_error() from error
+            else:
+                raise port_in_use_error()
         process, url = start_backend()
         if args.backend_only:
             print(url, flush=True)

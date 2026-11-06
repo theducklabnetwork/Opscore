@@ -5,7 +5,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import urllib.error
 from unittest import mock
 
 from tests.test_frozen_backend_env import load_desktop_module
@@ -69,26 +68,88 @@ class TestSourceBackend(unittest.TestCase):
 
 
 class TestPortCheck(unittest.TestCase):
-    def test_windows_connection_refused_starts_backend(self):
-        desktop = load_desktop_module()
+    def setUp(self):
+        self.desktop = load_desktop_module()
+
+    def test_windows_bind_free_port(self):
+        sock = mock.MagicMock()
+        with mock.patch.object(self.desktop.socket, "socket") as socket_factory:
+            socket_factory.return_value.__enter__.return_value = sock
+            self.assertTrue(self.desktop.windows_port_available())
+        sock.bind.assert_called_once_with(("127.0.0.1", 47811))
+        socket_factory.return_value.__exit__.assert_called_once()
+
+    def test_windows_bind_occupied_port(self):
+        sock = mock.MagicMock()
+        sock.bind.side_effect = OSError(10048, "Address already in use")
+        with mock.patch.object(self.desktop.socket, "socket") as socket_factory:
+            socket_factory.return_value.__enter__.return_value = sock
+            self.assertFalse(self.desktop.windows_port_available())
+
+    def test_windows_would_block_is_available(self):
+        sock = mock.MagicMock()
+        sock.bind.side_effect = OSError(10035, "Operation would block")
+        with mock.patch.object(self.desktop.socket, "socket") as socket_factory:
+            socket_factory.return_value.__enter__.return_value = sock
+            self.assertTrue(self.desktop.windows_port_available())
+
+    def test_windows_timeout_is_available(self):
+        sock = mock.MagicMock()
+        sock.bind.side_effect = TimeoutError()
+        with mock.patch.object(self.desktop.socket, "socket") as socket_factory:
+            socket_factory.return_value.__enter__.return_value = sock
+            self.assertTrue(self.desktop.windows_port_available())
+
+    def test_windows_available_port_starts_backend(self):
         process = mock.Mock()
         process.wait.return_value = 0
-        refused = urllib.error.URLError(OSError(10061, "Connection refused"))
         with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(desktop.sys, "platform", "win32"), \
-                mock.patch.object(desktop.sys, "argv", ["opscore_desktop.py", "--backend-only"]), \
-                mock.patch.object(desktop, "DATA_DIR", Path(tmp)), \
-                mock.patch.object(desktop, "URL_PATH", Path(tmp) / "current.json"), \
-                mock.patch.object(desktop, "acquire_lock", return_value=mock.Mock()), \
-                mock.patch.object(desktop, "active_app", return_value=None), \
-                mock.patch.object(desktop.urllib.request, "urlopen", side_effect=refused), \
-                mock.patch.object(desktop, "start_backend", return_value=(process, desktop.APP_URL)) as start, \
-                mock.patch.object(desktop, "stop_backend"):
-            self.assertEqual(desktop.main(), 0)
+                mock.patch.object(self.desktop.sys, "platform", "win32"), \
+                mock.patch.object(self.desktop.sys, "argv", ["opscore_desktop.py", "--backend-only"]), \
+                mock.patch.object(self.desktop, "DATA_DIR", Path(tmp)), \
+                mock.patch.object(self.desktop, "URL_PATH", Path(tmp) / "current.json"), \
+                mock.patch.object(self.desktop, "acquire_lock", return_value=mock.Mock()), \
+                mock.patch.object(self.desktop, "active_app", return_value=None), \
+                mock.patch.object(self.desktop, "windows_port_available", return_value=True), \
+                mock.patch.object(self.desktop, "start_backend", return_value=(process, self.desktop.APP_URL)) as start, \
+                mock.patch.object(self.desktop, "stop_backend"):
+            self.assertEqual(self.desktop.main(), 0)
         start.assert_called_once_with()
 
+    def test_windows_bind_is_used_without_connect_probe(self):
+        process = mock.Mock()
+        process.wait.return_value = 0
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(self.desktop.sys, "platform", "win32"), \
+                mock.patch.object(self.desktop.sys, "argv", ["opscore_desktop.py", "--backend-only"]), \
+                mock.patch.object(self.desktop, "DATA_DIR", Path(tmp)), \
+                mock.patch.object(self.desktop, "URL_PATH", Path(tmp) / "current.json"), \
+                mock.patch.object(self.desktop, "acquire_lock", return_value=mock.Mock()), \
+                mock.patch.object(self.desktop, "active_app", return_value=None), \
+                mock.patch.object(self.desktop, "windows_port_available", return_value=True) as available, \
+                mock.patch.object(self.desktop.urllib.request, "urlopen") as urlopen, \
+                mock.patch.object(self.desktop, "start_backend", return_value=(process, self.desktop.APP_URL)), \
+                mock.patch.object(self.desktop, "stop_backend"):
+            self.assertEqual(self.desktop.main(), 0)
+        available.assert_called_once_with()
+        urlopen.assert_not_called()
 
-class TestWindowsBrowser(unittest.TestCase):
+    def test_windows_occupied_port_does_not_start_backend(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(self.desktop.sys, "platform", "win32"), \
+                mock.patch.object(self.desktop.sys, "argv", ["opscore_desktop.py"]), \
+                mock.patch.object(self.desktop, "DATA_DIR", Path(tmp)), \
+                mock.patch.object(self.desktop, "URL_PATH", Path(tmp) / "current.json"), \
+                mock.patch.object(self.desktop, "acquire_lock", return_value=mock.Mock()), \
+                mock.patch.object(self.desktop, "active_app", return_value=None), \
+                mock.patch.object(self.desktop, "windows_port_available", return_value=False), \
+                mock.patch.object(self.desktop, "start_backend") as start, \
+                mock.patch.object(self.desktop, "show_error") as show_error, \
+                mock.patch.object(self.desktop, "stop_backend"):
+            self.assertEqual(self.desktop.main(), 1)
+        start.assert_not_called()
+        self.assertIn("already used", show_error.call_args.args[0])
+
     def test_browser_launcher_stays_with_backend(self):
         desktop = load_desktop_module()
         backend = mock.Mock()
