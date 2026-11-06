@@ -7,7 +7,7 @@ state var and event handler on ManpowerState.
 
 All reads/writes go through AppService with the session token revalidated
 on every event; store access is enforced by authz. CSV export writes
-per-staff files to ~/Documents/Opscore Schedules/<store-code>/<week-start>/.
+per-staff files below Documents/Opscore Schedules/<store-code>/<week-start>/.
 """
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ from __future__ import annotations
 import calendar
 import csv
 from datetime import date, datetime
-from pathlib import Path
 
 import reflex as rx
 
 from ducklab import authz
 from ducklab import kpi
+from ducklab import platform_utils
 from ducklab.auth_service import (
     AuthenticationError, AuthorizationError,
 )
@@ -193,7 +193,8 @@ class ScheduleState(SharedOpsState):
                 user, store_id, week_start, week_start.fromordinal(week_start.toordinal() + 6))
             store = next(store for store in user.stores if store.id == store_id)
             store_part = "".join(c if c.isalnum() or c in "-_" else "_" for c in store.code)
-            folder = Path.home() / "Documents/Opscore Schedules" / store_part / self.schedule_week
+            folder = (platform_utils.documents_dir() / "Opscore Schedules"
+                      / store_part / self.schedule_week)
             folder.mkdir(parents=True, exist_ok=True)
             entries = {(row["staff_id"], row["work_date"]): row["code"]
                        for row in data["entries"] if row["code"]}

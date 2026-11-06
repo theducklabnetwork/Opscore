@@ -18,9 +18,13 @@ import urllib.request
 
 os.environ["OPSCORE_DESKTOP"] = "1"
 
+APP_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+
 from ducklab import platform_utils
 
-APP_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 DATA_DIR = platform_utils.data_dir()
 DB_PATH = DATA_DIR / "store_ops.db"
 LOCK_PATH = DATA_DIR / "launcher.lock"
@@ -105,7 +109,8 @@ def show_error(message: str) -> None:
 
 def start_backend() -> tuple[subprocess.Popen, str]:
     url = APP_URL
-    release = (APP_ROOT / "RELEASE").read_text().strip()
+    release_file = APP_ROOT / "RELEASE"
+    release = release_file.read_text().strip() if release_file.exists() else "source"
     environment = {
         **os.environ,
         "DUCKLAB_DB_PATH": str(DB_PATH),
@@ -123,6 +128,11 @@ def start_backend() -> tuple[subprocess.Popen, str]:
         [str(Path(sys.executable).resolve()), "--backend"]
         if getattr(sys, "frozen", False)
         else [str(APP_ROOT / "packaging" / "opscore-backend")]
+        if sys.platform != "win32"
+        else [
+            str(Path(sys.executable).resolve()),
+            str(APP_ROOT / "packaging" / "opscore_backend.py"),
+        ]
     )
     with LOG_PATH.open("ab") as log:
         process = platform_utils.start_backend(
@@ -241,6 +251,9 @@ def native_window(url: str) -> int:
 def open_window(url: str, force_chromium: bool = False) -> int:
     if sys.platform == "win32" and not force_chromium:
         platform_utils.open_in_browser(url)
+        print(f"Opening Opscore in the default browser: {url}", file=sys.stderr)
+        print("Leave this window open; close it or press Ctrl+C to stop Opscore.", file=sys.stderr)
+        BACKEND.wait()
         return 0
     if force_chromium:
         return chromium_window(url) or 0
