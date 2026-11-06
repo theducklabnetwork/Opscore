@@ -161,7 +161,7 @@ Removing the package never deletes user data. For a truly fresh start, move the 
 mv ~/.local/share/opscore ~/.local/share/opscore.old-$(date +%F)
 ```
 
-## Windows folder (no installer)
+## Windows installer and folder
 
 Build on 64-bit Windows with internet access:
 
@@ -171,7 +171,22 @@ Build on 64-bit Windows with internet access:
 
 The script bundles standalone CPython 3.14, the locked dependencies and the production frontend in `dist\Opscore`. Copy the entire folder to any Windows 10/11 PC and double-click `Opscore.cmd`; Python, Git and Node are not required. The launcher uses `pythonw.exe` for a windowed start, and the package includes `assets\opscore.ico`. WebView2 is preferred, with Edge app mode and the default browser as fallbacks.
 
-The build checks that both frontend entry points exist and that `.web\env.json` targets `127.0.0.1:47811`. It does not create an installer or an archive. User data, including `store_ops.db` and `opscore.log`, is stored under `%LOCALAPPDATA%\Opscore`, so the application folder can remain read-only. Moving or replacing the folder preserves user data.
+The build checks that both frontend entry points exist and that `.web\env.json` targets `127.0.0.1:47811`. The folder build itself does not create an installer or an archive.
+
+### Build the Windows installer locally
+
+After building `dist\Opscore`, install [Inno Setup 6](https://jrsoftware.org/isinfo.php), open **Developer Command Prompt for Inno Setup**, and run from the repository root:
+
+```powershell
+$version = (Get-Content -Raw dist\Opscore\RELEASE).Trim()
+ISCC.exe /DOPSCORE_VERSION=$version packaging\windows\opscore.iss
+```
+
+This creates `dist\Opscore-Setup-<version>.exe`. The version comes from `RELEASE`, which `build_windows.ps1` writes using its `-Version` argument, `OPSCORE_VERSION`, or the current UTC date—the same version inputs as the `.deb` build.
+
+The installer is per-user and does not require administrator rights. It installs into `%LOCALAPPDATA%\Programs\Opscore`, adds an Opscore Start Menu shortcut, and offers an optional Desktop shortcut. Both shortcuts use `pythonw.exe`, so no console window flashes. Close Opscore when asked during installation or upgrade.
+
+User data, including `store_ops.db` and `opscore.log`, is stored under `%LOCALAPPDATA%\Opscore`, separately from the program. Upgrades and uninstallation preserve this data folder. Moving or replacing the application folder also preserves user data.
 
 ## First launch
 
