@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest import mock
 
 from tests.test_frozen_backend_env import load_desktop_module
@@ -65,6 +66,26 @@ class TestSourceBackend(unittest.TestCase):
              str(self.app_root / "packaging" / "opscore_backend.py")],
         )
         self.assertEqual(call.kwargs["env"]["DUCKLAB_RELEASE_ID"], "source")
+
+
+class TestPortCheck(unittest.TestCase):
+    def test_windows_connection_refused_starts_backend(self):
+        desktop = load_desktop_module()
+        process = mock.Mock()
+        process.wait.return_value = 0
+        refused = urllib.error.URLError(OSError(10061, "Connection refused"))
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(desktop.sys, "platform", "win32"), \
+                mock.patch.object(desktop.sys, "argv", ["opscore_desktop.py", "--backend-only"]), \
+                mock.patch.object(desktop, "DATA_DIR", Path(tmp)), \
+                mock.patch.object(desktop, "URL_PATH", Path(tmp) / "current.json"), \
+                mock.patch.object(desktop, "acquire_lock", return_value=mock.Mock()), \
+                mock.patch.object(desktop, "active_app", return_value=None), \
+                mock.patch.object(desktop.urllib.request, "urlopen", side_effect=refused), \
+                mock.patch.object(desktop, "start_backend", return_value=(process, desktop.APP_URL)) as start, \
+                mock.patch.object(desktop, "stop_backend"):
+            self.assertEqual(desktop.main(), 0)
+        start.assert_called_once_with()
 
 
 class TestWindowsBrowser(unittest.TestCase):

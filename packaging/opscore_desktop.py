@@ -444,7 +444,10 @@ def main() -> int:
                 "Close that application, then open Opscore again."
             ) from error
         except urllib.error.URLError as error:
-            if getattr(error.reason, "errno", None) not in (111, 104, 101):
+            unavailable_errnos = {111, 104, 101}
+            if sys.platform == "win32":
+                unavailable_errnos.add(10061)  # WSAECONNREFUSED
+            if getattr(error.reason, "errno", None) not in unavailable_errnos:
                 raise RuntimeError(
                     "Port 47811 is already used by another application. "
                     "Close that application, then open Opscore again."
