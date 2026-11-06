@@ -24,6 +24,18 @@ class TestDataDir(unittest.TestCase):
             self.assertEqual(platform_utils.data_dir(), Path(r"C:\Users\Test\AppData\Local") / "Opscore")
 
 
+class TestDocumentsDir(unittest.TestCase):
+    def test_linux_path(self):
+        with mock.patch.object(platform_utils.sys, "platform", "linux"), \
+                mock.patch.object(platform_utils.Path, "home", return_value=Path("/home/test")):
+            self.assertEqual(platform_utils.documents_dir(), Path("/home/test/Documents"))
+
+    def test_windows_path(self):
+        with mock.patch.object(platform_utils.sys, "platform", "win32"), \
+                mock.patch.dict(os.environ, {"USERPROFILE": r"C:\Users\Test"}):
+            self.assertEqual(platform_utils.documents_dir(), Path(r"C:\Users\Test") / "Documents")
+
+
 class TestSingleInstance(unittest.TestCase):
     def test_linux_flock(self):
         with tempfile.TemporaryDirectory() as tmp:

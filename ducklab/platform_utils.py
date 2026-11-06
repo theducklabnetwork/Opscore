@@ -17,14 +17,19 @@ def data_dir() -> Path:
     return Path.home() / ".local" / "share" / "opscore"
 
 
+def documents_dir() -> Path:
+    """Return the per-user directory used for exported documents."""
+    if sys.platform == "win32":
+        return Path(os.environ["USERPROFILE"]) / "Documents"
+    return Path.home() / "Documents"
+
+
 def acquire_single_instance(lock_path: Path):
     """Acquire the non-blocking per-user instance lock, or return None."""
     if sys.platform == "win32":
         import ctypes
         from ctypes import wintypes
 
-        kernel32 = ctypes.windll.kernel32
-    if sys.platform == "win32":
         kernel32 = ctypes.windll.kernel32
         kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
         kernel32.CreateMutexW.restype = wintypes.HANDLE
@@ -34,9 +39,11 @@ def acquire_single_instance(lock_path: Path):
         if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
             kernel32.CloseHandle(handle)
             return None
+
         class _Mutex:
             def close(self):
                 kernel32.CloseHandle(handle)
+
         return _Mutex()
 
     import fcntl

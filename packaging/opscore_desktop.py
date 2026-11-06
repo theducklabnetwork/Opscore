@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -18,9 +19,13 @@ import urllib.request
 
 os.environ["OPSCORE_DESKTOP"] = "1"
 
+APP_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
+
+
 from ducklab import platform_utils
 
-APP_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 DATA_DIR = platform_utils.data_dir()
 DB_PATH = DATA_DIR / "store_ops.db"
 LOCK_PATH = DATA_DIR / "launcher.lock"
@@ -105,7 +110,8 @@ def show_error(message: str) -> None:
 
 def start_backend() -> tuple[subprocess.Popen, str]:
     url = APP_URL
-    release = (APP_ROOT / "RELEASE").read_text().strip()
+    release_file = APP_ROOT / "RELEASE"
+    release = release_file.read_text().strip() if release_file.exists() else "source"
     environment = {
         **os.environ,
         "DUCKLAB_DB_PATH": str(DB_PATH),
@@ -123,6 +129,11 @@ def start_backend() -> tuple[subprocess.Popen, str]:
         [str(Path(sys.executable).resolve()), "--backend"]
         if getattr(sys, "frozen", False)
         else [str(APP_ROOT / "packaging" / "opscore-backend")]
+        if sys.platform != "win32"
+        else [
+            str(Path(sys.executable).resolve()),
+            str(APP_ROOT / "packaging" / "opscore_backend.py"),
+        ]
     )
     with LOG_PATH.open("ab") as log:
         process = platform_utils.start_backend(
@@ -241,6 +252,9 @@ def native_window(url: str) -> int:
 def open_window(url: str, force_chromium: bool = False) -> int:
     if sys.platform == "win32" and not force_chromium:
         platform_utils.open_in_browser(url)
+        print(f"Opening Opscore in the default browser: {url}", file=sys.stderr)
+        print("Leave this window open; close it or press Ctrl+C to stop Opscore.", file=sys.stderr)
+        BACKEND.wait()
         return 0
     if force_chromium:
         return chromium_window(url) or 0
@@ -396,6 +410,23 @@ def run_frozen_backend() -> int:
         return 1
 
 
+def windows_port_available() -> bool:
+    """Check the fixed port without Windows' delayed localhost connect."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 47811))
+        return True
+    except OSError as error:
+        return error.errno == 10035 or isinstance(error, TimeoutError)
+
+
+def port_in_use_error() -> RuntimeError:
+    return RuntimeError(
+        "Port 47811 is already used by another application. "
+        "Close that application, then open Opscore again."
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Open Opscore in a native desktop window")
     parser.add_argument("--backend", action="store_true", help=argparse.SUPPRESS)
@@ -422,30 +453,22 @@ def main() -> int:
             return 0
         # A live service that does not answer our health API owns the fixed
         # port; never replace it or silently choose a different API endpoint.
-        try:
-            with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
-                response.read(1)
-        except urllib.error.HTTPError as error:
-            raise RuntimeError(
-                "Port 47811 is already used by another application. "
-                "Close that application, then open Opscore again."
-            ) from error
-        except urllib.error.URLError as error:
-            if getattr(error.reason, "errno", None) not in (111, 104, 101):
-                raise RuntimeError(
-                    "Port 47811 is already used by another application. "
-                    "Close that application, then open Opscore again."
-                ) from error
-        except OSError as error:
-            raise RuntimeError(
-                "Port 47811 is already used by another application. "
-                "Close that application, then open Opscore again."
-            ) from error
+        if sys.platform == "win32":
+            if not windows_port_available():
+                raise port_in_use_error()
         else:
-            raise RuntimeError(
-                "Port 47811 is already used by another application. "
-                "Close that application, then open Opscore again."
-            )
+            try:
+                with urllib.request.urlopen(HEALTH_URL, timeout=2) as response:
+                    response.read(1)
+            except urllib.error.HTTPError as error:
+                raise port_in_use_error() from error
+            except urllib.error.URLError as error:
+                if getattr(error.reason, "errno", None) not in (111, 104, 101):
+                    raise port_in_use_error() from error
+            except OSError as error:
+                raise port_in_use_error() from error
+            else:
+                raise port_in_use_error()
         process, url = start_backend()
         if args.backend_only:
             print(url, flush=True)
