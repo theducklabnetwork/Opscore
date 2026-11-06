@@ -1,0 +1,3 @@
+# Optional native WebView2 window for Windows source runs.
+# Install with: python -m pip install -r requirements-windows.txt
+pywebview==6.2.1

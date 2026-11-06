@@ -8,7 +8,7 @@ These steps run the source checkout directly. They do not create a package or in
 - [Python 3.14](https://www.python.org/downloads/)
 - Git
 
-Use a normal PowerShell window. pywebview and GTK are optional: without them, Opscore uses the default browser.
+Use a normal PowerShell window. Opscore opens in a native WebView2 window when the optional Windows dependency below is installed. Without it, Opscore tries Microsoft Edge app mode and then the default browser.
 
 ## Set up the checkout
 
@@ -26,6 +26,16 @@ If the repository is already cloned, replace the first command with `cd` to that
 ```powershell
 git switch windows-compat
 ```
+
+### Optional: native app window
+
+For the proper Opscore window instead of a browser fallback, install the Windows-only pywebview dependency:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-windows.txt
+```
+
+The native window uses Microsoft Edge WebView2 Runtime, which is normally included with current Windows 10/11 systems. If it is missing, install the **Evergreen Standalone Installer** from [Microsoft's WebView2 download page](https://developer.microsoft.com/microsoft-edge/webview2/). Opscore automatically falls back to Edge app mode or the default browser if pywebview or WebView2 cannot start.
 
 ## Build the frontend once
 
@@ -50,7 +60,13 @@ From the repository root:
 .\.venv\Scripts\python.exe packaging\opscore_desktop.py
 ```
 
-Opscore starts its backend and opens **http://127.0.0.1:47811/** in the default browser when pywebview/GTK is unavailable. Keep the launcher PowerShell window open while using Opscore. Close that window or press **Ctrl+C** there to stop the backend; closing only the browser tab does not stop it.
+Opscore starts its backend and opens **http://127.0.0.1:47811/** in this order:
+
+1. A 1280×800 pywebview window titled **Opscore**, using WebView2 and the Opscore icon.
+2. Microsoft Edge in `--app` mode if pywebview or WebView2 is unavailable.
+3. The default browser if Edge cannot start.
+
+Closing the native window or Edge app window stops the backend and releases the single-instance lock. In default-browser mode, keep the launcher PowerShell window open and press **Ctrl+C** there to stop Opscore; closing only the browser tab does not stop it.
 
 On first launch, create the Super Admin account. If port `47811` is already occupied, close the application using it before starting Opscore.
 

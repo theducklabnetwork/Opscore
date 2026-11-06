@@ -150,17 +150,112 @@ class TestPortCheck(unittest.TestCase):
         start.assert_not_called()
         self.assertIn("already used", show_error.call_args.args[0])
 
-    def test_browser_launcher_stays_with_backend(self):
+
+class TestWindowsWindow(unittest.TestCase):
+    def setUp(self):
+        self.desktop = load_desktop_module()
+        self.url = "http://127.0.0.1:47811/"
+        self.desktop.BACKEND = mock.Mock()
+
+    def tearDown(self):
+        self.desktop.BACKEND = None
+
+    def test_webview2_window_has_opscore_title_icon_and_size(self):
+        webview = mock.Mock()
+        with mock.patch.dict(sys.modules, {"webview": webview}):
+            self.desktop.windows_native_window(self.url)
+        webview.create_window.assert_called_once_with(
+            "Opscore", self.url, width=1280, height=800, min_size=(800, 600),
+            background_color="#111827", text_select=True,
+        )
+        webview.start.assert_called_once_with(
+            gui="edgechromium", private_mode=False,
+            storage_path=str(self.desktop.DATA_DIR / "webview"),
+            icon=str(self.desktop.APP_ROOT / "assets" / "opscore.ico"),
+        )
+
+    def test_webview_unavailable_falls_back_to_edge_app_mode(self):
+        with mock.patch.dict(sys.modules, {"webview": None}), \
+                mock.patch.object(self.desktop, "edge_window", return_value=True) as edge, \
+                mock.patch.object(self.desktop.platform_utils, "open_in_browser") as browser:
+            self.desktop.windows_window(self.url)
+        edge.assert_called_once_with(self.url)
+        browser.assert_not_called()
+
+    def test_webview2_failure_falls_back_to_edge(self):
+        with mock.patch.object(self.desktop, "windows_native_window", side_effect=RuntimeError("missing")), \
+                mock.patch.object(self.desktop, "edge_window", return_value=True) as edge, \
+                mock.patch.object(self.desktop.platform_utils, "open_in_browser") as browser:
+            self.desktop.windows_window(self.url)
+        edge.assert_called_once_with(self.url)
+        browser.assert_not_called()
+
+    def test_edge_unavailable_falls_back_to_default_browser(self):
+        with mock.patch.object(self.desktop, "windows_native_window", side_effect=ImportError), \
+                mock.patch.object(self.desktop, "edge_window", return_value=False), \
+                mock.patch.object(self.desktop.platform_utils, "open_in_browser") as browser:
+            self.desktop.windows_window(self.url)
+        browser.assert_called_once_with(self.url)
+        self.desktop.BACKEND.wait.assert_called_once_with()
+
+    def test_edge_failure_also_falls_back_without_raising(self):
+        with mock.patch.object(self.desktop, "windows_native_window", side_effect=RuntimeError), \
+                mock.patch.object(self.desktop, "edge_window", side_effect=OSError("missing")), \
+                mock.patch.object(self.desktop.platform_utils, "open_in_browser") as browser:
+            self.desktop.windows_window(self.url)
+        browser.assert_called_once_with(self.url)
+
+    def test_default_browser_failure_does_not_raise(self):
+        with mock.patch.object(self.desktop, "windows_native_window", side_effect=ImportError), \
+                mock.patch.object(self.desktop, "edge_window", return_value=False), \
+                mock.patch.object(self.desktop.platform_utils, "open_in_browser", side_effect=OSError):
+            self.desktop.windows_window(self.url)
+        self.desktop.BACKEND.wait.assert_called_once_with()
+
+    def test_edge_app_mode_uses_opscore_profile_and_waits(self):
+        process = mock.Mock()
+        with mock.patch.object(self.desktop.Path, "is_file", return_value=True), \
+                mock.patch.dict(self.desktop.os.environ, {"ProgramFiles(x86)": r"C:\Program Files (x86)"}), \
+                mock.patch.object(self.desktop.subprocess, "Popen", return_value=process) as popen:
+            self.assertTrue(self.desktop.edge_window(self.url))
+        command = popen.call_args.args[0]
+        self.assertTrue(command[0].endswith("msedge.exe"))
+        self.assertIn(f"--app={self.url}", command)
+        self.assertIn(f"--user-data-dir={self.desktop.DATA_DIR / 'edge'}", command)
+        process.wait.assert_called_once_with()
+
+    def test_missing_edge_returns_false(self):
+        with mock.patch.object(self.desktop.Path, "is_file", return_value=False):
+            self.assertFalse(self.desktop.edge_window(self.url))
+
+    def test_linux_window_path_is_unchanged(self):
+        with mock.patch.object(self.desktop.sys, "platform", "linux"), \
+                mock.patch.object(self.desktop, "native_window", return_value=0) as native, \
+                mock.patch.object(self.desktop, "windows_window") as windows:
+            self.assertEqual(self.desktop.open_window(self.url), 0)
+        native.assert_called_once_with(self.url)
+        windows.assert_not_called()
+
+
+class TestLauncherCleanup(unittest.TestCase):
+    def test_window_close_stops_backend_and_releases_lock(self):
         desktop = load_desktop_module()
-        backend = mock.Mock()
-        backend.wait.return_value = 0
-        desktop.BACKEND = backend
-        with mock.patch.object(desktop.sys, "platform", "win32"), \
-                mock.patch.object(desktop.platform_utils, "open_in_browser") as open_browser:
-            self.assertEqual(desktop.open_window("http://127.0.0.1:47811/"), 0)
-        open_browser.assert_called_once_with("http://127.0.0.1:47811/")
-        backend.wait.assert_called_once_with()
-        desktop.BACKEND = None
+        process = mock.Mock()
+        lock = mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(desktop.sys, "platform", "win32"), \
+                mock.patch.object(desktop.sys, "argv", ["opscore_desktop.py"]), \
+                mock.patch.object(desktop, "DATA_DIR", Path(tmp)), \
+                mock.patch.object(desktop, "URL_PATH", Path(tmp) / "current.json"), \
+                mock.patch.object(desktop, "acquire_lock", return_value=lock), \
+                mock.patch.object(desktop, "active_app", return_value=None), \
+                mock.patch.object(desktop, "windows_port_available", return_value=True), \
+                mock.patch.object(desktop, "start_backend", return_value=(process, desktop.APP_URL)), \
+                mock.patch.object(desktop, "open_window", return_value=0), \
+                mock.patch.object(desktop, "stop_backend") as stop:
+            self.assertEqual(desktop.main(), 0)
+        stop.assert_called_once_with()
+        lock.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

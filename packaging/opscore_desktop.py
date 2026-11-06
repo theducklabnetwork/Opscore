@@ -209,6 +209,75 @@ def chromium_window(url: str) -> int:
         stop_backend()
 
 
+def windows_native_window(url: str) -> None:
+    """Open Opscore in WebView2 and return after its window closes."""
+    import webview
+
+    webview.create_window(
+        "Opscore",
+        url,
+        width=1280,
+        height=800,
+        min_size=(800, 600),
+        background_color="#111827",
+        text_select=True,
+    )
+    webview.start(
+        gui="edgechromium",
+        private_mode=False,
+        storage_path=str(DATA_DIR / "webview"),
+        icon=str(APP_ROOT / "assets" / "opscore.ico"),
+    )
+
+
+def edge_window(url: str) -> bool:
+    """Open an Edge app window and wait for it, returning False if unavailable."""
+    edge = next(
+        (
+            path
+            for path in (
+                Path(os.environ.get("ProgramFiles(x86)", "")) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+                Path(os.environ.get("ProgramFiles", "")) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+            )
+            if path.is_file()
+        ),
+        None,
+    )
+    if edge is None:
+        return False
+    process = subprocess.Popen([
+        str(edge),
+        f"--app={url}",
+        f"--user-data-dir={DATA_DIR / 'edge'}",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ])
+    process.wait()
+    return True
+
+
+def windows_window(url: str) -> None:
+    """Use WebView2, then Edge app mode, then the default browser."""
+    try:
+        windows_native_window(url)
+        return
+    except Exception as error:
+        print(f"WebView2 window unavailable ({error}); trying Microsoft Edge.", file=sys.stderr)
+    try:
+        if edge_window(url):
+            return
+    except Exception as error:
+        print(f"Edge app window unavailable ({error}); trying the default browser.", file=sys.stderr)
+    try:
+        platform_utils.open_in_browser(url)
+    except Exception as error:
+        print(f"Could not open a browser automatically ({error}); open {url}", file=sys.stderr)
+    else:
+        print(f"Opening Opscore in the default browser: {url}", file=sys.stderr)
+    print("Leave this window open; close it or press Ctrl+C to stop Opscore.", file=sys.stderr)
+    BACKEND.wait()
+
+
 def native_window(url: str) -> int:
     import threading
     from wsgiref.simple_server import WSGIRequestHandler, make_server
@@ -251,10 +320,7 @@ def native_window(url: str) -> int:
 
 def open_window(url: str, force_chromium: bool = False) -> int:
     if sys.platform == "win32" and not force_chromium:
-        platform_utils.open_in_browser(url)
-        print(f"Opening Opscore in the default browser: {url}", file=sys.stderr)
-        print("Leave this window open; close it or press Ctrl+C to stop Opscore.", file=sys.stderr)
-        BACKEND.wait()
+        windows_window(url)
         return 0
     if force_chromium:
         return chromium_window(url) or 0
@@ -482,6 +548,7 @@ def main() -> int:
         return 1
     finally:
         stop_backend()
+        lock.close()
         try:
             if json.loads(URL_PATH.read_text()).get("pid") == os.getpid():
                 URL_PATH.unlink(missing_ok=True)
