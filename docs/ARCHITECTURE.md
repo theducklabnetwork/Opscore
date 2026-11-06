@@ -33,7 +33,7 @@ Opscore is a full-stack Python app built with **Reflex 0.10**. Reflex compiles t
 │  Database          store_ops_db.py + auth_db.py (schema, migrations)│
 └───────────────┬─────────────────────────────────────────────────────┘
                 ▼
-        ~/.local/share/opscore/store_ops.db   (SQLite, schema v7)
+        ~/.local/share/opscore/store_ops.db   (SQLite, schema v9)
 ```
 
 ## 2. Technology
@@ -106,7 +106,7 @@ can restyle open figures without cross-module imports.
 
 ## 4. Data model
 
-One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **7**). Initialization is idempotent and migrations are additive.
+One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **9**). Initialization is idempotent and migrations are additive.
 
 ### Operations tables
 
@@ -126,7 +126,7 @@ One SQLite file holds both operations data and accounts. Schema version is track
 | `contribution_shares` | Daily Sales Contribution: each day type's share of the month by State and Concept |
 | `basket_benchmarks` | State average SPR and IPR by Concept and month |
 | `reference_data_info` | When and from which file the reference data was loaded |
-| `staff` | Store-scoped staff roster: name, staff ID and position |
+| `staff` | Store-scoped staff roster: name, staff ID, position and employment type (`Full-Time`, `Part-Time` or `Not Set`) |
 | `shift_codes` | Shared shift codes, labels, working times and colors |
 | `schedule_entries` | Staff shift assignments by store and date |
 | `schedule_targets` | Target manpower per store and week |
@@ -164,18 +164,20 @@ Parsing helpers (`parse_money_cents`, `parse_count`, `parse_decimal`) are shared
 
 ### Weekly schedules
 
-Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Only shift codes with working times count toward daily headcount. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, a sibling of ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Each staff member has an employment type (`Full-Time`, `Part-Time` or `Not Set`). Only shift codes with working times count toward daily headcount, and schedule staffing uses employment type to separate full-time and part-time workers. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, a sibling of ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+
+Daily Operations can apply a selected day's schedule through **Apply Schedule**. The **Schedule Preview** shows derived working staff and leave counts, with warnings where applicable, before the user applies them to the entry.
 
 ## 6. Monthly reports and snapshots
 
-- **Preview:** `operations_service.py` assembles the live report for a store and month from the repositories and `kpi.py`.
-- **Finalize:** `operations_snapshots.py` saves the report's KPI results as a JSON snapshot (`ducklab.snapshot.v1`), version 1.
-- **Correct:** a correction creates a new version that supersedes the previous one. Old versions are kept and never overwritten.
-- **Export:** `report_export.py` writes the live report and its source records to an Excel file named `opscore-<store>-<month>.xlsx`.
+- **Preview:** `operations_service.py` assembles the live report for a store and month from the repositories and `kpi.py`. The Dashboard and Monthly Report also offer an **All Stores** live aggregate across the user's assigned stores; this view has no finalized versions.
+- **Finalize:** **Finalize Month** on the Monthly Report page calls `operations_snapshots.py` to save the report's KPI results as a JSON snapshot (`ducklab.snapshot.v1`), starting at version 1.
+- **Correct:** **Correct Month** creates a new version from current live data and supersedes the previous one. Old versions are kept and never overwritten, and the finalized view provides a version selector.
+- **Export:** `report_export.py` writes the selected report and its source records to Excel. Live reports use `opscore-<store>-<month>.xlsx`; finalized reports use `opscore-<store>-<month>-finalized-v<version>.xlsx`.
 
 Snapshots keep KPI outputs, not a full history of the input records.
 
-Finalize and correct are available in `AppService` and tested, but have no button on screen yet. The Monthly Report page shows a finalized version when one exists.
+Finalize and Correct are available on screen to Super Admin and Administrator users for active single-store months that pass the live-report preflight. All Stores remains live-only.
 
 ## 7. Security model
 
@@ -286,7 +288,7 @@ Depends on GTK 3 and WebKit2GTK 4.1. Supports Ubuntu 22.04 and newer.
 
 | Kind | Where | Notes |
 |---|---|---|
-| Unit and integration | `tests/` | 936 tests, each on a disposable database |
+| Unit and integration | `tests/` | 1,069 tests and 115 subtests passed on 2026-11-07; disposable databases |
 | KPI rules | `test_kpi_synthetic.py`, `test_ops_levels_synthetic.py`, `test_daily_targets_t1.py` | Hand-made cases for every rule |
 | Security | `test_security.py`, `test_auth.py`, `test_ops_payroll_policy.py` | Roles, sessions, payroll visibility |
 | Packaging | `test_release_pipeline.py`, `test_deployment.py` | Build and release checks |

@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Windows compatibility and Windows test coverage.
+- Native Windows application windows through pywebview/WebView2, with Microsoft Edge app mode and the default browser as fallbacks.
+- Self-contained Windows folder builds using standalone CPython 3.14.
+- Per-user Windows installer built with Inno Setup and installed under `%LOCALAPPDATA%\Programs\Opscore`.
+- GitHub Actions workflows for Windows checks, frozen-build smoke tests and installer release artifacts.
+
+### Release status
+
+- Windows packaging and installer automation are implemented in source. Published-release and real-machine validation status are unverified.
+
+## v1.0 — 2026-10-31
+
+First stable desktop release.
+
+### Added
+
+- Monthly report finalization and correction workflows, including finalized-report Excel export.
+- Schedule-staffing integration, staff employment types and schedule previews in Daily Operations.
+- All Stores dashboard aggregation and live monthly reporting.
+- Versioned release pipeline with staged verification, activation, health checks and rollback.
+- Offline Ubuntu/Debian desktop package with bundled CPython 3.14 and a GTK/WebKit launcher.
+
+### Changed
+
+- Refactored page state into flat per-page states and improved report and chart performance.
+
+### Verification
+
+- 1,032 tests passed; 115 subtests passed for this release.
+
 ## 0.1.1 — 2026-10-30
 
 ### Added

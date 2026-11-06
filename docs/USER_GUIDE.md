@@ -90,12 +90,13 @@ Enter each day's figures here.
 
 1. Pick the store and month.
 2. Click **New Entry**, or **Edit** on a day in **Daily Records**.
-3. Fill in what you have:
+3. To use the week's schedule for staffing, click **Apply Schedule**. Review the **Schedule Preview**, including any warnings, then click **Apply to Entry** to fill working full-time and part-time staff and annual, medical and unpaid leave. You can still enter or adjust the figures yourself.
+4. Fill in what you have:
    - **Sales**, **Transactions**, **Units Sold**
    - **Stock Loss** by code
    - **Staff**: working full-time and part-time, **New Hires**, **Resignations**
    - **Leave**: Annual, Medical, Other Paid, Unpaid
-4. Click **Save Entry**.
+5. Click **Save Entry**.
 
 **Blank is not zero.** Leave a field blank if it wasn't reported. Enter 0 only for a real zero, such as a closed day. A blank day shows as not reported and is left out of averages and targets.
 
@@ -146,7 +147,7 @@ Salary figures appear only to Super Admin and Administrator. Until month-end pay
 
 Open the **Schedule** tab to plan staff shifts for the selected store. The existing manpower figures remain under **Overview**.
 
-1. Open **Staff**, click **Add Staff**, and enter each person's name, staff ID and position. Use **Save & Add Another** to enter a roster quickly.
+1. Open **Staff**, click **Add Staff**, and enter each person's name, staff ID, position and **Employment Type** (**Full-Time**, **Part-Time** or **Not Set**). Use **Save & Add Another** to enter a roster quickly. Set the employment type before using the schedule to fill daily staffing figures.
 2. Open **Planner** and choose a week. Select a shift code for each person and day. Changes save automatically.
 3. Enter **Target Manpower** for the week. The **Headcount** row shows scheduled working staff each day and highlights days below target in red. Only shift codes with start and end times count toward headcount.
 4. Open **Config** to add or edit shift codes, labels, times and colors. Start and End must either both be set or both be blank. Shift codes are shared by all stores; deleting a code used by a schedule is not allowed.
@@ -193,17 +194,17 @@ Update the **Status** as it moves: **Open**, **In progress**, **Blocked**, **Don
 
 ### Dashboard
 
-The month at a glance for the selected store: sales, expenses, manpower, stock and actions, with **Alerts** for anything off track.
+The month at a glance for the selected store: sales, expenses, manpower, stock and actions, with **Alerts** for anything off track. Choose **All Stores** in the Store selector to see an aggregate across your assigned stores.
 
 ### Monthly Report
 
 The full month-end report across all areas: sales, expenses, manpower, stock and actions.
 
-Click **Export** to download it as an Excel file, `opscore-<store>-<month>.xlsx`.
+The Store selector also offers **All Stores**, a live aggregate report across your assigned stores. All Stores reports cannot be finalized.
 
-A **Live** label means you're seeing current figures. If a month has a **Finalized** version, the page shows it, and editing a day in that month shows a warning that live figures may now differ.
+Click **Export** to download the selected report as Excel. A live report is named `opscore-<store>-<month>.xlsx`; a finalized report is named `opscore-<store>-<month>-finalized-v<version>.xlsx`.
 
-Locking a month (finalize) is built into the app's engine but doesn't have a button on screen yet.
+For a single-store report, **Live** shows current figures. Users with finalization permission can click **Finalize Month**, review the warnings and confirm to save a finalized version from the current live figures. The **Finalized** view retains every version and provides a version selector. Click **Correct Month** there to create a new version from current live figures; previous versions are never overwritten. Editing a finalized month shows a warning that live figures may now differ.
 
 ## 12. Settings
 
@@ -212,6 +213,7 @@ Locking a month (finalize) is built into the app's engine but doesn't have a but
 | Account | See your name and email. **Change Password**. |
 | Reference Data | Upload the Daily Sales Contribution file. Add and rename expense categories. |
 | Data (Super Admin) | **Download Backup**. **Restore Database** from a backup file. |
+| About | See the app name, app version and database schema version. Super Admin also sees the database path. |
 
 ### Backup and restore
 

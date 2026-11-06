@@ -79,18 +79,20 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 ### In scope (built)
 
 - Seven operational modules: Dashboard, Daily Operations, Sales Performance, Expenses Management, Manpower Efficiency, Stock Management, Action Tracker
-- Weekly staff scheduling with target headcounts, printable schedules and per-staff CSV export
+- Weekly staff scheduling with employment types, target headcounts, printable schedules and per-staff CSV export
+- Schedule-derived daily staffing with Apply Schedule and Schedule Preview in Daily Operations
+- All Stores dashboard aggregation and live monthly report
 - Store Management with Monthly Setup (targets, budgets, holidays) and user assignment
-- Monthly Report with Excel export, plus finalize and versioning in the engine
+- Monthly Report with Excel export, user-facing finalization, corrections and retained versions
 - Daily Sales Contribution: daily targets by State, Concept and weekday or public holiday
-- Settings: account, reference data upload, backup and restore
+- Settings: account, reference data upload, backup and restore, and About with app and schema versions
 - Five roles with server-side access control
 - First-launch account creation and guided page tours
 - Ubuntu/Debian desktop package
 
 ### Out of scope (for now)
 
-- Windows and macOS installers
+- macOS installer
 - A shared server or syncing between users
 - Mobile app
 - Forecasting beyond the workbook's straight-line projection
@@ -105,10 +107,10 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 | Demo data (AB01 / DEMO, June to September 2026) | Done |
 | Light mode default | Done |
 | Weekly scheduling, printing and CSV export | Done |
-| Tests | 936 passing |
+| Tests | 1,069 passing, 115 subtests passing (verified 2026-11-07) |
 | Wording pass | Pending |
-| Finalize button on screen | Pending |
-| Windows installer | Not started |
+| Finalize and Correct on screen | Done |
+| Windows packaging and installer | Implemented; published-release and real-machine validation status unverified |
 
 ## 7. Timeline
 
@@ -132,9 +134,8 @@ Opscore was built by the author with AI coding agents (Claude Code, then OpenCod
 ## 9. Next steps
 
 1. Wording pass across all pages
-2. Finalize button on the Monthly Report page
-3. Windows installer
-4. Wider trial with ABMs, then feedback
+2. Validate the implemented Windows packaging and installer on real machines, then prepare signed, checksummed release artifacts
+3. Wider trial with ABMs, then feedback
 
 ## 10. Related documents
 

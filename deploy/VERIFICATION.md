@@ -29,7 +29,7 @@ Run after the approved cutover. All against **https://app.theducklab.com/**.
 - [ ] `/ops/daily`, `/ops/expenses`, `/ops/report` load
 - [ ] WebSocket connects (no console errors; live updates work)
 - [ ] Legacy routes `/placements`, `/tasks`, `/report` return 404
-- [ ] `/` (root) behavior is the intended placeholder (no business data)
+- [ ] `/` redirects authenticated users to `/ops` and unauthenticated users to `/login` (no business data at the root)
 
 ## RBAC
 - [ ] Viewer account cannot write (server-side rejection)

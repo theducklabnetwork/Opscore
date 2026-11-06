@@ -62,17 +62,17 @@ The display name is **Opscore**. The code name, Python package and repository st
 | KPI engine (`kpi.py`) | Done. Matched 102/102 metrics against the September 2026 workbook |
 | Daily Sales Contribution (daily targets, carry-forward) | Done |
 | Monthly Report and Excel export | Done |
-| Settings (Account, Reference Data, Backup/Restore) | Done |
+| Settings (Account, Reference Data, Backup/Restore, About) | Done |
 | First launch (Create Account) and page tours | Done |
 | Ubuntu desktop app (`.deb`) | Done. Tested on Ubuntu with a native window |
 | Weekly staff schedules, printing and CSV export | Done |
 | Demo data import (AB01 / DEMO) | Done |
 | Light mode default | Done |
-| Windows installer | Not started |
+| Windows packaging and installer | Implemented; published-release and real-machine validation status unverified |
 | Wording pass (remove leftover subtitles and helper sentences) | Pending |
-| Finalize button on the Monthly Report page | Pending |
+| Finalize and Correct on the Monthly Report page | Done |
 
-**Test suite:** 1032 passing, 115 subtests passing (as of v1.0).
+**Test suite:** 1,069 passing, 115 subtests passing (verified 2026-11-07).
 **Database schema:** version 9.
 
 ---
@@ -83,8 +83,8 @@ The display name is **Opscore**. The code name, Python package and repository st
 
 | Page | Route | What it shows |
 |---|---|---|
-| Dashboard | `/ops` | Month at a glance across modules |
-| Monthly Report | `/ops/report` | Full monthly report and Excel export |
+| Dashboard | `/ops` | Month at a glance across modules, with an All Stores view |
+| Monthly Report | `/ops/report` | Live or finalized monthly report, All Stores live view, corrections and Excel export |
 | Daily Operations | `/ops/daily` | Daily entry: sales, transactions, units, stock loss, staffing |
 | Sales Performance | `/ops/sales` | Level 1 to 4 achievement, Daily Target, Adjusted Target, SSSG/Year, SSSG/Month, SPR, IPR |
 | Expenses Management | `/ops/expenses` | Expense register and category budgets |
@@ -92,7 +92,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Stock Management | `/ops/stock` | Stock loss by code against target |
 | Action Tracker | `/ops/actions` | Corrective actions with priority and status |
 | Store Management | `/ops/stores` | Stores, access and Monthly Setup (targets, budgets, holidays) |
-| Settings | `/ops/settings` | Account, Reference Data upload, Backup/Restore |
+| Settings | `/ops/settings` | Account, Reference Data, Backup/Restore, About (app and schema versions) |
 
 ### Business rules
 
@@ -352,8 +352,7 @@ assets/                       Logo, icons, favicon
 ## Next
 
 1. Wording pass on Store Management and other pages (remove subtitles and helper sentences, Title Case labels).
-2. Finalize button on the Monthly Report page (the engine already supports it).
-3. Windows installer.
+2. Validate the implemented Windows packaging and installer on real machines, then prepare signed, checksummed release artifacts.
 
 ## Data privacy
 

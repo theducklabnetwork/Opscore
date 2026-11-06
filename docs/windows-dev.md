@@ -21,11 +21,7 @@ py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock
 ```
 
-If the repository is already cloned, replace the first command with `cd` to that checkout. Use its `windows-compat` branch if these changes have not been merged yet:
-
-```powershell
-git switch windows-compat
-```
+If the repository is already cloned, replace the first command with `cd` to that checkout. The Windows compatibility changes are included in the current source; no separate compatibility branch is needed.
 
 ### Optional: native app window
 

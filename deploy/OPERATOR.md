@@ -46,9 +46,15 @@ fresh safety copy.
 
 ## Updating the app
 
+**Current method:** use the versioned release pipeline in `deploy/OPERATOR-RELEASE.md`. It prepares and verifies an isolated release before activation and preserves the previous release for rollback.
+
+### Legacy `/opt/ducklab` update procedure
+
+The following procedure applies only to the legacy non-versioned installation. Do not use it for versioned releases under `/opt/ducklab-releases`.
+
 ```bash
 cd /home/duck/project/ducklab && git pull
-# re-sync the deployment copy, then restart:
+# re-sync the legacy deployment copy, then restart:
 sudo rsync -a --delete --exclude '.git/' --exclude '.web/' \
   --exclude 'store_ops.db' --exclude 'placement_tracker.db' \
   ducklab rxconfig.py assets scripts deploy /opt/ducklab/

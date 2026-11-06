@@ -5,9 +5,11 @@ the original source checkout are never overwritten by rollback.
 
 ## 1. Failed application startup
 
+**Current method:** for versioned releases, use the verified release rollback in `deploy/OPERATOR-RELEASE.md`. It flips the active release symlink back without touching the database.
+
 - Symptom: `systemctl status ducklab` = failed; `journalctl -u ducklab -n 100`.
 - Action: fix config/code, `sudo systemctl restart ducklab`.
-- If unfixable: `sudo systemctl stop ducklab`; redeploy a last-known-good copy
+- **Legacy `/opt/ducklab` only:** if unfixable, `sudo systemctl stop ducklab`; redeploy a last-known-good copy
   to `/opt/ducklab` and restart. DB untouched.
 
 ## 2. Failed Caddy routing / TLS / gate misconfiguration
@@ -55,4 +57,4 @@ the original source checkout are never overwritten by rollback.
    `sudo systemctl start ducklab-backup.service`.
 
 No rollback step deletes or overwrites the operational database, the source
-workbook, or the original Placement Tracker checkout.
+workbook, or the original DuckLab source checkout.

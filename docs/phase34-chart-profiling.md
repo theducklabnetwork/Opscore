@@ -1,5 +1,7 @@
 # Phase 3.4 — chart and state payload profiling
 
+> **Historical measurements.** The figures below record the Phase 3.4 before/after profiling runs; they are not current performance benchmarks or service-level targets.
+
 ## Findings and change
 
 Dashboard built six figures and Sales Performance eight figures on every

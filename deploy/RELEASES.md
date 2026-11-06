@@ -3,7 +3,8 @@
 ## Dependency management
 
 - `requirements.txt` — direct runtime dependencies only (`reflex`,
-  `argon2-cffi`). Human-edited.
+  `argon2-cffi`, `openpyxl`, `plotly`, `pywebview`, `starlette`, and Windows
+  `tzdata`). Human-edited.
 - `requirements.lock` — the authoritative, fully pinned production manifest
   (all transitive deps). Regenerate after changing `requirements.txt`:
 

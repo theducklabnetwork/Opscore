@@ -1,5 +1,7 @@
 # Opscore Windows build plan
 
+> **Historical proposal.** This document records the original design options, not the current build procedure. The implemented installer build uses standalone CPython 3.14 from `scripts/build_windows.ps1` and Inno Setup, installed per user under `%LOCALAPPDATA%\Programs\Opscore`; it does not use the proposed PyInstaller + `%ProgramFiles%` layout. See `README.md` for current build instructions. Code signing, release checksums and real-machine install/upgrade/uninstall validation remain outstanding.
+
 ## Current package and Windows equivalents
 
 The `.deb` installs standalone CPython 3.14 plus locked dependencies, app/config/assets/launchers, and the compiled frontend under `/opt/opscore`; it also installs a desktop entry/icons and refreshes desktop metadata. The menu launcher sets desktop mode and per-user paths, enforces one instance, starts the loopback backend, waits for `/api/health`, opens GTK/WebKit (with Chromium/`xdg-open` fallbacks), and stops the backend process group on exit. Uninstall preserves user data.

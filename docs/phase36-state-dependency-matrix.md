@@ -1,5 +1,7 @@
 # Phase 3.6 — Flatten Page State Inheritance: Dependency Matrix (audit)
 
+> **Completed historical audit.** This document records the pre-fix ("before") state and review decisions. The migration described below has been completed; see `ARCHITECTURE.md` for the current flat state architecture. The audit content is retained unchanged for reference.
+
 Audit produced before any code movement (Phase 3.6 step 1).
 **No code has been moved. This document is the review gate.**
 
