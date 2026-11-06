@@ -161,7 +161,19 @@ Removing the package never deletes user data. For a truly fresh start, move the 
 mv ~/.local/share/opscore ~/.local/share/opscore.old-$(date +%F)
 ```
 
-### First launch
+## Windows folder (no installer)
+
+Build on 64-bit Windows with internet access:
+
+```powershell
+.\scripts\build_windows.ps1 -Version 1.0
+```
+
+The script bundles standalone CPython 3.14, the locked dependencies and the production frontend in `dist\Opscore`. Copy the entire folder to any Windows 10/11 PC and double-click `Opscore.cmd`; Python, Git and Node are not required. The launcher uses `pythonw.exe` for a windowed start, and the package includes `assets\opscore.ico`. WebView2 is preferred, with Edge app mode and the default browser as fallbacks.
+
+The build checks that both frontend entry points exist and that `.web\env.json` targets `127.0.0.1:47811`. It does not create an installer or an archive. User data, including `store_ops.db` and `opscore.log`, is stored under `%LOCALAPPDATA%\Opscore`, so the application folder can remain read-only. Moving or replacing the folder preserves user data.
+
+## First launch
 
 1. Opscore opens at **Create Account**. The first account is Super Admin.
 2. The welcome tour starts, and each page runs its own tour on first visit.
@@ -264,6 +276,7 @@ Title Case, short one or two word labels (Salary Ratio, Stock Loss, Daily Target
 | Script | Purpose |
 |---|---|
 | `scripts/build_deb.sh` | Build the Ubuntu desktop package |
+| `scripts/build_windows.ps1` | Build the self-contained Windows folder |
 | `scripts/import_demo.py` | Import the AB01 demo CSVs into a given database |
 | `scripts/import_dsc.py` | Import the Daily Sales Contribution file (needs `DUCKLAB_DB_PATH`) |
 | `scripts/import_workbook_dev.py` | Import a workbook into the dev database, with `--verify` parity check |
