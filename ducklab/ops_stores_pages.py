@@ -178,7 +178,9 @@ def _setup_field(spec) -> rx.Component:
         label,
         rx.input(value=getattr(Setup, attr),
                  on_change=getattr(Setup, "set_" + attr),
-                 placeholder="—", id="setup-" + field.replace("_", "-"),
+                 placeholder=(Setup.target_txn_placeholder
+                              if attr == "s_target_txn" else "—"),
+                 id="setup-" + field.replace("_", "-"),
                  disabled=~Setup.can_edit_setup))
 
 
@@ -283,8 +285,8 @@ def _setup_section() -> rx.Component:
                 _levels_panel(),
                 _setup_grid(SETUP_SALES[5:]),
                 hint="Set Levels 2–4 when Level 1 has a target. HQ Defaults "
-                     "add 10%, 20% and 30%. Last year and last month drive "
-                     "growth comparisons.",
+                     "set Minimum RTM to RM 200,000 and add 10%, 20% and 30%. "
+                     "Last year and last month drive growth comparisons.",
             ),
             ui.form_section(
                 "Daily Sales",

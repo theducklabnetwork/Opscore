@@ -91,9 +91,10 @@ def _factor_str(factor) -> str:
     return "" if factor is None else f"{float(factor):g}"
 
 
-# "Use HQ defaults": Level 2-4 uplift in percent, filled visibly into
-# the form (never applied silently on save)
-HQ_DEFAULT_UPLIFTS = {"s_level2": "10", "s_level3": "20", "s_level4": "30"}
+# "Use HQ defaults": Minimum RTM in RM and Level 2-4 uplift in percent,
+# filled visibly into the form (never applied silently on save)
+HQ_DEFAULT_UPLIFTS = {"s_min_rtm": "200000.00", "s_level2": "10",
+                      "s_level3": "20", "s_level4": "30"}
 
 
 def _pct_str(ratio) -> str:
@@ -402,6 +403,18 @@ class SetupState(SharedOpsState):
         self.s_holidays = [d for d in self.s_holidays if d != value]
 
     @rx.var
+    def target_txn_placeholder(self) -> str:
+        if self.s_target_txn.strip():
+            return "—"
+        try:
+            level1 = parse_money_cents(self.s_level1)
+            target_bv = parse_money_cents(self.s_target_spr)
+        except ValueError:
+            return "—"
+        return _count_str(kpi.effective_target_transactions(
+            None, level1, target_bv)) or "—"
+
+    @rx.var
     def holiday_chips(self) -> list[dict[str, str]]:
         return [{"iso": d, "label": date.fromisoformat(d).strftime("%d %b")}
                 for d in self.s_holidays]
@@ -453,7 +466,7 @@ class SetupState(SharedOpsState):
 
     @rx.event
     def use_hq_defaults(self) -> None:
-        """Fill Level 2-4 uplift with the HQ defaults (+10% / +20% / +30%)
+        """Fill Minimum RTM and Level 2-4 uplift with the HQ defaults
         in the form; nothing is saved until Save."""
         for attr, value in HQ_DEFAULT_UPLIFTS.items():
             setattr(self, attr, value)

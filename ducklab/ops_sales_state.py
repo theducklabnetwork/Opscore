@@ -511,6 +511,8 @@ class SalesState(SharedOpsState):
         first, _, dim = kpi.month_bounds(month)
         by_day = {d.date: d for d in days}
         by_target = {t.date: t for t in targets or []}
+        target_transactions = kpi.effective_target_transactions(
+            cfg.target_transactions, cfg.level1_base_cents, cfg.target_spr_cents)
         rows = []
         for i in range(dim):
             day = first + timedelta(days=i)
@@ -524,7 +526,7 @@ class SalesState(SharedOpsState):
             share = kpi.day_share(day, shares, holidays) if shares else None
             pcts = {
                 "txn_pct": ds.fmt_variance_pct(
-                    kpi.transactions_pct(txn, cfg.target_transactions, dim)),
+                    kpi.transactions_pct(txn, target_transactions, dim)),
                 "spr_pct": ds.fmt_variance_pct(
                     kpi.pct_vs_target(spr, cfg.target_spr_cents)),
                 "ipr_pct": ds.fmt_variance_pct(

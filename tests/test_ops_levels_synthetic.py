@@ -261,8 +261,8 @@ class MonthlySetupTests(Fixture):
         self.save(state)
         self.assertEqual(state.setup_error, LEVELS_REQUIRED)
         state.use_hq_defaults()
-        self.assertEqual((state.s_level2, state.s_level3, state.s_level4),
-                         ("10", "20", "30"))
+        self.assertEqual((state.s_min_rtm, state.s_level2, state.s_level3,
+                          state.s_level4), ("200000.00", "10", "20", "30"))
         with self.assertRaises(ConfigNotFoundError):
             self.config()
         self.save(state)

@@ -346,6 +346,34 @@ class MonthlySetupTests(Fixture):
         self.bound(mod, cls, lambda: list(st.save_setup()))
         self.assertEqual(st.setup_error, "Nothing to save — no changes made.")
 
+    def test_blank_target_transactions_uses_calculation_without_saving(self):
+        mod, cls, st = self.setup_state()
+        st.s_level1 = "300000.00"
+        st.s_target_spr = "25.00"
+        st.s_level2, st.s_level3, st.s_level4 = "10", "20", "30"
+        self.assertEqual(st.target_txn_placeholder, "12000")
+        self.assertNotIn("target_transactions", st._parse_fields()[0])
+        self.bound(mod, cls, lambda: list(st.save_setup()))
+        self.assertEqual(st.setup_error, "")
+        cfg = self.app.get_month_config(self.admin, self.sid, "2026-07")
+        self.assertIsNone(cfg.target_transactions)
+
+    def test_typed_target_transactions_wins(self):
+        _, _, st = self.setup_state()
+        st.s_level1 = "300000.00"
+        st.s_target_spr = "25.00"
+        st.s_target_txn = "12400"
+        self.assertEqual(st.target_txn_placeholder, "—")
+        self.assertEqual(kpi.effective_target_transactions(
+            12400, rm(300000), rm(25)), 12400)
+
+    def test_blank_target_transactions_without_target_bv_stays_blank(self):
+        _, _, st = self.setup_state()
+        st.s_level1 = "300000.00"
+        self.assertEqual(st.target_txn_placeholder, "—")
+        self.assertIsNone(kpi.effective_target_transactions(
+            None, rm(300000), None))
+
     def test_bad_target_rejected(self):
         mod, cls, st = self.setup_state()
         st.s_target_ipr = "abc"
@@ -411,6 +439,14 @@ class SalesTableTests(Fixture):
         self.assertEqual(rows[7]["adjusted"], "—")
         self.assertEqual(len(st.sp_rows_reported), 6)
         self.assertEqual(st.sp_hidden_label, "25 days not reported")
+
+    def test_daily_sales_uses_calculated_target_transactions(self):
+        self.insert_shares()
+        self.july()
+        self.app.configure_month_with_budgets(
+            self.admin, self.sid, "2026-07",
+            {"target_transactions": None}, {})
+        self.assertEqual(self.sales().sp_rows[5]["txn_pct"], "−1.8%")
 
     def test_gap_day_in_table(self):
         self.insert_shares()

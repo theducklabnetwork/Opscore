@@ -596,6 +596,19 @@ def pct_vs_target(actual, target) -> Optional[Decimal]:
     return a / t - 1
 
 
+def effective_target_transactions(target_transactions: Optional[int],
+                                  level1_base_cents: Optional[int],
+                                  target_spr_cents: Optional[int]
+                                  ) -> Optional[int]:
+    """Saved Target Transactions, or Level 1 / Target BV rounded to a count."""
+    if target_transactions is not None:
+        return target_transactions
+    if not level1_base_cents or not target_spr_cents:
+        return None
+    return int((Decimal(level1_base_cents) / Decimal(target_spr_cents))
+               .to_integral_value(rounding=ROUND_HALF_UP))
+
+
 def transactions_pct(transactions: Optional[int],
                      target_transactions: Optional[int],
                      days_in_month: int) -> Optional[Decimal]:
