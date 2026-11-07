@@ -117,5 +117,69 @@ class BundledArtifactTests(unittest.TestCase):
         self.assertIn('"$ROOT/ducklab/data/DSCSPR_alias_2027.xlsx"', build)
 
 
+class DefaultExpenseCategoryTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Path(self._tmp.name) / "ops.db"
+        store_ops_db.init_db(self.db)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def add_store(self, code="A01"):
+        conn = sqlite3.connect(self.db)
+        try:
+            store_id = conn.execute(
+                "INSERT INTO stores (code, name) VALUES (?, ?)",
+                (code, code)).lastrowid
+            conn.commit()
+            return store_id
+        finally:
+            conn.close()
+
+    def category_rows(self, store_id):
+        conn = sqlite3.connect(self.db)
+        try:
+            return conn.execute(
+                "SELECT id, name, sort_order FROM expense_categories "
+                "WHERE store_id = ? ORDER BY sort_order, id",
+                (store_id,)).fetchall()
+        finally:
+            conn.close()
+
+    def test_empty_store_gets_all_ten_in_order(self):
+        store_id = self.add_store()
+        self.assertTrue(reference_bootstrap.seed_default_expense_categories(
+            self.db))
+        rows = self.category_rows(store_id)
+        self.assertEqual([row[1] for row in rows],
+                         list(reference_bootstrap.DEFAULT_EXPENSE_CATEGORIES))
+        self.assertEqual([row[2] for row in rows], list(range(10)))
+
+    def test_existing_categories_are_untouched(self):
+        store_id = self.add_store()
+        conn = sqlite3.connect(self.db)
+        try:
+            conn.execute(
+                "INSERT INTO expense_categories (store_id, name, sort_order) "
+                "VALUES (?, 'Custom', 42)", (store_id,))
+            conn.commit()
+        finally:
+            conn.close()
+        before = self.category_rows(store_id)
+        self.assertFalse(reference_bootstrap.seed_default_expense_categories(
+            self.db))
+        self.assertEqual(self.category_rows(store_id), before)
+
+    def test_seeding_runs_once_per_store(self):
+        first = self.add_store()
+        reference_bootstrap.seed_default_expense_categories(self.db)
+        before = self.category_rows(first)
+        second = self.add_store("B02")
+        reference_bootstrap.seed_default_expense_categories(self.db)
+        self.assertEqual(self.category_rows(first), before)
+        self.assertEqual(len(self.category_rows(second)), 10)
+
+
 if __name__ == "__main__":
     unittest.main()

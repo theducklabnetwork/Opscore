@@ -1,4 +1,4 @@
-"""Load the small bundled DSC workbook into a new reference-data store."""
+"""Seed bundled reference data without modifying existing records."""
 
 from __future__ import annotations
 
@@ -10,6 +10,42 @@ from ducklab import dsc_import, store_ops_db
 log = logging.getLogger("ducklab.reference_bootstrap")
 
 WORKBOOK = Path(__file__).parent / "data" / "DSCSPR_alias_2027.xlsx"
+
+DEFAULT_EXPENSE_CATEGORIES = (
+    "Electricity",
+    "Water",
+    "Consumables",
+    "Store Supplies",
+    "Summons & Penalties",
+    "Licenses & Permits Fees",
+    "Mall/Building Fees",
+    "Maintenance/Repairs/Renovation",
+    "Telecommunications",
+    "Cash Shortages",
+)
+
+
+def seed_default_expense_categories(
+        db_path: Path | str = store_ops_db.DB_PATH) -> bool:
+    """Seed each category-free store once; never change existing categories."""
+    store_ops_db.init_db(db_path)
+    conn = store_ops_db.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT id FROM stores AS s "
+            "WHERE NOT EXISTS (SELECT 1 FROM expense_categories AS c "
+            "                  WHERE c.store_id = s.id)").fetchall()
+        for row in rows:
+            conn.executemany(
+                "INSERT INTO expense_categories (store_id, name, sort_order) "
+                "VALUES (?, ?, ?)",
+                [(row["id"], name, order) for order, name in enumerate(
+                    DEFAULT_EXPENSE_CATEGORIES)],
+            )
+        conn.commit()
+        return bool(rows)
+    finally:
+        conn.close()
 
 
 def load_bundled_reference_data(

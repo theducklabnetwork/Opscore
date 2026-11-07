@@ -53,9 +53,12 @@ from ducklab.ops_stores_state import StoresState  # noqa: E402
 from ducklab.ops_sales_pages import sales_page  # noqa: E402
 from ducklab.ops_sales_state import SalesState  # noqa: E402
 from ducklab.ops_settings_pages import SettingsState, settings_page  # noqa: E402
-from ducklab.reference_bootstrap import load_bundled_reference_data  # noqa: E402
+from ducklab.reference_bootstrap import (  # noqa: E402
+    load_bundled_reference_data, seed_default_expense_categories,
+)
 from ducklab.session_transport import DB_PATH  # noqa: E402
 
+app.register_lifespan_task(seed_default_expense_categories, db_path=DB_PATH)
 app.register_lifespan_task(load_bundled_reference_data, db_path=DB_PATH)
 
 app.add_page(auth_pages.login_page, route="/login", title="Sign In — Opscore",
