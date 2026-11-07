@@ -120,6 +120,8 @@ else {
 Write-Host "==> Copying application (without databases or development data)"
 New-Item -ItemType Directory -Path (Join-Path $App "ducklab"), (Join-Path $App "assets"), (Join-Path $App "packaging") -Force | Out-Null
 Copy-Item -Path (Join-Path $Root "ducklab\*.py") -Destination (Join-Path $App "ducklab")
+New-Item -ItemType Directory -Path (Join-Path $App "ducklab\data") -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $Root "ducklab\data\DSCSPR_alias_2027.xlsx") -Destination (Join-Path $App "ducklab\data")
 Get-ChildItem -LiteralPath (Join-Path $Root "assets") -File | Copy-Item -Destination (Join-Path $App "assets")
 Copy-Item -LiteralPath (Join-Path $Root "rxconfig.py") -Destination $App
 Copy-Item -LiteralPath (Join-Path $Root "packaging\opscore_desktop.py"), (Join-Path $Root "packaging\opscore_backend.py") -Destination (Join-Path $App "packaging")

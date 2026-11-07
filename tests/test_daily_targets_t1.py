@@ -350,7 +350,7 @@ class MonthlySetupTests(Fixture):
         mod, cls, st = self.setup_state()
         st.s_target_ipr = "abc"
         self.bound(mod, cls, lambda: list(st.save_setup()))
-        self.assertIn("Target IPR", st.setup_error)
+        self.assertIn("Target UPT", st.setup_error)
 
     def test_repository_rejects_holiday_outside_month(self):
         with self.assertRaises(ValidationError):

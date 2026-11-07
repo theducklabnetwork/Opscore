@@ -88,7 +88,8 @@ class ReportExportTest(unittest.TestCase):
         summary = {row[0]: row[1] for row in self.book["Summary"].iter_rows(
             min_row=2, max_col=2, values_only=True)}
         self.assertEqual(summary["Sales MTD"], 10000)
-        self.assertEqual(summary["Sales per Receipt"], 100)
+        self.assertEqual(summary["BV"], 100)
+        self.assertEqual(summary["UPT"], 3)
         self.assertEqual(summary["Expenses Paid"], 3000)
         self.assertEqual(summary["Closing Headcount"], 9)
         self.assertEqual(summary["Total Stock Loss"], 65)

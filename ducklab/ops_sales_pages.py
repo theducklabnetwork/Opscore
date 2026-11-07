@@ -138,9 +138,9 @@ def _basket_pair(label, value, avg, pct, neg, id: str) -> rx.Component:
 def _basket() -> rx.Component:
     return ui.section_card(
         rx.grid(
-            _basket_pair("SPR", S.sp_spr, S.sp_spr_state, S.sp_spr_state_pct,
+            _basket_pair("BV", S.sp_spr, S.sp_spr_state, S.sp_spr_state_pct,
                          S.sp_spr_state_neg, "basket-spr-state"),
-            _basket_pair("IPR", S.sp_upt, S.sp_ipr_state, S.sp_ipr_state_pct,
+            _basket_pair("UPT", S.sp_upt, S.sp_ipr_state, S.sp_ipr_state_pct,
                          S.sp_ipr_state_neg, "basket-ipr-state"),
             ui.stat("ASP", S.sp_asp, size="6"),
             # two across on phones (ASP wraps), three from tablet up
@@ -239,7 +239,7 @@ def _target_ladder() -> rx.Component:
 
 _DAILY_COLS = ["Date", "PH", ("Contribution", True), ("Target", True),
                ("Adjusted Target", True), ("Sales", True),
-               ("Transactions", True), ("SPR", True), ("IPR", True),
+               ("Transactions", True), ("BV", True), ("UPT", True),
                "Result", ""]
 
 

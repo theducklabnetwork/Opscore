@@ -147,6 +147,8 @@ class TileTests(Fixture):
 class PageWordingTests(unittest.TestCase):
     def test_daily_upt_uses_daily_upt_values(self):
         from ducklab import ops_daily_pages as p
+        self.assertIn(("BV", True), p._COLS)
+        self.assertNotIn(("SPR", True), p._COLS)
         self.assertIn(("UPT", True), p._COLS)
         self.assertNotIn(("IPR", True), p._COLS)
         self.assertEqual(p._COLS[5], ("UPT", True))

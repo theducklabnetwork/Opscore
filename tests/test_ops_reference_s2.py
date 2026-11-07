@@ -153,7 +153,8 @@ class SharedImporterTests(ImportFixture):
     def test_info_empty_before_first_import(self):
         info = reference_data_info(self.db)
         self.assertEqual(
-            info, {"pairs": 0, "benchmark_months": 0, "imported_at": None})
+            info, {"pairs": 0, "benchmark_months": 0, "imported_at": None,
+                   "bundled": False})
 
 
 # --- category actions ----------------------------------------------------------

@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -292,6 +292,10 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
         if current < 9 and current >= 8:
             _apply_v9(conn)
             conn.execute("PRAGMA user_version = 9")
+            current = 9
+        if current < 10 and current >= 9:
+            _apply_v10(conn)
+            conn.execute("PRAGMA user_version = 10")
         conn.commit()
     finally:
         conn.close()
@@ -500,3 +504,13 @@ def _apply_v9(conn: sqlite3.Connection) -> None:
         "ON actions (store_id, raised_date)"
     )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (9)")
+
+
+def _apply_v10(conn: sqlite3.Connection) -> None:
+    # Track whether the current reference tables came from the bundled
+    # workbook; an explicit upload clears this flag in the same transaction.
+    conn.execute(
+        "ALTER TABLE reference_data_info ADD COLUMN bundled "
+        "INTEGER NOT NULL DEFAULT 0 CHECK (bundled IN (0, 1))"
+    )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (10)")

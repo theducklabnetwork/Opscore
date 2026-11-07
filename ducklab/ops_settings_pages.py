@@ -57,7 +57,7 @@ DB_UPLOAD_ID = "db-upload"
 DB_MAX_BYTES = 512 * 1024 * 1024  # generous cap; a store-ops DB is small
 DSC_DESCRIPTION = (
     "The workbook's DSC and SPR sheets replace the Daily Sales "
-    "Contribution shares and SPR/IPR benchmarks for every store. The "
+    "Contribution shares and BV/UPT benchmarks for every store. The "
     "import is all-or-nothing: a rejected workbook changes nothing.")
 
 
@@ -118,6 +118,7 @@ class SettingsState(SharedOpsState):
     ref_benchmark_months: int = 0
     ref_imported_at: str = ""        # "" = never imported
     ref_has_data: bool = False
+    ref_bundled_data: bool = False
     dsc_pending_name: str = ""       # original filename awaiting confirm
     dsc_confirm_open: bool = False
     dsc_error: str = ""
@@ -264,6 +265,7 @@ class SettingsState(SharedOpsState):
             ds.fmt_kl_datetime(info["imported_at"]) if info["imported_at"]
             else "")
         self.ref_has_data = bool(info["pairs"] or info["benchmark_months"])
+        self.ref_bundled_data = info["bundled"]
 
     def _auth_fail(self, exc: Exception) -> None:
         self.ref_error = SESSION_EXPIRED if isinstance(
@@ -458,7 +460,7 @@ class SettingsState(SharedOpsState):
             self.dsc_result = [
                 f"Imported {result['shares']} day shares "
                 f"({result['pairs']} State/Concept pairs) and "
-                f"{result['benchmarks']} SPR/IPR benchmarks "
+                f"{result['benchmarks']} BV/UPT benchmarks "
                 f"({result['benchmark_months']} Concept/State months) "
                 f"from {name}.",
                 *[f"Warning: {w} (stores cannot match it)"
@@ -749,6 +751,10 @@ def _categories_section() -> rx.Component:
 def _dsc_section() -> rx.Component:
     return ui.form_section(
         "Daily Sales Contribution",
+        rx.cond(
+            S.ref_bundled_data,
+            rx.text("Default data loaded. Upload a new file to replace it.",
+                    size="2", color=ds.TEXT_MUTED, id="ref-default-data")),
         rx.vstack(
             _about_row("State/Concept Pairs", S.ref_pairs.to_string(),
                        "ref-pairs"),
@@ -797,7 +803,7 @@ def _dsc_confirm_dialog() -> rx.Component:
             rx.alert_dialog.title("Replace Reference Data?"),
             rx.alert_dialog.description(
                 "The existing Daily Sales Contribution shares and "
-                "SPR/IPR benchmarks will be replaced. This cannot be "
+                "BV/UPT benchmarks will be replaced. This cannot be "
                 "undone."),
             rx.hstack(
                 rx.alert_dialog.cancel(

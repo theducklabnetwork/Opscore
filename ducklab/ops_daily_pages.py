@@ -70,7 +70,7 @@ def _kpi_summary() -> rx.Component:
 
 
 _COLS = ["Date", ("Sales", True), ("Transactions", True), ("Units", True),
-         ("SPR", True), ("UPT", True), ("ASP", True), ("Staff", True),
+         ("BV", True), ("UPT", True), ("ASP", True), ("Staff", True),
          # Sales per Staff (also on Manpower) hides at 768-1535px so the
          # table fits beside Expenses
          ("Sales per Staff", True, True), ("Stock Loss", True),

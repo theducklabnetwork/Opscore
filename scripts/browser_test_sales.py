@@ -101,7 +101,7 @@ def main() -> int:
         page.wait_for_selector("#sales-row-2026-10-11", timeout=15000)
         check("Daily Sales columns",
               all(h in body for h in ("Contribution", "Adjusted Target",
-                                      "IPR", "Result")))
+                                      "UPT", "Result")))
         check("unreported day has no Result; zero-sales day Not Achieved",
               page.locator("#sales-row-2026-10-11 >> text=Achieved")
               .count() == 0
@@ -109,7 +109,7 @@ def main() -> int:
               .count() == 1)
         check("public holiday marked (seed: 14 Oct)",
               page.locator("#sales-row-2026-10-14 >> text=PH").count() == 1)
-        check("basket section", "Basket" in body and "SPR" in body)
+        check("basket section", "Basket" in body and "BV" in body)
 
         # edit deep link for the 1st of the month
         page.click("#sales-row-2026-10-01 >> text=Edit")

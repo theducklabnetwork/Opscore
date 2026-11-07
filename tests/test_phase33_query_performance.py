@@ -87,11 +87,13 @@ class MonthRangeTests(unittest.TestCase):
             INSERT INTO schema_migrations VALUES (8);
             CREATE TABLE actions (
                 id INTEGER PRIMARY KEY, store_id INTEGER, raised_date TEXT);
+            CREATE TABLE reference_data_info (
+                id INTEGER PRIMARY KEY, imported_at TEXT NOT NULL);
         """)
         conn.close()
         store_ops_db.init_db(legacy)
         self.conn = store_ops_db.connect(legacy)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 9)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 10)
         self.assertEqual(self.conn.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
             "AND name = 'idx_actions_store_raised_date'").fetchone()[0], 1)

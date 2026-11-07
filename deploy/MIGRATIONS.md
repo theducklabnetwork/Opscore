@@ -2,7 +2,7 @@
 
 The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
 `PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **9** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+application schema version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -39,6 +39,10 @@ application schema version: **9** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 - **v9** — additive: index `idx_actions_store_raised_date` on
   `actions (store_id, raised_date)` for half-open month-range queries.
   No data changes.
+- **v10** — additive: `reference_data_info.bundled` records whether the
+  current reference tables came from the bundled workbook. The startup
+  loader imports that workbook only when both reference tables are empty;
+  an explicit upload clears the flag. Existing reference data is unchanged.
 
 ## Desktop upgrades
 

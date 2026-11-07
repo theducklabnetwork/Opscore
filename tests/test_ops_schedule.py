@@ -30,7 +30,7 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 9)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 10)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])
@@ -158,7 +158,7 @@ class ScheduleTests(unittest.TestCase):
         conn = store_ops_db.connect(path)
         row = conn.execute("SELECT employment_type FROM staff").fetchone()
         self.assertEqual(row["employment_type"], "Not Set")
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 10)
         self.assertIn(8, [r["version"] for r in conn.execute(
             "SELECT version FROM schema_migrations")])
         conn.close()

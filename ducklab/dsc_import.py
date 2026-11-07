@@ -295,12 +295,11 @@ def parse_spr(cells) -> list[tuple[str, str, int, float | None,
 # --------------------------------------------------------------------------
 # Import
 # --------------------------------------------------------------------------
-def import_workbook(xlsx: Path, db_path: Path) -> dict:
+def import_workbook(xlsx: Path, db_path: Path, *, bundled: bool = False) -> dict:
     """Parse everything first, then replace both tables in one
-    transaction. Returns counts and warnings. The import timestamp is
-    recorded (reference_data_info, schema v5) inside the same
-    transaction; a failed import changes nothing, including the
-    timestamp."""
+    transaction. Returns counts and warnings. The import timestamp and
+    bundled-data marker are recorded inside the same transaction; a failed
+    import changes nothing, including that metadata."""
     if not db_path.is_file():
         raise DscImportError(f"Database not found: {db_path}")
     shares = parse_dsc(read_sheet(xlsx, DSC_SHEET))
@@ -322,10 +321,11 @@ def import_workbook(xlsx: Path, db_path: Path) -> dict:
                 "INSERT INTO basket_benchmarks (concept, state, month, "
                 "avg_spr, avg_ipr) VALUES (?,?,?,?,?)", benchmarks)
             conn.execute(
-                "INSERT INTO reference_data_info (id, imported_at) "
-                "VALUES (1, datetime('now')) "
+                "INSERT INTO reference_data_info (id, imported_at, bundled) "
+                "VALUES (1, datetime('now'), ?) "
                 "ON CONFLICT (id) DO UPDATE SET imported_at = "
-                "datetime('now')")
+                "datetime('now'), bundled = excluded.bundled",
+                (int(bundled),))
     finally:
         conn.close()
     pairs = {(s, c) for s, c, *_ in shares} | {(s, c)
@@ -354,11 +354,12 @@ def reference_data_info(db_path: Path) -> dict:
             "SELECT COUNT(*) FROM basket_benchmarks").fetchone()[0]
         try:
             row = conn.execute(
-                "SELECT imported_at FROM reference_data_info "
+                "SELECT imported_at, bundled FROM reference_data_info "
                 "WHERE id = 1").fetchone()
-        except sqlite3.OperationalError:  # pre-v5 database
+        except sqlite3.OperationalError:  # pre-v10 database
             row = None
     finally:
         conn.close()
     return {"pairs": pairs, "benchmark_months": months,
-            "imported_at": row[0] if row else None}
+            "imported_at": row[0] if row else None,
+            "bundled": bool(row[1]) if row else False}

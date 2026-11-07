@@ -81,7 +81,7 @@ class PageWordingTests(unittest.TestCase):
         from ducklab.ops_pages import report_page
         page = str(report_page())
         for text in ("Sales", "Level 1 Target", "Achievement", "SSSG/Year",
-                     "SSSG/Month", "SPR", "UPT", "ASP", "Projected Sales",
+                     "SSSG/Month", "BV", "UPT", "ASP", "Projected Sales",
                      "Expenses", "Paid", "Incurred", "Pending", "Budget",
                      "Expense Ratio", "Category", "Status", "Manpower",
                      "Opening Headcount", "Hires", "Resignations",

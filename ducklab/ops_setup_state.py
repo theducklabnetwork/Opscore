@@ -73,8 +73,8 @@ SETUP_PAYROLL = [
 # Daily Sales targets: monthly transactions, SPR (RM) and IPR (items)
 SETUP_DAILY = [
     ("s_target_txn", "target_transactions", "count", "Target Transactions"),
-    ("s_target_spr", "target_spr_cents", "money", "Target SPR (RM)"),
-    ("s_target_ipr", "target_ipr", "ipr", "Target IPR"),
+    ("s_target_spr", "target_spr_cents", "money", "Target BV (RM)"),
+    ("s_target_ipr", "target_ipr", "ipr", "Target UPT"),
 ]
 SETUP_ALL = (SETUP_SALES + SETUP_DAILY + SETUP_MANPOWER + SETUP_STOCK
              + SETUP_PAYROLL)

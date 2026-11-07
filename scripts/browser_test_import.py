@@ -95,7 +95,7 @@ def main() -> int:
         check("sales: days 30 / 30", "30 / 30" in body)
         check("sales: Actual (complete month)", "(Actual)" in body)
         check("sales: L1-L3 Achieved", body.count("Achieved") >= 3)
-        check("sales: SPR RM 50.00", "RM 50.00" in body)
+        check("sales: BV RM 50.00", "RM 50.00" in body)
 
         # --- Stock ---
         page.goto(f"{BASE}/ops/stock")

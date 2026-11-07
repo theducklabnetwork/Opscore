@@ -490,7 +490,7 @@ def _sales_section() -> rx.Component:
         _grid(
             _stat("SSSG/Year", sales["growth_year"], size="5"),
             _stat("SSSG/Month", sales["growth_month"], size="5"),
-            _stat("SPR", sales["spr"], size="5"),
+            _stat("BV", sales["spr"], size="5"),
             _stat("UPT", sales["upt"], size="5"),
             _stat("ASP", sales["asp"], size="5"),
             columns=_COLS5,

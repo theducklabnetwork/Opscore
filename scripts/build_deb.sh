@@ -84,10 +84,11 @@ pkg-config --exists gobject-introspection-1.0 cairo || {
 "$UV" pip install --python "$APP/python/bin/python3" --break-system-packages --no-cache \
     --no-binary pygobject pygobject==3.50.0
 printf '==> Copying application (without databases or development data)\n'
-mkdir -p "$APP/ducklab" "$APP/assets" "$APP/packaging"
+mkdir -p "$APP/ducklab" "$APP/ducklab/data" "$APP/assets" "$APP/packaging"
 for source in "$ROOT/ducklab"/*.py; do
     cp "$source" "$APP/ducklab/"
 done
+cp "$ROOT/ducklab/data/DSCSPR_alias_2027.xlsx" "$APP/ducklab/data/"
 for source in "$ROOT/assets"/*; do
     [[ -f $source ]] && cp "$source" "$APP/assets/"
 done

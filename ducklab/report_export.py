@@ -60,7 +60,7 @@ def _sheet(workbook, title, headers, rows, formats=None, widths=None):
 
 def _summary_rows(report, include_payroll, snapshot=None):
     money_rows = {
-        "Sales MTD", "Month-End Sales", "Level 1 Target", "Sales per Receipt",
+        "Sales MTD", "Month-End Sales", "Level 1 Target", "BV",
         "Average Selling Price", "Expenses Paid", "Expenses Incurred",
         "Expenses Pending", "Expense Budget", "Salary Cost", "Total Stock Loss",
     }
@@ -82,8 +82,8 @@ def _summary_rows(report, include_payroll, snapshot=None):
             sales.achievement_by_level.get("level1"))),
         ("Growth vs Last Year", _decimal(sales.growth_last_year)),
         ("Growth vs Last Month", _decimal(sales.growth_last_month)),
-        ("Sales per Receipt", _money(sales.spr)),
-        ("Units per Transaction", _decimal(sales.upt)),
+        ("BV", _money(sales.spr)),
+        ("UPT", _decimal(sales.upt)),
         ("Average Selling Price", _money(sales.asp)),
         ("Days Reported", sales.days_entered),
         ("Days in Month", sales.days_in_month),
@@ -128,7 +128,7 @@ def _summary_rows(report, include_payroll, snapshot=None):
         ] + [row for row in rows if not row[0].startswith("Action")]
     return [(label, value, PERCENT_FORMAT if label in percentage_rows
              else MONEY_FORMAT if label in money_rows else "0.00"
-             if label in {"Units per Transaction", "Average Effective Staff"}
+             if label in {"UPT", "Average Effective Staff"}
              else None) for label, value in rows]
 
 
