@@ -1,10 +1,13 @@
 """Manpower schedule persistence, calculations and store authorization."""
 
+import csv
 import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
+from ducklab import ops_schedule_state
 from ducklab import store_ops_db
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthorizationError
@@ -107,6 +110,40 @@ class ScheduleTests(unittest.TestCase):
         with self.assertRaises(AuthorizationError):
             self.app.set_schedule_target(self.viewer, self.store,
                                          date(2026, 10, 5), 2)
+
+    def test_export_schedule_csv_uses_authorized_store(self):
+        staff_id = self.app.save_staff(
+            self.admin, self.store, None, name="Alice", staff_code="A001",
+            position="Cashier")
+        self.app.save_staff(
+            self.admin, self.store, None, name="Bob", staff_code="A002",
+            position="Cashier")
+        monday = date(2026, 10, 5)
+        self.app.set_schedule_entry(self.admin, self.store, staff_id,
+                                    monday, "M900")
+        self.app.set_schedule_entry(self.admin, self.store, staff_id,
+                                    date(2026, 10, 7), "AL")
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_week = monday.isoformat()
+        state.stores = [{"id": self.store, "label": "A01 — Alpha"}]
+        state.selected_store_label = "A01 — Alpha"
+        with mock.patch.object(ops_schedule_state, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor", lambda _: self.admin), \
+                mock.patch.object(ops_schedule_state.platform_utils,
+                                  "documents_dir", return_value=Path(self.tmp.name)):
+            state.export_schedule_csv()
+        folder = Path(self.tmp.name) / "Opscore Schedules" / "A01" / "2026-10-05"
+        self.assertEqual(sorted(path.name for path in folder.iterdir()),
+                         ["A001_2026-10-05.csv"])
+        with (folder / "A001_2026-10-05.csv").open(newline="") as handle:
+            self.assertEqual(list(csv.reader(handle)), [
+                ["date", "shift_code"],
+                ["2026-10-05", "M900"],
+                ["2026-10-07", "AL"],
+            ])
+        self.assertEqual(state.schedule_error, "")
+        self.assertEqual(state.schedule_notice, f"1 files saved: {folder}")
 
     def test_generated_view_uses_builder_order_dates_and_legend(self):
         first = self.app.save_staff(self.admin, self.store, None,

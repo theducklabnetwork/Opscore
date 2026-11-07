@@ -191,7 +191,7 @@ class ScheduleState(SharedOpsState):
             week_start = date.fromisoformat(self.schedule_week)
             data = app_service.get_schedule(
                 user, store_id, week_start, week_start.fromordinal(week_start.toordinal() + 6))
-            store = next(store for store in user.stores if store.id == store_id)
+            store = app_service.get_store(user, store_id)
             store_part = "".join(c if c.isalnum() or c in "-_" else "_" for c in store.code)
             folder = (platform_utils.documents_dir() / "Opscore Schedules"
                       / store_part / self.schedule_week)
