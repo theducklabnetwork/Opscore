@@ -105,11 +105,17 @@ def _count_str(v) -> str:
     return "" if v is None else str(v)
 
 
+def _prev_month(month: str) -> str:
+    y, m = int(month[:4]), int(month[5:7])
+    return f"{y - (m == 1):04d}-{12 if m == 1 else m - 1:02d}"
+
+
 class SetupState(SharedOpsState):
     """Monthly Setup workflow state."""
 
     # --- monthly setup form ---------------------------------------------
     can_edit_setup: bool = False
+    has_previous_setup: bool = False
     setup_finalized: bool = False
     setup_notice: str = ""
     setup_error: str = ""
@@ -144,6 +150,7 @@ class SetupState(SharedOpsState):
 
     def _clear_setup(self) -> None:
         self.setup_original = {}
+        self.has_previous_setup = False
         self.setup_finalized = False
         self.setup_notice = ""
         self.setup_error = ""
@@ -180,8 +187,15 @@ class SetupState(SharedOpsState):
             store_id is not None and authz.can_manage_config(user)
             and authz.can_access_store(user, store_id))
         if store_id is None or month is None:
+            self.has_previous_setup = False
             return
         try:
+            try:
+                app_service.get_month_config(
+                    user, store_id, _prev_month(month))
+                self.has_previous_setup = True
+            except ConfigNotFoundError:
+                self.has_previous_setup = False
             try:
                 cfg = app_service.get_month_config(user, store_id, month)
             except ConfigNotFoundError:
@@ -470,6 +484,50 @@ class SetupState(SharedOpsState):
         in the form; nothing is saved until Save."""
         for attr, value in HQ_DEFAULT_UPLIFTS.items():
             setattr(self, attr, value)
+
+    @rx.event
+    def copy_previous_month(self) -> None:
+        """Pre-fill the form from last month; Save Setup persists changes."""
+        self.setup_error = ""
+        self.setup_notice = ""
+        try:
+            user = self._actor()
+            store_id = self._selected_store_id()
+            month = self._selected_month()
+            if (not self.can_edit_setup or not self.selected_store_active
+                    or store_id is None or month is None
+                    or not authz.can_manage_config(user)
+                    or not authz.can_access_store(user, store_id)):
+                raise AuthorizationError("You cannot edit this setup.")
+            previous_month = _prev_month(month)
+            cfg = app_service.get_month_config(user, store_id, previous_month)
+            budgets = app_service.get_expense_budgets(
+                user, store_id, previous_month)
+            self.has_previous_setup = True
+        except ConfigNotFoundError:
+            self.has_previous_setup = False
+            return
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.setup_error = auth_message(exc)
+            return
+
+        for attr, fmt in (
+                ("s_min_rtm", _money_str),
+                ("s_level2", _pct_str), ("s_level3", _pct_str),
+                ("s_level4", _pct_str), ("s_target_spr", _money_str),
+                ("s_target_ipr", _factor_str), ("s_salary_ratio", _pct_str),
+                ("s_budget_hc", _count_str), ("s_turnover", _pct_str),
+                ("s_pt_factor", _factor_str), ("s_stock_target", _pct_str)):
+            field = next(spec[1] for spec in SETUP_ALL if spec[0] == attr)
+            setattr(self, attr, fmt(getattr(cfg, field)))
+        self.budget_rows = [
+            {**row, "value": _money_str(budgets.get(int(row["id"]))),
+             "clear": "1" if row["original"] and int(row["id"]) not in budgets
+             else ""}
+            for row in self.budget_rows
+        ]
+        self.setup_notice = "Copied last month's setup. Save Setup to apply."
 
     @rx.event
     def set_budget_value(self, category_id: str, value: str) -> None:

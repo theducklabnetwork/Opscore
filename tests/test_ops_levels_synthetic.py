@@ -271,6 +271,105 @@ class MonthlySetupTests(Fixture):
                           self.config().level4_pct),
                          (Decimal("0.1"), Decimal("0.2"), Decimal("0.3")))
 
+    def test_copy_previous_month_prefills_only_listed_fields_until_save(self):
+        from ducklab.ops_setup_state import SetupState
+        import ducklab.ops_setup_state as mod
+        power = self.app.add_expense_category(
+            self.admin, self.sid, "Power", sort_order=1)
+        rent = self.app.add_expense_category(
+            self.admin, self.sid, "Rent", sort_order=2)
+        previous = dict(
+            min_rtm_target_cents=rm(180000), level1_base_cents=rm(150000),
+            level2_pct=0.05, level3_pct=0.1, level4_pct=0.15,
+            sales_last_year_cents=rm(140000),
+            sales_last_month_cents=rm(145000), salary_ratio_target=0.18,
+            budget_headcount=8, turnover_threshold=0.1,
+            opening_headcount_ft=6, part_timer_factor=0.5,
+            stock_loss_target=0.015, target_transactions=3000,
+            target_spr_cents=rm(55), target_ipr=1.5,
+            salary_basic_allowance_cents=rm(20000), overtime_cents=rm(900),
+            support_team_cost_cents=rm(2000))
+        current = dict(
+            min_rtm_target_cents=rm(190000), level1_base_cents=rm(200000),
+            level2_pct=0.06, level3_pct=0.11, level4_pct=0.16,
+            sales_last_year_cents=rm(170000),
+            sales_last_month_cents=rm(175000), salary_ratio_target=0.2,
+            budget_headcount=9, turnover_threshold=0.12,
+            opening_headcount_ft=7, part_timer_factor=0.6,
+            stock_loss_target=0.02, target_transactions=3200,
+            target_spr_cents=rm(60), target_ipr=1.6,
+            salary_basic_allowance_cents=rm(25000), overtime_cents=rm(1200),
+            support_team_cost_cents=rm(3000))
+        self.app.configure_month_with_budgets(
+            self.admin, self.sid, "2026-09", previous,
+            {power: rm(300)}, [date(2026, 9, 3)])
+        self.app.configure_month_with_budgets(
+            self.admin, self.sid, "2026-10", current,
+            {power: rm(100), rent: rm(200)}, [date(2026, 10, 5)])
+        state = self.setup_state()
+        self.bound(mod, SetupState, state.load_setup_data)
+        self.assertTrue(state.has_previous_setup)
+        before = self.config()
+
+        self.bound(mod, SetupState, state.copy_previous_month)
+
+        copied = {
+            "s_min_rtm": "180000.00", "s_level2": "5", "s_level3": "10",
+            "s_level4": "15", "s_target_spr": "55.00", "s_target_ipr": "1.5",
+            "s_salary_ratio": "18", "s_budget_hc": "8", "s_turnover": "10",
+            "s_pt_factor": "0.5", "s_stock_target": "1.5",
+        }
+        self.assertEqual({attr: getattr(state, attr) for attr in copied}, copied)
+        self.assertEqual([row["value"] for row in state.budget_rows],
+                         ["300.00", ""])
+        self.assertEqual([row["clear"] for row in state.budget_rows], ["", "1"])
+        untouched = {
+            "s_level1": "200000.00", "s_last_year": "170000.00",
+            "s_last_month": "175000.00", "s_target_txn": "3200",
+            "s_opening_hc": "7", "s_salary": "25000.00",
+            "s_overtime": "1200.00", "s_support": "3000.00",
+        }
+        self.assertEqual({attr: getattr(state, attr) for attr in untouched},
+                         untouched)
+        self.assertEqual(state.s_holidays, ["2026-10-05"])
+        self.assertEqual(self.config(), before)
+        self.assertEqual(self.app.get_expense_budgets(
+            self.admin, self.sid, "2026-10"), {power: rm(100), rent: rm(200)})
+
+        self.save(state)
+        saved = self.config()
+        for field in (
+                "min_rtm_target_cents", "level2_pct", "level3_pct",
+                "level4_pct", "target_spr_cents", "target_ipr",
+                "salary_ratio_target", "budget_headcount", "turnover_threshold",
+                "part_timer_factor", "stock_loss_target"):
+            self.assertEqual(getattr(saved, field), Decimal(str(previous[field])))
+        for field in (
+                "level1_base_cents", "sales_last_year_cents",
+                "sales_last_month_cents", "target_transactions",
+                "opening_headcount_ft", "salary_basic_allowance_cents",
+                "overtime_cents", "support_team_cost_cents"):
+            self.assertEqual(getattr(saved, field), Decimal(str(current[field])))
+        self.assertEqual(self.app.get_expense_budgets(
+            self.admin, self.sid, "2026-10"), {power: rm(300), rent: None})
+        self.assertEqual(self.app.get_public_holidays(
+            self.admin, self.sid, "2026-10"), [date(2026, 10, 5)])
+
+    def test_copy_previous_month_disabled_when_previous_setup_is_missing(self):
+        from ducklab.ops_setup_state import SetupState
+        import ducklab.ops_setup_state as mod
+        state = self.setup_state()
+        state.s_min_rtm = "123.00"
+        self.bound(mod, SetupState, state.load_setup_data, month="2026-01")
+        self.assertTrue(state.can_edit_setup)
+        self.assertFalse(state.has_previous_setup)
+        self.bound(mod, SetupState, state.copy_previous_month,
+                   month="2026-01")
+        self.assertEqual(state.s_min_rtm, "123.00")
+        self.assertFalse(state.has_previous_setup)
+        with self.assertRaises(ConfigNotFoundError):
+            self.config("2026-01")
+
     def test_missing_uplift_warning_on_setup_and_sales(self):
         from ducklab.ops_setup_state import SetupState
         import ducklab.ops_setup_state as mod

@@ -277,6 +277,13 @@ def _setup_section() -> rx.Component:
                               on_click=Setup.use_hq_defaults, variant="soft",
                               size="2", type="button", id="setup-hq-levels",
                               disabled=~Setup.can_edit_setup),
+                    rx.button(
+                        rx.cond(Setup.has_previous_setup,
+                                "Copy From Last Month", "No Setup Last Month"),
+                        on_click=Setup.copy_previous_month, variant="soft",
+                        size="2", type="button", id="setup-copy-previous",
+                        disabled=~Setup.can_edit_setup
+                        | ~Setup.has_previous_setup),
                     rx.cond(Setup.setup_levels_missing,
                             ui.status_chip(ds.LEVELS_MISSING, "amber",
                                            id="setup-levels-missing",
