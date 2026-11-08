@@ -97,6 +97,30 @@ class ScheduleTests(unittest.TestCase):
         self.assertNotIn("M900", [c["code"] for c in self.app.get_schedule(
             self.admin, self.store, date(2026, 10, 1), date(2026, 10, 2))["codes"]])
 
+    def test_shift_code_changes_require_config_manager(self):
+        def user_with_role(role):
+            user = self.app.create_user(
+                self.admin, f"{role}@ducklab.com", role, "Passw0rd!xyz")
+            self.app.assign_role(self.admin, user.id, role)
+            self.app.assign_store(self.admin, user.id, self.store)
+            return self.app.auth.get_user(user.id)
+
+        fields = dict(code="M900", label="Morning Shift", start_time="09:00",
+                      end_time="19:00", color="#3b82f6")
+        for role in ("branch_manager", "zone_manager"):
+            user = user_with_role(role)
+            with self.subTest(role=role, operation="save"):
+                with self.assertRaises(AuthorizationError):
+                    self.app.save_shift_code(user, self.store, "M900", **fields)
+            with self.subTest(role=role, operation="delete"):
+                with self.assertRaises(AuthorizationError):
+                    self.app.delete_shift_code(user, self.store, "M900")
+
+        config_manager = user_with_role("administrator")
+        self.app.save_shift_code(
+            config_manager, self.store, "M900", **fields)
+        self.app.delete_shift_code(config_manager, self.store, "M900")
+
     def test_viewer_can_read_but_cannot_write(self):
         data = self.app.get_schedule(self.viewer, self.store,
                                      date(2026, 10, 1), date(2026, 10, 2))
