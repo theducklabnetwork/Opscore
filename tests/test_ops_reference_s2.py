@@ -150,6 +150,42 @@ class SharedImporterTests(ImportFixture):
             import_workbook(self.xlsx, old)
         self.assertIn("schema is v4", str(ctx.exception))
 
+    def test_pre_v10_schema_import_without_bundled_column(self):
+        build_workbook(self.xlsx, july_dsc_rows(), [])
+        conn = sqlite3.connect(self.db)
+        try:
+            # Recreate the v5 metadata table as it was before v10.
+            conn.execute("DROP TABLE reference_data_info")
+            conn.execute(
+                "CREATE TABLE reference_data_info ("
+                "id INTEGER PRIMARY KEY CHECK (id = 1), "
+                "imported_at TEXT NOT NULL)")
+            conn.execute("PRAGMA user_version = 9")
+            self.assertNotIn("bundled", {row[1] for row in conn.execute(
+                "PRAGMA table_info(reference_data_info)")})
+        finally:
+            conn.close()
+
+        result = import_workbook(self.xlsx, self.db, bundled=True)
+
+        self.assertEqual(result["pairs"], 1)
+        self.assertTrue(self.rows(
+            "SELECT imported_at FROM reference_data_info WHERE id = 1")[0][0])
+        self.assertFalse(reference_data_info(self.db)["bundled"])
+
+    def test_database_error_is_wrapped_as_import_error(self):
+        build_workbook(self.xlsx, july_dsc_rows(), [])
+        conn = sqlite3.connect(self.db)
+        try:
+            conn.execute("DROP TABLE basket_benchmarks")
+        finally:
+            conn.close()
+
+        with self.assertRaises(DscImportError) as ctx:
+            import_workbook(self.xlsx, self.db)
+        self.assertIn("Database error during import", str(ctx.exception))
+        self.assertIn("basket_benchmarks", str(ctx.exception))
+
     def test_info_empty_before_first_import(self):
         info = reference_data_info(self.db)
         self.assertEqual(
