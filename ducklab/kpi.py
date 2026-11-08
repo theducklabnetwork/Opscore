@@ -850,7 +850,7 @@ def paid_cents_by_day(
         if e.store_id != store_id:
             continue
         pv = paid_value_cents(e)
-        if pv and _in_month(e.paid_date, month):
+        if pv is not None and _in_month(e.paid_date, month):
             out[e.paid_date] = out.get(e.paid_date, 0) + pv
     return out
 

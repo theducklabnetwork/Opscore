@@ -298,11 +298,11 @@ class AppService:
         self.write.repo.delete_staff(store_id, staff_id)
 
     def save_shift_code(self, user: User, store_id: int, original_code, **fields):
-        self._store_write(user, store_id)
+        authz.require_config_manager(user)
         self.write.repo.save_shift_code(original_code, **fields)
 
     def delete_shift_code(self, user: User, store_id: int, code: str):
-        self._store_write(user, store_id)
+        authz.require_config_manager(user)
         self.write.repo.delete_shift_code(code)
 
     def set_schedule_entry(self, user: User, store_id: int, staff_id: int,

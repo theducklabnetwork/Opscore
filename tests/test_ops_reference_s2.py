@@ -435,6 +435,46 @@ class ImportStateTests(ImportFixture):
             self.rows("SELECT * FROM contribution_shares ORDER BY 1,2,3,4"),
             before)
 
+    def test_upload_rejects_wrong_role_before_reading(self):
+        import asyncio
+        from ducklab import ops_settings_pages as mod
+        from ducklab.ops_settings_pages import SettingsState
+        viewer = self.app.auth.get_user(
+            self.app.create_user(
+                self.admin, "viewer@ducklab.com", "Viewer", PW2).id)
+        upload = mock.Mock()
+        upload.filename = "dsc.xlsx"
+        upload.read = mock.AsyncMock()
+        st = SettingsState()
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(SettingsState, "_actor",
+                                  lambda s_: viewer):
+            asyncio.run(SettingsState.handle_dsc_upload.fn(st, [upload]))
+        self.assertEqual(st.dsc_error, "You do not have access.")
+        self.assertEqual(st.ref_error, "")
+        upload.read.assert_not_awaited()
+        self.assertFalse(st.dsc_confirm_open)
+        self.assertEqual(st._dsc_pending_path, "")
+
+    def test_upload_rejects_oversized_workbook(self):
+        import asyncio
+        from ducklab import ops_settings_pages as mod
+        from ducklab.ops_settings_pages import SettingsState
+        upload = mock.Mock()
+        upload.filename = "dsc.xlsx"
+
+        async def read():
+            return b"x" * (mod.DSC_MAX_BYTES + 1)
+        upload.read = read
+        st = SettingsState()
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(SettingsState, "_actor",
+                                  lambda s_: self.admin):
+            asyncio.run(SettingsState.handle_dsc_upload.fn(st, [upload]))
+        self.assertEqual(st.dsc_error, "File is too large.")
+        self.assertFalse(st.dsc_confirm_open)
+        self.assertEqual(st._dsc_pending_path, "")
+
     def test_replacement_asks_confirmation_and_summary(self):
         build_workbook(self.xlsx, july_dsc_rows(), [])
         import_workbook(self.xlsx, self.db)

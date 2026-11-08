@@ -79,6 +79,11 @@ class TotalExpensesStatusTests(unittest.TestCase):
         exps = [paid_exp(200), paid_exp(-200), pending_exp(10)]
         self.assertEqual(kpi.paid_count_in_month(exps, "2026-10", 1), 2)
 
+    def test_standalone_zero_paid_expense_appears_by_day(self):
+        self.assertEqual(
+            kpi.paid_cents_by_day([paid_exp(0)], "2026-10", 1),
+            {date(2026, 10, 2): 0})
+
     def test_zero_value_lines_count_as_entered(self):
         exps = [paid_exp(0), pending_exp(0)]
         self.assertEqual(kpi.paid_count_in_month(exps, "2026-10", 1), 1)
