@@ -97,6 +97,7 @@ class ActionsState(SharedOpsState):
         self.selected_store_label = label
         self._clear_actions()
         self._clear_shared_status()
+        yield ActionsState.resync_selection()
         yield ActionsState.load_actions_data()
 
     @rx.event

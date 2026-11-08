@@ -94,8 +94,9 @@ class OverviewState(SharedOpsState):
     pace_fig_light: go.Figure | None = None
     pace_has_data: bool = False
 
-    # Plain private attribute (no annotation): intentionally not state.
+    # Plain private attributes (no annotations): intentionally not state.
     _chart_inputs = {}
+    _store_param_applied = False
 
     def _chart_source(self) -> dict:
         return self._chart_inputs
@@ -189,12 +190,26 @@ class OverviewState(SharedOpsState):
         yield OverviewState.load_overview_data()
 
     # --- loading ------------------------------------------------------------
+    def _apply_store_param(self) -> None:
+        """Honor ?store= once per page load, after selector initialization."""
+        self._store_param_applied = True
+        wanted = self.router.page.params.get("store")
+        if not wanted:
+            return
+        target = next((s for s in self.stores
+                       if str(s["id"]) == str(wanted)), None)
+        if target is not None:
+            self.selected_store_label = target["label"]
+            self._sync_store_active()
+
     @rx.event
     def load_overview(self):
         guard = self.require_auth()
         if guard is not None:
             return guard
         yield OverviewState.load_selectors()
+        if not self._store_param_applied:
+            self._apply_store_param()
         yield OverviewState.load_overview_data()
 
     @rx.event
@@ -222,15 +237,6 @@ class OverviewState(SharedOpsState):
             return  # has_stores=False handled by the page's empty state
         try:
             user = self._actor()
-            if self.router.page.params.get("store"):
-                wanted = self.router.page.params["store"]
-                target = next((s for s in self.stores
-                               if str(s["id"]) == str(wanted)), None)
-                if target is not None:
-                    self.selected_store_label = target["label"]
-                    self.all_stores = False
-                    all_stores = False
-                    store_id = target["id"]
         except AuthenticationError:
             self.error = "Your session has expired. Please sign in again."
             return
