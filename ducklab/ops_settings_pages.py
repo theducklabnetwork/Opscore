@@ -56,6 +56,7 @@ PASSWORD_RULES = ("At least 10 characters, with letters and digits. "
 DSC_UPLOAD_ID = "dsc-upload"
 DB_UPLOAD_ID = "db-upload"
 DB_MAX_BYTES = 512 * 1024 * 1024  # generous cap; a store-ops DB is small
+DSC_MAX_BYTES = 64 * 1024 * 1024  # generous cap; a DSC workbook is small
 DSC_DESCRIPTION = (
     "The workbook's DSC and SPR sheets replace the Daily Sales "
     "Contribution shares and BV/UPT benchmarks for every store. The "
@@ -399,12 +400,18 @@ class SettingsState(SharedOpsState):
             return
         upload = files[0]
         try:
-            self._actor()  # re-validate the session before touching data
-        except AuthenticationError as exc:
+            user = self._actor()
+            authz.require_config_manager(user)
+        except (AuthenticationError, AuthorizationError) as exc:
             self._auth_fail(exc)
+            self.dsc_error = self.ref_error
+            self.ref_error = ""
             return
         self._discard_pending()
         data = await upload.read()
+        if len(data) > DSC_MAX_BYTES:
+            self.dsc_error = "File is too large."
+            return
         fd, path = tempfile.mkstemp(
             suffix=".xlsx", prefix="ducklab-dsc-")
         with os.fdopen(fd, "wb") as fh:
