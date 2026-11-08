@@ -1,6 +1,7 @@
 """First-run bundled reference data: load once, never replace, never crash."""
 
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -47,6 +48,24 @@ class BundledReferenceTests(unittest.TestCase):
         self.assertFalse(reference_bootstrap.load_bundled_reference_data(
             self.db, self.xlsx))
         self.assertEqual(self.rows("contribution_shares"), before)
+
+    def test_startup_populates_reference_tables_from_real_workbook(self):
+        self.assertTrue(reference_bootstrap.load_bundled_reference_data(self.db))
+        self.assertTrue(self.rows("contribution_shares"))
+        self.assertTrue(self.rows("basket_benchmarks"))
+        self.assertTrue(reference_data_info(self.db)["bundled"])
+
+    def test_missing_workbook_logs_error_and_does_not_raise(self):
+        missing = self.tmp / "missing.xlsx"
+        with mock.patch.object(
+                reference_bootstrap.dsc_import, "import_workbook"
+        ) as importer, self.assertLogs(
+                "ducklab.reference_bootstrap", "ERROR") as logs:
+            self.assertFalse(reference_bootstrap.load_bundled_reference_data(
+                self.db, missing))
+        self.assertIn("Bundled reference workbook is missing", logs.output[0])
+        self.assertIn(str(missing), logs.output[0])
+        importer.assert_not_called()
 
     def test_either_nonempty_table_prevents_import(self):
         for populated in ("contribution_shares", "basket_benchmarks"):
@@ -115,6 +134,30 @@ class BundledArtifactTests(unittest.TestCase):
         build = (root / "scripts" / "build_deb.sh").read_text()
         self.assertIn('"$APP/ducklab/data"', build)
         self.assertIn('"$ROOT/ducklab/data/DSCSPR_alias_2027.xlsx"', build)
+
+    def test_workbook_is_unignored_and_tracked(self):
+        root = Path(__file__).resolve().parent.parent
+        workbook = "ducklab/data/DSCSPR_alias_2027.xlsx"
+        check_ignore = subprocess.run(
+            ["git", "check-ignore", "--no-index", workbook], cwd=root,
+            capture_output=True, text=True, check=False)
+        self.assertEqual(check_ignore.returncode, 1, check_ignore.stderr)
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", workbook], cwd=root,
+            capture_output=True, text=True, check=False)
+        self.assertEqual(tracked.returncode, 0, tracked.stderr)
+        self.assertEqual(tracked.stdout.strip(), workbook)
+
+    def test_windows_builds_include_workbook(self):
+        root = Path(__file__).resolve().parent.parent
+        spec = (root / "packaging" / "windows" / "opscore.spec").read_text()
+        self.assertIn('ROOT / "ducklab" / "data" / "DSCSPR_alias_2027.xlsx"',
+                      spec)
+        self.assertIn('"ducklab/data"', spec)
+        build = (root / "scripts" / "build_windows.ps1").read_text()
+        self.assertIn('Join-Path $Root "ducklab\\data\\DSCSPR_alias_2027.xlsx"',
+                      build)
+        self.assertIn('Join-Path $App "ducklab\\data"', build)
 
 
 class DefaultExpenseCategoryTests(unittest.TestCase):

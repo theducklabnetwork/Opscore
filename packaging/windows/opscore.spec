@@ -15,6 +15,7 @@ datas = [
 ]
 datas += [(str(path), "assets") for path in ROOT.joinpath("assets").iterdir() if path.is_file()]
 datas += [
+    (str(ROOT / "ducklab" / "data" / "DSCSPR_alias_2027.xlsx"), "ducklab/data"),
     (str(ROOT / "rxconfig.py"), "."),
     (str(ROOT / "RELEASE"), "."),
     (str(ROOT / "packaging" / "opscore_backend.py"), "packaging"),

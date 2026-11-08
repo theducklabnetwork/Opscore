@@ -67,6 +67,9 @@ def load_bundled_reference_data(
             conn.close()
         if not empty:
             return False
+        if not Path(workbook).is_file():
+            log.error("Bundled reference workbook is missing: %s", workbook)
+            return False
         dsc_import.import_workbook(Path(workbook), Path(db_path), bundled=True)
     except Exception:
         log.warning("Could not load bundled reference data; continuing without it",
