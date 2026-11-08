@@ -233,7 +233,7 @@ Blank State or Concept cells under a merged group take the value above. Both tab
 ## 9. Backup and restore (`backup.py`)
 
 - **Backup** uses SQLite's online backup API, so it's safe while the app is running.
-- **Restore** first checks the uploaded file: it must be a real SQLite database, pass an integrity check, contain the required tables, and not be from a newer schema. Older schemas are migrated on next start.
+- **Restore** checks a temporary copy of the uploaded file: it must be a real SQLite database, pass integrity and foreign-key checks, contain the required tables and columns, and not be from a newer schema. Older schemas are migrated on the temporary copy, which atomically replaces the live database only after all checks pass.
 - Before every restore, the current database is copied into `backups/` next to it.
 
 Super Admin only.
