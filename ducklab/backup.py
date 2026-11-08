@@ -5,21 +5,24 @@ Super Admin only (enforced by the caller via authz.require_user_manager).
 Backup: a consistent copy produced with SQLite's online backup API —
 safe while the app is running, no file-copy races with open writers.
 
-Restore: the uploaded file is validated before anything is replaced —
-it must be a real SQLite database, pass PRAGMA integrity_check, contain
-the tables this application needs, and not carry a schema version newer
-than this code (older schemas migrate on next startup via init_db()).
+Restore: a temporary copy of the uploaded file is validated and migrated
+before anything is replaced. It must be a real SQLite database, pass
+PRAGMA integrity_check and PRAGMA foreign_key_check, contain the tables
+and columns this application needs, and not carry a newer schema version.
 
 Before any restore, the current database is copied (backup API again)
 into a ``backups/`` folder next to the database file; those automatic
-pre-restore copies are listed for the UI. Restore then swaps the
-database content using the backup API into a live destination file.
+pre-restore copies are listed for the UI. Only a fully validated and
+migrated temporary copy atomically replaces the live database.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import sqlite3
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,6 +51,67 @@ EXPECTED_TABLES = (
     "auth_user_roles",
     "auth_sessions",
 )
+
+# Tables and identifiers used throughout the application, not just their
+# container tables. Columns added by old migrations are checked after those
+# migrations have run on the temporary restore copy.
+EXPECTED_COLUMNS = {
+    "schema_migrations": ("version", "applied_at"),
+    "stores": (
+        "id", "code", "name", "concept", "zone", "zone_pic",
+        "branch_manager", "active", "state",
+    ),
+    "expense_categories": (
+        "id", "store_id", "name", "sort_order",
+    ),
+    "stock_loss_codes": ("code", "name", "contribution_sign"),
+    "monthly_configs": (
+        "id", "store_id", "month", "min_rtm_target_cents",
+        "level1_base_cents", "level2_pct", "level3_pct", "level4_pct",
+        "sales_last_year_cents", "sales_last_month_cents",
+        "salary_ratio_target", "budget_headcount", "turnover_threshold",
+        "stock_loss_target", "opening_headcount_ft", "part_timer_factor",
+        "salary_basic_allowance_cents", "overtime_cents",
+        "support_team_cost_cents", "target_transactions",
+        "target_spr_cents", "target_ipr",
+    ),
+    "monthly_expense_budgets": (
+        "id", "store_id", "monthly_config_id", "category_id",
+        "budget_cents",
+    ),
+    "daily_records": (
+        "id", "store_id", "date", "sales_cents", "transactions", "units",
+        "resigned_ft", "new_hires_ft", "ft_working", "pt_working",
+        "leave_annual", "leave_mc", "leave_other_paid", "leave_unpaid",
+    ),
+    "daily_stock_losses": (
+        "id", "daily_record_id", "code", "amount_cents",
+    ),
+    "expense_transactions": (
+        "id", "store_id", "incurred_date", "paid_date", "category_id",
+        "description", "amount_cents", "paid_by", "status", "receipt_ref",
+        "verification", "recorded_by", "remarks",
+    ),
+    "actions": (
+        "id", "store_id", "raised_date", "pillar", "issue", "priority",
+        "status", "pic", "due_date", "corrective_action", "completion_date",
+        "remarks", "created_by", "created_at", "updated_by", "updated_at",
+    ),
+    "monthly_snapshots": (
+        "id", "store_id", "month", "version", "kpi_json", "finalized",
+        "superseded_by", "created_at",
+    ),
+    "auth_users": (
+        "id", "email", "display_name", "password_hash", "is_active",
+        "password_changed_at", "created_at", "updated_at", "last_login_at",
+    ),
+    "auth_roles": ("id", "name"),
+    "auth_user_roles": ("user_id", "role_id", "assigned_at"),
+    "auth_sessions": (
+        "id", "token_hash", "user_id", "created_at", "expires_at",
+        "revoked_at",
+    ),
+}
 
 
 class BackupError(Exception):
@@ -91,10 +155,35 @@ def download_name(now: datetime | None = None) -> str:
     return f"opscore-backup-{now.strftime('%Y-%m-%d-%H%M')}.db"
 
 
+def _validate_schema(conn: sqlite3.Connection) -> None:
+    """Check the tables and columns required by the application."""
+    tables = {
+        r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    missing = [t for t in EXPECTED_TABLES if t not in tables]
+    if missing:
+        raise BackupError("Missing expected tables: " + ", ".join(missing))
+
+    missing_columns = []
+    for table, expected in EXPECTED_COLUMNS.items():
+        columns = {
+            r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')
+        }
+        missing_columns.extend(
+            f"{table}.{column}" for column in expected
+            if column not in columns
+        )
+    if missing_columns:
+        raise BackupError(
+            "Missing expected columns: " + ", ".join(missing_columns))
+
+
 def validate_restore(path: Path | str) -> int:
     """Validate an uploaded .db for restore; returns its schema version.
 
-    Raises BackupError with a user-safe message on any rejection.
+    Raises BackupError with a user-safe message on any rejection. This
+    function is read-only; restore migrations run on a temporary copy.
     """
     path = Path(path)
     if not path.exists():
@@ -117,15 +206,19 @@ def validate_restore(path: Path | str) -> int:
             raise BackupError(f"Integrity check failed: {exc}")
         if not ok:
             raise BackupError("Integrity check failed: the file is corrupt.")
-        tables = {
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")
-        }
-        missing = [t for t in EXPECTED_TABLES if t not in tables]
-        if missing:
+        try:
+            violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        except sqlite3.Error as exc:
+            raise BackupError(f"Foreign-key check failed: {exc}")
+        if violations:
             raise BackupError(
-                "Missing expected tables: " + ", ".join(missing))
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
+                "Foreign-key check failed: the file contains "
+                f"{len(violations)} violation(s).")
+        try:
+            _validate_schema(conn)
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+        except sqlite3.Error as exc:
+            raise BackupError(f"Schema validation failed: {exc}")
     finally:
         conn.close()
     if version > store_ops_db.SCHEMA_VERSION:
@@ -150,27 +243,42 @@ def save_pre_restore_backup(db_path: Path | str,
 
 
 def restore(db_path: Path | str, upload_path: Path | str) -> int:
-    """Replace db_path content with the validated upload (backup API).
+    """Validate and migrate a temporary copy, then atomically replace db_path.
 
-    Returns the restored schema version. The caller must already have
-    saved a pre-restore backup and obtained user confirmation. Pending
-    schema migrations are applied immediately (init_db is idempotent and
-    non-destructive), so an older backup works without a restart; the
-    return value is the pre-migration version of the uploaded file.
+    The caller must already have saved a pre-restore backup and obtained
+    user confirmation. No failure before os.replace can modify the live
+    database. Returns the uploaded file's pre-migration schema version.
     """
     db_path, upload_path = Path(db_path), Path(upload_path)
-    version = validate_restore(upload_path)
-    src = _connect(upload_path)
+    temp_path = None
     try:
-        dst = _connect(db_path)
+        # Keep the temporary file on the same filesystem so os.replace is
+        # atomic. Never open the live path until every check has passed.
+        fd, temp_name = tempfile.mkstemp(
+            dir=db_path.parent, prefix=f".{db_path.name}.restore-",
+            suffix=".db")
+        os.close(fd)
+        temp_path = Path(temp_name)
         try:
-            src.backup(dst)
-        finally:
-            dst.close()
+            shutil.copyfile(upload_path, temp_path)
+        except (OSError, shutil.SameFileError) as exc:
+            raise BackupError(f"Cannot copy the uploaded file: {exc}")
+
+        version = validate_restore(temp_path)
+        try:
+            store_ops_db.init_db(temp_path)
+            validate_restore(temp_path)
+        except sqlite3.Error as exc:
+            raise BackupError(f"Database migration failed: {exc}")
+        os.replace(temp_path, db_path)
+        temp_path = None
+        return version
     finally:
-        src.close()
-    store_ops_db.init_db(db_path)
-    return version
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 _SAFE_NAME = re.compile(r"^pre-restore-\d{8}-\d{6}\.db$")

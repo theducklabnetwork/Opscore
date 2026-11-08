@@ -12,6 +12,7 @@ only.
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import tempfile
 from pathlib import Path
@@ -588,12 +589,13 @@ class SettingsState(SharedOpsState):
         except AuthorizationError:
             self.data_error = "You do not have access."
             return None
-        except backup.BackupError as exc:
+        except (backup.BackupError, sqlite3.Error) as exc:
             self.data_error = f"Restore failed; the database was not "\
                 f"replaced.\n{exc}"
             return None
         except OSError as exc:
-            self.data_error = f"Restore failed.\n{exc}"
+            self.data_error = f"Restore failed; the database was not "\
+                f"replaced.\n{exc}"
             return None
         finally:
             self.data_restoring = False

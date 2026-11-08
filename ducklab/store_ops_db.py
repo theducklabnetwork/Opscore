@@ -240,8 +240,17 @@ def connect(db_path: Path | str | sqlite3.Connection = DB_PATH) -> sqlite3.Conne
     return conn
 
 
+def _execute_schema(conn: sqlite3.Connection, schema: str) -> None:
+    statement = ""
+    for line in schema.splitlines():
+        statement += line + "\n"
+        if sqlite3.complete_statement(statement):
+            conn.execute(statement)
+            statement = ""
+
+
 def _apply_v1(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA_V1)
+    _execute_schema(conn, _SCHEMA_V1)
     conn.executemany(
         "INSERT OR IGNORE INTO stock_loss_codes (code, name, contribution_sign) "
         "VALUES (?, ?, ?)",
@@ -257,46 +266,30 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
     conn = connect(db_path)
     try:
         current = conn.execute("PRAGMA user_version").fetchone()[0]
-        if current < 1:
-            _apply_v1(conn)
-            conn.execute("PRAGMA user_version = 1")
-            current = 1
-        if current < 2 and current >= 1:
-            _apply_v2(conn)
-            conn.execute("PRAGMA user_version = 2")
-            current = 2
-        if current < 3 and current >= 2:
-            _apply_v3(conn)
-            conn.execute("PRAGMA user_version = 3")
-            current = 3
-        if current < 4 and current >= 3:
-            _apply_v4(conn)
-            conn.execute("PRAGMA user_version = 4")
-            current = 4
-        if current < 5 and current >= 4:
-            _apply_v5(conn)
-            conn.execute("PRAGMA user_version = 5")
-            current = 5
-        if current < 6 and current >= 5:
-            _apply_v6(conn)
-            conn.execute("PRAGMA user_version = 6")
-            current = 6
-        if current < 7 and current >= 6:
-            _apply_v7(conn)
-            conn.execute("PRAGMA user_version = 7")
-            current = 7
-        if current < 8 and current >= 7:
-            _apply_v8(conn)
-            conn.execute("PRAGMA user_version = 8")
-            current = 8
-        if current < 9 and current >= 8:
-            _apply_v9(conn)
-            conn.execute("PRAGMA user_version = 9")
-            current = 9
-        if current < 10 and current >= 9:
-            _apply_v10(conn)
-            conn.execute("PRAGMA user_version = 10")
-        conn.commit()
+        migrations = (
+            (1, _apply_v1),
+            (2, _apply_v2),
+            (3, _apply_v3),
+            (4, _apply_v4),
+            (5, _apply_v5),
+            (6, _apply_v6),
+            (7, _apply_v7),
+            (8, _apply_v8),
+            (9, _apply_v9),
+            (10, _apply_v10),
+        )
+        for version, apply_migration in migrations:
+            if current >= version:
+                continue
+            try:
+                conn.execute("BEGIN")
+                apply_migration(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+                conn.commit()
+            except BaseException:
+                conn.rollback()
+                raise
+            current = version
     finally:
         conn.close()
 
@@ -312,7 +305,7 @@ ALTER TABLE actions ADD COLUMN updated_at TEXT;
 
 
 def _apply_v2(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA_V2)
+    _execute_schema(conn, _SCHEMA_V2)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (2,)
     )
@@ -359,7 +352,7 @@ CREATE TABLE basket_benchmarks (
 
 
 def _apply_v3(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA_V3)
+    _execute_schema(conn, _SCHEMA_V3)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (3,)
     )
@@ -384,7 +377,7 @@ CREATE TABLE basket_benchmarks (
 
 
 def _apply_v4(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA_V4)
+    _execute_schema(conn, _SCHEMA_V4)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (4,)
     )
@@ -402,7 +395,7 @@ CREATE TABLE reference_data_info (
 
 
 def _apply_v5(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA_V5)
+    _execute_schema(conn, _SCHEMA_V5)
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)", (5,)
     )
@@ -466,7 +459,7 @@ SHIFT_CODES = [
 
 
 def _apply_v6(conn: sqlite3.Connection) -> None:
-    conn.executescript(_SCHEMA_V6)
+    _execute_schema(conn, _SCHEMA_V6)
     conn.executemany(
         "INSERT OR IGNORE INTO shift_codes "
         "(code, label, start_time, end_time, color) VALUES (?, ?, ?, ?, ?)",

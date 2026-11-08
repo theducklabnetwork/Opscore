@@ -9,6 +9,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from ducklab import store_ops_db
 
@@ -315,6 +316,74 @@ class TestSnapshots(StoreOpsDbTestCase):
         ).fetchall()
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0][2], cur2.lastrowid)
+
+
+class TestMigrationAtomicity(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self._tmp.name) / "migration.db"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def database_state(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            return list(conn.iterdump())
+        finally:
+            conn.close()
+
+    def test_failure_at_every_migration_boundary_rolls_back_and_retries(self):
+        error = sqlite3.OperationalError("injected migration failure")
+        for version in range(1, store_ops_db.SCHEMA_VERSION + 1):
+            with self.subTest(version=version):
+                original_apply = getattr(store_ops_db, f"_apply_v{version}")
+
+                def fail_late(conn, apply_migration=original_apply):
+                    apply_migration(conn)
+                    raise error
+
+                if self.db_path.exists():
+                    self.db_path.unlink()
+                if version > 1:
+                    with mock.patch.object(
+                        store_ops_db, f"_apply_v{version}", fail_late
+                    ):
+                        with self.assertRaisesRegex(
+                            sqlite3.OperationalError, "injected migration failure"
+                        ):
+                            store_ops_db.init_db(self.db_path)
+                    before = self.database_state()
+                else:
+                    before = ["BEGIN TRANSACTION;", "COMMIT;"]
+
+                with mock.patch.object(
+                    store_ops_db, f"_apply_v{version}", fail_late
+                ):
+                    with self.assertRaisesRegex(
+                        sqlite3.OperationalError, "injected migration failure"
+                    ):
+                        store_ops_db.init_db(self.db_path)
+
+                self.assertEqual(self.database_state(), before)
+                store_ops_db.init_db(self.db_path)
+                conn = store_ops_db.connect(self.db_path)
+                try:
+                    self.assertEqual(
+                        conn.execute("PRAGMA user_version").fetchone()[0],
+                        store_ops_db.SCHEMA_VERSION,
+                    )
+                    self.assertEqual(
+                        conn.execute(
+                            "SELECT COUNT(*) FROM schema_migrations"
+                        ).fetchone()[0],
+                        store_ops_db.SCHEMA_VERSION,
+                    )
+                    self.assertEqual(
+                        conn.execute("PRAGMA integrity_check").fetchone()[0], "ok"
+                    )
+                finally:
+                    conn.close()
 
 
 class TestPrototypePreservation(unittest.TestCase):

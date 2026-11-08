@@ -304,30 +304,43 @@ def import_workbook(xlsx: Path, db_path: Path, *, bundled: bool = False) -> dict
         raise DscImportError(f"Database not found: {db_path}")
     shares = parse_dsc(read_sheet(xlsx, DSC_SHEET))
     benchmarks = parse_spr(read_sheet(xlsx, SPR_SHEET))
-    conn = store_ops_db.connect(db_path)
     try:
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version < 5:
-            raise DscImportError(
-                f"Database schema is v{version}; start this release once "
-                "so it migrates to v5, then import")
-        with conn:
-            conn.execute("DELETE FROM contribution_shares")
-            conn.execute("DELETE FROM basket_benchmarks")
-            conn.executemany(
-                "INSERT INTO contribution_shares (state, concept, day, "
-                "month, share) VALUES (?,?,?,?,?)", shares)
-            conn.executemany(
-                "INSERT INTO basket_benchmarks (concept, state, month, "
-                "avg_spr, avg_ipr) VALUES (?,?,?,?,?)", benchmarks)
-            conn.execute(
-                "INSERT INTO reference_data_info (id, imported_at, bundled) "
-                "VALUES (1, datetime('now'), ?) "
-                "ON CONFLICT (id) DO UPDATE SET imported_at = "
-                "datetime('now'), bundled = excluded.bundled",
-                (int(bundled),))
-    finally:
-        conn.close()
+        conn = store_ops_db.connect(db_path)
+        try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < 5:
+                raise DscImportError(
+                    f"Database schema is v{version}; start this release once "
+                    "so it migrates to v5, then import")
+            columns = {row[1] for row in conn.execute(
+                "PRAGMA table_info(reference_data_info)")}
+            with conn:
+                conn.execute("DELETE FROM contribution_shares")
+                conn.execute("DELETE FROM basket_benchmarks")
+                conn.executemany(
+                    "INSERT INTO contribution_shares (state, concept, day, "
+                    "month, share) VALUES (?,?,?,?,?)", shares)
+                conn.executemany(
+                    "INSERT INTO basket_benchmarks (concept, state, month, "
+                    "avg_spr, avg_ipr) VALUES (?,?,?,?,?)", benchmarks)
+                if "bundled" in columns:
+                    conn.execute(
+                        "INSERT INTO reference_data_info "
+                        "(id, imported_at, bundled) "
+                        "VALUES (1, datetime('now'), ?) "
+                        "ON CONFLICT (id) DO UPDATE SET imported_at = "
+                        "datetime('now'), bundled = excluded.bundled",
+                        (int(bundled),))
+                else:
+                    conn.execute(
+                        "INSERT INTO reference_data_info (id, imported_at) "
+                        "VALUES (1, datetime('now')) "
+                        "ON CONFLICT (id) DO UPDATE SET imported_at = "
+                        "datetime('now')")
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as exc:
+        raise DscImportError(f"Database error during import: {exc}") from exc
     pairs = {(s, c) for s, c, *_ in shares} | {(s, c)
                                               for c, s, *_ in benchmarks}
     warnings = sorted(

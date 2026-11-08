@@ -87,6 +87,34 @@ class BackupModuleTest(unittest.TestCase):
             backup.validate_restore(other)
         self.assertIn("Missing expected tables", str(ctx.exception))
 
+    def test_reject_foreign_key_violations(self):
+        invalid = self.dir / "invalid-foreign-keys.db"
+        shutil.copy(self.db, invalid)
+        conn = sqlite3.connect(invalid)
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute(
+            "INSERT INTO expense_categories (store_id, name) VALUES (?, ?)",
+            (999999, "Orphan category"))
+        conn.commit()
+        conn.close()
+        with self.assertRaises(backup.BackupError) as ctx:
+            backup.validate_restore(invalid)
+        self.assertIn("Foreign-key check failed", str(ctx.exception))
+
+    def test_reject_missing_columns(self):
+        invalid = self.dir / "invalid-columns.db"
+        shutil.copy(self.db, invalid)
+        conn = sqlite3.connect(invalid)
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("DROP TABLE stock_loss_codes")
+        conn.execute("CREATE TABLE stock_loss_codes (code TEXT PRIMARY KEY)")
+        conn.commit()
+        conn.close()
+        with self.assertRaises(backup.BackupError) as ctx:
+            backup.validate_restore(invalid)
+        self.assertIn("Missing expected columns", str(ctx.exception))
+        self.assertIn("stock_loss_codes.name", str(ctx.exception))
+
     def test_reject_newer_schema(self):
         newer = self.dir / "newer.db"
         shutil.copy(self.db, newer)
@@ -134,6 +162,30 @@ class BackupModuleTest(unittest.TestCase):
         self.assertEqual(version, store_ops_db.SCHEMA_VERSION)
         self.assertIn("reference_data_info", tables)
         self.assertEqual(ok, "ok")
+
+    def test_corrupt_restore_leaves_live_db_unchanged(self):
+        corrupt = self.dir / "corrupt-restore.db"
+        corrupt.write_bytes(b"SQLite format 3\x00" + b"\xff" * 4096)
+        before = self.db.read_bytes()
+        with self.assertRaises(backup.BackupError):
+            backup.restore(self.db, corrupt)
+        self.assertEqual(self.db.read_bytes(), before)
+
+    def test_migration_failure_leaves_live_db_unchanged(self):
+        older = self.dir / "migration-failure.db"
+        shutil.copy(self.db, older)
+        conn = sqlite3.connect(older)
+        conn.execute("PRAGMA user_version = 4")
+        conn.commit()
+        conn.close()
+        before = self.db.read_bytes()
+        with mock.patch.object(
+                store_ops_db, "init_db",
+                side_effect=sqlite3.OperationalError("forced migration error")):
+            with self.assertRaises(backup.BackupError) as ctx:
+                backup.restore(self.db, older)
+        self.assertIn("Database migration failed", str(ctx.exception))
+        self.assertEqual(self.db.read_bytes(), before)
 
     def test_pre_restore_copy_created(self):
         saved = backup.save_pre_restore_backup(
