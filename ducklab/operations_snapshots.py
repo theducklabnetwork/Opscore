@@ -266,13 +266,13 @@ class SnapshotService:
         return {**snap, "report": deserialize_report(snap["kpi_json"])}
 
     def list_versions(self, store_id: int, month: str) -> list[dict]:
-        """All versions in version order, with metadata (no payloads)."""
+        """Finalized versions in version order, with metadata (no payloads)."""
         conn = store_ops_db.connect(self._db_path)
         try:
             rows = conn.execute(
                 "SELECT id, version, finalized, superseded_by, created_at "
                 "FROM monthly_snapshots WHERE store_id = ? AND month = ? "
-                "ORDER BY version",
+                "AND finalized = 1 ORDER BY version",
                 (store_id, month),
             ).fetchall()
             return [dict(r) for r in rows]
