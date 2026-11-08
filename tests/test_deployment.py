@@ -108,6 +108,13 @@ class TestOperatorInstaller(unittest.TestCase):
         self.assertNotIn("chmod -R g+rX /home/duck", self.sh)
         self.assertNotIn("usermod -aG duck", self.sh)
 
+    def test_current_symlink_and_handoff_match_service(self):
+        self.assertIn('CURRENT_LINK=/opt/ducklab-current', self.sh)
+        self.assertIn('ln -sfn "$DEPLOY_DIR" "$CURRENT_LINK"', self.sh)
+        self.assertIn('cd $CURRENT_LINK', self.sh)
+        self.assertIn('$CURRENT_LINK/.venv/bin/python scripts/bootstrap_admin.py',
+                      self.sh)
+
     def test_preserves_existing_env(self):
         # only installs the template when ducklab.env is absent
         self.assertIn('if [[ -f "$ETC_DIR/ducklab.env" ]]', self.sh)

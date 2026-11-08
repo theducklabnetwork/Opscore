@@ -27,6 +27,7 @@ set -euo pipefail
 # --- Configuration -----------------------------------------------------------
 SRC=/home/duck/project/ducklab          # original checkout (preserved)
 DEPLOY_DIR=/opt/ducklab                 # controlled deployment copy
+CURRENT_LINK=/opt/ducklab-current       # stable path used by ducklab.service
 DATA_DIR=/var/lib/ducklab
 BACKUP_DIR=/var/lib/ducklab/backups
 ETC_DIR=/etc/ducklab
@@ -128,6 +129,8 @@ chmod -R g+x "$DEPLOY_DIR/.venv/bin" 2>/dev/null || true
 # The app writes build artifacts to .web at startup; give the group a writable
 # project root and let it create .web.
 chmod g+w "$DEPLOY_DIR"
+# Match the stable path used by ducklab.service for the initial deployment.
+ln -sfn "$DEPLOY_DIR" "$CURRENT_LINK"
 
 # --- [4] Production environment (preserve existing) ---------------------------
 log "[4/11] Production environment file"
@@ -225,9 +228,9 @@ cat <<EOF
 NEXT STEPS (operator, in order — the app is NOT started yet):
 
   1. Bootstrap the first Super Admin (interactive; before starting the app):
-       cd $DEPLOY_DIR
+       cd $CURRENT_LINK
        sudo -u $SVC_USER DUCKLAB_DB_PATH=$DATA_DIR/store_ops.db \\
-         $DEPLOY_DIR/.venv/bin/python scripts/bootstrap_admin.py
+         $CURRENT_LINK/.venv/bin/python scripts/bootstrap_admin.py
 
   2. Start the app (now safely behind the active gate):
        sudo systemctl enable --now ducklab

@@ -11,6 +11,7 @@ tests/private/
 .env
 .env.*
 *.xlsx
+!ducklab/data/DSCSPR_alias_2027.xlsx
 *.xls
 *.log
 *.pgid
