@@ -137,6 +137,8 @@ class BundledArtifactTests(unittest.TestCase):
 
     def test_workbook_is_unignored_and_tracked(self):
         root = Path(__file__).resolve().parent.parent
+        if not (root / ".git").exists():
+            self.skipTest("Git metadata is not shipped in release copies")
         workbook = "ducklab/data/DSCSPR_alias_2027.xlsx"
         check_ignore = subprocess.run(
             ["git", "check-ignore", "--no-index", workbook], cwd=root,

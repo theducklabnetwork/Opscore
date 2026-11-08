@@ -4,6 +4,7 @@ only — never the real workbook or dev.db.
 Run: python -m pytest tests/test_import_workbook.py -v
 """
 
+import importlib.util
 import os
 import sqlite3
 import subprocess
@@ -59,21 +60,23 @@ class TestImportScript(unittest.TestCase):
             capture_output=True, text=True, cwd=ROOT)
 
     def test_db_path_from_environment_and_missing_file(self):
-        sys.path.insert(0, str(ROOT / "scripts"))
-        import importlib
-        import import_workbook_dev as imp
+        # Load the release copy afresh even if another test imported the
+        # development checkout's module under the same name.
+        spec = importlib.util.spec_from_file_location(
+            "import_workbook_dev_isolated", SCRIPT)
+        imp = importlib.util.module_from_spec(spec)
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "custom.db"
             with mock.patch.dict(os.environ, {"DUCKLAB_DB_PATH": str(db)}):
-                importlib.reload(imp)
+                spec.loader.exec_module(imp)
                 self.assertEqual(imp.DEV_DB, db)
             with self.assertRaises(SystemExit) as ctx:
                 imp.do_import(db, Path(tmp) / "missing.xlsx", replace=False)
             self.assertIn(f"Database not found: {db}", str(ctx.exception))
             self.assertIn("DUCKLAB_DB_PATH", str(ctx.exception))
             with mock.patch.dict(os.environ, {}, clear=True):
-                importlib.reload(imp)
-                self.assertEqual(imp.DEV_DB, ROOT / ".devdata" / "dev.db")
+                spec.loader.exec_module(imp)
+                self.assertEqual(imp.DEV_DB, imp.ROOT / ".devdata" / "dev.db")
 
     def test_replace_updates_daily_record_and_stock(self):
         """Replacement uses daily_record_id and replaces both linked rows."""

@@ -183,7 +183,7 @@ stage_source() {
             --include 'assets/*.png' \
             --exclude 'docs/screenshots/' --exclude '*.png' --exclude '*.har' \
             "$src/ducklab" "$src/rxconfig.py" "$src/assets" "$src/scripts" \
-            "$src/deploy" "$src/requirements.txt" "$src/requirements.lock" \
+            "$src/packaging" "$src/deploy" "$src/requirements.txt" "$src/requirements.lock" \
             "$src/requirements-dev.txt" "$src/AGENTS.md" "$src/README.md" \
             "$dest/"
         # Tests ship with the release so validation is reproducible.
@@ -224,8 +224,13 @@ audit_staged_release() {
 # --- production build (gate 11) ---------------------------------------------------
 build_release() {
     local dir="$1"
+    local tmpd; tmpd="$(release_mktempdir)"
     log "production build (reflex export) in $dir — this can take minutes"
-    (cd "$dir" && "./.venv/bin/reflex" export --env prod --frontend-only --no-zip >/dev/null)
+    local rc=0
+    (cd "$dir" && DUCKLAB_DB_PATH="$tmpd/build.db" \
+        "./.venv/bin/reflex" export --env prod --frontend-only --no-zip >/dev/null) || rc=$?
+    rm -rf "$tmpd"
+    [[ "$rc" -eq 0 ]] || return "$rc"
     [[ -d "$dir/.web" ]] || die "build produced no .web directory in $dir"
     log "build OK: $dir/.web"
 }
@@ -284,6 +289,9 @@ write_manifest() {
     gitsrc="$(git -C "$SRC" rev-parse HEAD 2>/dev/null | head -1 || true)"
     gitsrc="${gitsrc:-untracked-worktree}"
     prev="$(readlink "$CURRENT_LINK" 2>/dev/null | xargs -r basename || echo '')"
+    local schema_version
+    schema_version="$(PYTHONPATH="$dir" "$dir/.venv/bin/python" -c \
+        'from ducklab.store_ops_db import SCHEMA_VERSION; print(SCHEMA_VERSION)')"
     cat > "$dir/release.json" <<EOF
 {
   "release_id": "$id",
@@ -300,7 +308,7 @@ write_manifest() {
     "expenses-management",
     "manpower-efficiency-payroll"
   ],
-  "schema_version_code": 1,
+  "schema_version_code": $schema_version,
   "schema_migration": "additive-only; auto-migrate forward on service start; verified backup required before activation",
   "previous_release_at_creation": "$prev",
   "approval_required": true,

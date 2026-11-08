@@ -106,9 +106,9 @@ PY
 
 # --- health check -------------------------------------------------------------------
 # Usage: release_health_check <base_url> [timeout_sec]
-# Checks: login page HTTP 200, /api/health, WebSocket handshake (401/101/403 —
-# any non-5xx protocol response proves the WS endpoint is alive), and that the
-# login page is served over the expected app. Returns non-zero on failure.
+# Checks: login page HTTP 200, /api/health, and an expected WebSocket protocol
+# response (a 404 means the event endpoint is not mounted). Returns non-zero on
+# failure.
 release_health_check() {
     local base="$1" timeout="${2:-60}" deadline=$((SECONDS + ${2:-60}))
     local code
@@ -125,7 +125,7 @@ release_health_check() {
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
         "$base/_event/?EIO=4&transport=polling" || echo 000)"
     case "$code" in
-        200|400|401|403|404|426) : ;;  # socket.io endpoint responding
+        200|400|401|403|426) : ;;  # socket.io endpoint responding
         *) release_warn "health: /_event unexpected code $code"; return 1 ;;
     esac
     release_log "health check OK: $base"

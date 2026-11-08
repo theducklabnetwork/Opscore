@@ -86,7 +86,7 @@ mkdir -p "$WORK"
 # Anything not listed here (dev venv, .web build dir, .git, local state,
 # ad-hoc files) never leaves /home/duck.
 # ---------------------------------------------------------------------------
-INCLUDES=(ducklab rxconfig.py assets scripts deploy tests
+INCLUDES=(ducklab rxconfig.py assets scripts packaging deploy tests
           requirements.txt requirements.lock requirements-dev.txt
           AGENTS.md README.md)
 
