@@ -24,13 +24,25 @@ The display name is **Opscore**. The code name, Python package and repository st
 
 ### Sales Performance and Daily Operations
 
-| Sales Performance | Daily Operations |
+| Sales Performance (Level 1) | Sales Performance (Level 2) |
 |---|---|
-| ![Sales Performance](docs/images/sales-performance.png) | ![Daily Operations](docs/images/daily-operations.png) |
+| ![Sales Performance](docs/images/sales-performance-level-1.png) | ![Sales Performance](docs/images/sales-performance-level-2.png) |
+
+| Sales Performance (Level 3) | Sales Performance (Level 4) |
+|---|---|
+| ![Sales Performance](docs/images/sales-performance-level-3.png) | ![Sales Performance](docs/images/sales-performance-level-4.png) |
+
+| Daily Operations |
+|---|
+| ![Daily Operations](docs/images/daily-operations-light.png) |
 
 ### Sales Charts
 
-![Daily Sales vs Target, Sales by Day and Sales Calendar](docs/images/sales-charts.png)
+![Daily Sales vs Target, Sales by Day and Sales Calendar](docs/images/sales-by-day-and-sales-calendar.png)
+
+| Daily Sales vs Target |
+|---|
+| ![Daily Sales vs Target](docs/images/daily-sales-vs-target.png) |
 
 ### Daily Targets
 
@@ -42,9 +54,13 @@ The display name is **Opscore**. The code name, Python package and repository st
 |---|---|
 | ![Dashboard in dark mode](docs/images/dashboard-dark.png) | ![Daily Operations in dark mode](docs/images/daily-operations-dark.png) |
 
-| Monthly Report | Daily Entry |
+| Monthly Report | Monthly Report |
 |---|---|
-| ![Monthly Report in dark mode](docs/images/monthly-report-dark.png) | ![Daily Entry in dark mode](docs/images/daily-entry-dark.png) |
+| ![Monthly Report in dark mode](docs/images/monthly-report-dark-1.png) | ![Monthly Report in dark mode](docs/images/monthly-report-dark-2.png) |
+
+| Daily Entry |
+|---|
+| ![Daily Entry in dark mode](docs/images/daily-entry-dark.png) |
 
 ## Documents
 
