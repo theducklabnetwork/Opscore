@@ -232,6 +232,11 @@ class SettingsState(SharedOpsState):
             self.has_stores = bool(self.stores)
             if self.stores and self._selected_store_id() is None:
                 self.selected_store_label = self.stores[0]["label"]
+        # Populate the shared month selector so the global header control
+        # shows the month list even on the settings page.
+        self.month_options = [label for _, label in self._month_choices()]
+        if self._selected_month() is None:
+            self.selected_month_label = self.month_options[0]
         self.ref_store_label = self.selected_store_label
         self.ref_error = self.ref_notice = ""
         self.dsc_error = ""
@@ -274,6 +279,23 @@ class SettingsState(SharedOpsState):
             exc, AuthenticationError) else "You do not have access."
 
     # --- Reference Data events --------------------------------------------
+    @rx.event
+    def select_store(self, label: str) -> None:
+        """Global store selector: reload categories for the new store."""
+        if label == self.selected_store_label:
+            return
+        self.selected_store_label = label
+        self.ref_store_label = label
+        self.ref_error = self.ref_notice = ""
+        self._clear_shared_status()
+        try:
+            user = self._actor()
+        except AuthenticationError as exc:
+            self._auth_fail(exc)
+            return
+        self._load_categories(user)
+        yield SharedOpsState.resync_selection()
+
     @rx.event
     def select_ref_store(self, label: str) -> None:
         if label == self.ref_store_label:

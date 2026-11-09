@@ -350,6 +350,33 @@ class CategoryStateTests(CategoryFixture):
         self.assertNotIn("reference", st.visible_tabs)
         self.assertFalse(st.can_manage_reference)
 
+    def test_month_selector_populated_on_load(self):
+        """Global month selector must have options after settings loads."""
+        st = self.bound(lambda s: s.load_settings())
+        self.assertEqual(len(st.month_options), 12)
+        self.assertIn(st.selected_month_label, st.month_options)
+
+    def test_global_store_change_reloads_categories(self):
+        """Changing the global store selector reloads the category list."""
+        from ducklab import ops_settings_pages as mod
+        from ducklab.ops_settings_pages import SettingsState
+        self.app.add_expense_category(self.admin, self.sid, "Rent",
+                                      sort_order=0)
+        self.app.add_expense_category(self.admin, self.other, "Power",
+                                      sort_order=0)
+        st = SettingsState()
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(SettingsState, "_actor",
+                                  lambda s_: self.admin):
+            st.load_settings()
+            self.assertEqual([c["name"] for c in st.ref_categories], ["Rent"])
+            # simulate the global store selector picking the other store
+            other_label = next(
+                s["label"] for s in st.stores if s["id"] == self.other)
+            list(st.select_store(other_label))
+            self.assertEqual([c["name"] for c in st.ref_categories],
+                             ["Power"])
+
 
 class ImportStateTests(ImportFixture):
     """SettingsState DSC handlers: staging, confirm and result summary."""

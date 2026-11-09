@@ -450,6 +450,29 @@ class AuthFailureTests(Fixture):
         self.bound(mod, StockState, st.load_stock_data, actor=expired)
         self.assertEqual(st.st_error, SESSION)
 
+    def test_stores_session_expired_clears_rows_and_controls(self):
+        """On session expiry, cached store rows and privileged controls
+        must be cleared so stale data is never shown."""
+        import ducklab.ops_stores_state as mod
+        from ducklab.ops_stores_state import StoresState
+        st = StoresState()
+        st.store_rows = [{"id": "1", "code": "A01", "name": "Alpha"}]
+        st.can_manage_stores = True
+        self.bound(mod, StoresState, st.load_page_data, actor=expired)
+        self.assertEqual(st.store_rows, [])
+        self.assertFalse(st.can_manage_stores)
+        self.assertEqual(st.stores_error, SESSION)
+
+    def test_stores_access_denied_clears_rows(self):
+        """On authorization failure, cached store rows must be cleared."""
+        import ducklab.ops_stores_state as mod
+        from ducklab.ops_stores_state import StoresState
+        st = StoresState()
+        st.store_rows = [{"id": "1", "code": "A01", "name": "Alpha"}]
+        self.bound(mod, StoresState, st.load_page_data,
+                   actor=self.revoked_viewer())
+        self.assertEqual(st.store_rows, [])
+
 
 # 8 ---------------------------------------------------------------------------
 class FlagResetTests(Fixture):
