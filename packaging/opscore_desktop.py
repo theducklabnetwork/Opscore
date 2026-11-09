@@ -108,10 +108,30 @@ def show_error(message: str) -> None:
             subprocess.run([opener, "--error", "--title=Opscore cannot start", f"--text={message}"])
 
 
+def installed_version() -> str:
+    release_file = APP_ROOT / "RELEASE"
+    return release_file.read_text().strip() if release_file.exists() else "source"
+
+
+def prepare_webview_profile() -> None:
+    """Discard a browser profile from a different app version."""
+    version = installed_version()
+    version_path = DATA_DIR / "app_version.txt"
+    try:
+        previous_version = version_path.read_text().strip()
+    except OSError:
+        previous_version = None
+    profile = DATA_DIR / "webview"
+    if previous_version != version and profile.exists():
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        profile.rename(DATA_DIR / f"webview.old-{timestamp}")
+    if previous_version != version:
+        version_path.write_text(version + "\n")
+
+
 def start_backend() -> tuple[subprocess.Popen, str]:
     url = APP_URL
-    release_file = APP_ROOT / "RELEASE"
-    release = release_file.read_text().strip() if release_file.exists() else "source"
+    release = installed_version()
     environment = {
         **os.environ,
         "DUCKLAB_DB_PATH": str(DB_PATH),
@@ -536,6 +556,7 @@ def main() -> int:
             else:
                 raise port_in_use_error()
         process, url = start_backend()
+        prepare_webview_profile()
         if args.backend_only:
             print(url, flush=True)
             try:
