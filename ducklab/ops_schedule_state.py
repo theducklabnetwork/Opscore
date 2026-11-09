@@ -219,6 +219,9 @@ class ScheduleState(SharedOpsState):
             self.schedule_error = SESSION_EXPIRED
         except (AuthorizationError, StoreNotFoundError):
             self.schedule_error = ACCESS_DENIED
+        except ValueError:
+            self.schedule_error = (
+                "Invalid schedule week. Select a valid week and try again.")
         except (OSError, RepositoryError):
             self.schedule_error = "Could not export schedule CSV files."
 

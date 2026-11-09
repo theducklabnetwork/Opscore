@@ -260,13 +260,28 @@ class TestSnapshots(RepoFixture):
             "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
             "finalized) VALUES (?,?,?,?,1)", (sid, "2026-09", 1, '{"v":1}'))
         self.conn.execute(
-            "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json) "
-            "VALUES (?,?,?,?)", (sid, "2026-09", 2, '{"v":2}'))
+            "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
+            "finalized) VALUES (?,?,?,?,1)", (sid, "2026-09", 2, '{"v":2}'))
         self.assertEqual(self.repo.get_snapshot(sid, "2026-09")["version"], 2)
         self.assertEqual(self.repo.get_snapshot(sid, "2026-09", version=1)["kpi_json"],
                          '{"v":1}')
         self.assertTrue(self.repo.get_snapshot(sid, "2026-09", version=1)["finalized"])
         self.assertIsNone(self.repo.get_snapshot(sid, "2026-10"))
+
+    def test_latest_draft_does_not_hide_finalized_version(self):
+        sid = self.add_store("S01", "Store A")
+        self.conn.execute(
+            "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
+            "finalized) VALUES (?,?,?,?,1)", (sid, "2026-09", 1, '{"v":1}'))
+        self.conn.execute(
+            "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
+            "finalized) VALUES (?,?,?,?,0)", (sid, "2026-09", 2, '{"v":2}'))
+
+        latest = self.repo.get_snapshot(sid, "2026-09")
+
+        self.assertEqual(latest["version"], 1)
+        self.assertEqual(latest["kpi_json"], '{"v":1}')
+        self.assertTrue(latest["finalized"])
 
 
 class TestEndToEndIntegration(RepoFixture):

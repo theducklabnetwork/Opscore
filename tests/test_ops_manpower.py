@@ -9,6 +9,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 from ducklab import kpi
 from ducklab.app_service import AppService
@@ -335,6 +336,24 @@ class TestManpowerSecurity(ManpowerFixture):
 
 class TestStateValidation(ManpowerFixture):
     """Form-level parsing used by the manpower configuration editor."""
+
+    def test_deactivated_store_hides_payroll_editing(self):
+        import ducklab.ops_manpower_state as mod
+        from ducklab.ops_manpower_state import ManpowerState
+
+        st = ManpowerState()
+        st.selected_store_active = False
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ManpowerState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ManpowerState, "_selected_store_id",
+                                  lambda _: self.sa), \
+                mock.patch.object(ManpowerState, "_selected_month",
+                                  lambda _: "2026-10"):
+            st.load_manpower_data()
+
+        self.assertFalse(st.can_manage_manpower)
+        self.assertTrue(st.can_view_payroll)
 
     def test_parse_helpers(self):
         from ducklab.input_validation import parse_decimal

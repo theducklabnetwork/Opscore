@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 from ducklab import store_ops_db
 from ducklab.app_service import AppService
@@ -226,6 +227,24 @@ class ScheduleTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.app.set_schedule_entry(self.admin, self.store, staff_id,
                                         date(2026, 10, 5), "M900")
+
+    def test_csv_export_reports_malformed_week(self):
+        import ducklab.ops_schedule_state as mod
+
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_week = "not-a-date"
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store):
+            state.export_schedule_csv()
+
+        self.assertEqual(
+            state.schedule_error,
+            "Invalid schedule week. Select a valid week and try again.")
+        self.assertEqual(state.schedule_notice, "")
 
 
 if __name__ == "__main__":

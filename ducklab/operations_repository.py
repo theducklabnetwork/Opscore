@@ -435,12 +435,12 @@ class OperationsRepository:
     # ------------------------------------------------------------------
     def get_snapshot(self, store_id: int, month: str,
                      version: Optional[int] = None) -> Optional[dict]:
-        """Latest (or specific) snapshot version. Never mutates."""
+        """Latest finalized (or specific) snapshot version. Never mutates."""
         _validate_month(month)
         if version is None:
             rows = self._query(
                 "SELECT * FROM monthly_snapshots WHERE store_id = ? AND month = ? "
-                "ORDER BY version DESC LIMIT 1",
+                "AND finalized = 1 ORDER BY version DESC LIMIT 1",
                 (store_id, month),
             )
         else:

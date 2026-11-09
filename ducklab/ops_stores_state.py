@@ -117,6 +117,8 @@ class StoresState(SharedOpsState):
         try:
             user = self._actor()
         except AuthenticationError:
+            self.store_rows = []
+            self.can_manage_stores = False
             self.error_message = self.stores_error = SESSION_EXPIRED
             self.report_status = "error"
             return
@@ -127,6 +129,7 @@ class StoresState(SharedOpsState):
             stores = [app_service.read_repo.get_store(s["id"])
                       for s in app_service.list_my_stores(user)]
         except (AuthorizationError, RepositoryError) as exc:
+            self.store_rows = []
             self.stores_error = str(exc)
             return
         self.store_rows = [

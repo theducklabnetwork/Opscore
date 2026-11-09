@@ -243,7 +243,9 @@ class ManpowerState(SharedOpsState):
             self.mp_error = ACCESS_DENIED
             return
         self.can_view_payroll = authz.can_manage_config(user)
-        self.can_manage_manpower = authz.can_manage_config(user)
+        # Deactivated stores remain readable, but hide every edit control.
+        self.can_manage_manpower = (authz.can_manage_config(user)
+                                    and self.selected_store_active)
         self.mp_finalized = finalized
         self.pt_factor_label = (
             f"{float(cfg.part_timer_factor):g}"

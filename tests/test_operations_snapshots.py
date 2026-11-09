@@ -136,6 +136,24 @@ class TestFinalization(SnapFixture):
 
 
 class TestVersioning(SnapFixture):
+    def test_draft_not_listed_as_finalized_version(self):
+        sid, _ = self.seed_store()
+        finalized = self.snaps.finalize_month(
+            sid, "2026-09", as_of=date(2026, 9, 30))
+        conn = store_ops_db.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO monthly_snapshots (store_id, month, version, kpi_json, "
+            "finalized) VALUES (?,?,?,?,0)",
+            (sid, "2026-09", 2, '{"draft": true}'))
+        conn.commit()
+        conn.close()
+
+        versions = self.snaps.list_versions(sid, "2026-09")
+
+        self.assertEqual([v["version"] for v in versions], [1])
+        self.assertEqual(versions[0]["id"], finalized["snapshot_id"])
+        self.assertTrue(versions[0]["finalized"])
+
     def test_correction_chain_v1_v2_v3(self):
         sid, _ = self.seed_store()
         self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(100))
