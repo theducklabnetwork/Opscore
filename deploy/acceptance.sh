@@ -7,6 +7,7 @@
 set -uo pipefail
 DIR="$1"; PORT="$2"; DEV="${DUCKLAB_DEV:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ACCEPT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/ducklab-accept.XXXXXX")"
+SERVER_PID=""
 trap 'stop; rm -rf "$ACCEPT_TMP"' EXIT
 DB="$ACCEPT_TMP/accept-$PORT.db"
 
@@ -16,6 +17,7 @@ start() {
         '$DIR/.venv/bin/reflex' run --env prod --single-port \
         --backend-host 127.0.0.1 --backend-port '$PORT'" \
         >"$ACCEPT_TMP/accept-stage.log" 2>&1 </dev/null &
+    SERVER_PID=$!
     local i
     for i in $(seq 1 45); do
         curl -s -o /dev/null --max-time 3 "http://127.0.0.1:$PORT/api/health" && return 0
@@ -23,7 +25,12 @@ start() {
     done
     return 1
 }
-stop() { pkill -f "backend-port $PORT" 2>/dev/null; sleep 3; }
+stop() {
+    [[ -n "$SERVER_PID" ]] || return 0
+    kill -- -"$SERVER_PID" 2>/dev/null || kill "$SERVER_PID" 2>/dev/null || true
+    SERVER_PID=""
+    sleep 3
+}
 
 run() {
     local seed="$1" test="$2"

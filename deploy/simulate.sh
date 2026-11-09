@@ -27,14 +27,14 @@ KEEP=0
 [[ "${1:-}" == "--keep" ]] && KEEP=1
 
 PASS=0; FAIL=0
+HTTPPID=""
 ok()   { PASS=$((PASS+1)); printf 'SIM PASS: %s\n' "$*"; }
 bad()  { FAIL=$((FAIL+1)); printf 'SIM FAIL: %s\n' "$*" >&2; }
 check(){ if "$@" >/dev/null 2>&1; then ok "$*"; else bad "$*"; fi }
 
 cleanup() {
-    pkill -f "backend-port $PORT_BASE" 2>/dev/null
-    pkill -f "backend-port $((PORT_BASE+1))" 2>/dev/null
-    pkill -f "backend-port $((PORT_BASE+7))" 2>/dev/null
+    # release.sh stops each staged server by its saved process-group PID.
+    [[ -n "$HTTPPID" ]] && kill "$HTTPPID" 2>/dev/null || true
     [[ "$KEEP" -eq 1 ]] && { echo "sim kept at $SIM"; return; }
     rm -rf "$SIM"
 }
@@ -50,13 +50,12 @@ mkdir -p "$ROOT"
 echo "--- release A: prepare + verify + activate"
 OUT="$("${REL_SH[@]}" prepare --skip-build --skip-browser 2>&1)" \
     && ok "prepare A" || { bad "prepare A"; echo "$OUT" | tail -5; exit 1; }
-IDA="$(basename "$(ls -d "$ROOT"/2026* | sort | head -1)")"
+IDA="$(basename "$(ls -d "$ROOT"/[0-9]* | sort | head -1)")"
 OUT="$("${REL_SH[@]}" verify-staged --release-id "$IDA" --port "$PORT_BASE" --skip-browser 2>&1)" \
     && ok "verify-staged A" || { bad "verify-staged A"; echo "$OUT" | tail -5; }
 # Wait for the staged app's socket to be fully released before port reuse.
 wait_port_free() {
     local port="$1" n=0
-    pkill -f "backend-port $port" 2>/dev/null
     while ss -tln 2>/dev/null | grep -q ":$port "; do
         sleep 1; n=$((n+1)); [[ $n -gt 30 ]] && return 1
     done
@@ -96,7 +95,7 @@ echo "--- release B: prepare + verify + activate + rollback"
 sleep 1  # distinct timestamp id
 OUT="$("${REL_SH[@]}" prepare --skip-build --skip-browser 2>&1)" \
     && ok "prepare B" || { bad "prepare B"; echo "$OUT" | tail -5; exit 1; }
-IDB="$(basename "$(ls -d "$ROOT"/2026* | sort | tail -1)")"
+IDB="$(basename "$(ls -d "$ROOT"/[0-9]* | sort | tail -1)")"
 [[ "$IDB" != "$IDA" ]] && ok "distinct release ids" || bad "release id collision"
 OUT="$("${REL_SH[@]}" verify-staged --release-id "$IDB" --port "$PORT_BASE" --skip-browser 2>&1)" \
     && ok "verify-staged B" || { bad "verify-staged B"; echo "$OUT" | tail -5; }
@@ -153,6 +152,7 @@ sleep 1
 "${REL_SH[@]}" verify-staged --release-id "$IDA" --port "$((PORT_BASE+7))" --skip-browser >/dev/null 2>&1 \
     && bad "staging on occupied port was allowed" || ok "staging port conflict detected"
 kill "$HTTPPID" 2>/dev/null
+HTTPPID=""
 
 # --- Failure mode: refuse staging on production port ---------------------------------
 "${REL_SH[@]}" verify-staged --release-id "$IDA" --port 3000 --skip-browser >/dev/null 2>&1 \
