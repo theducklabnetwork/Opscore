@@ -67,6 +67,87 @@ class TestSourceBackend(unittest.TestCase):
         self.assertEqual(call.kwargs["env"]["DUCKLAB_RELEASE_ID"], "source")
 
 
+class TestWebviewProfileUpgrade(unittest.TestCase):
+    def setUp(self):
+        self.desktop = load_desktop_module()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self.tmp.name)
+        self.app_root = self.data_dir / "bundle"
+        self.app_root.mkdir()
+        (self.app_root / "RELEASE").write_text("2.0\n")
+        self.profile = self.data_dir / "webview"
+        self.profile.mkdir()
+        (self.profile / "browser-state").write_text("stale")
+        self.protected = {
+            name: self.data_dir / name
+            for name in ("store_ops.db", "uploaded_files", "states", "reflex-web")
+        }
+        for name, path in self.protected.items():
+            if name == "store_ops.db":
+                path.write_text("database")
+            else:
+                path.mkdir()
+                (path / "keep").write_text(name)
+        self.patches = [
+            mock.patch.object(self.desktop, "DATA_DIR", self.data_dir),
+            mock.patch.object(self.desktop, "APP_ROOT", self.app_root),
+        ]
+        for patcher in self.patches:
+            patcher.start()
+
+    def tearDown(self):
+        for patcher in reversed(self.patches):
+            patcher.stop()
+        self.tmp.cleanup()
+
+    def assert_protected_data_unchanged(self):
+        for name, path in self.protected.items():
+            if name == "store_ops.db":
+                self.assertEqual(path.read_text(), "database")
+            else:
+                self.assertEqual((path / "keep").read_text(), name)
+
+    def test_version_change_moves_webview_profile(self):
+        (self.data_dir / "app_version.txt").write_text("1.0\n")
+        with mock.patch.object(self.desktop.time, "strftime", return_value="20261109-120000"):
+            self.desktop.prepare_webview_profile()
+        moved = self.data_dir / "webview.old-20261109-120000"
+        self.assertFalse(self.profile.exists())
+        self.assertEqual((moved / "browser-state").read_text(), "stale")
+        self.assertEqual((self.data_dir / "app_version.txt").read_text(), "2.0\n")
+        self.assert_protected_data_unchanged()
+
+    def test_missing_version_file_moves_webview_profile(self):
+        with mock.patch.object(self.desktop.time, "strftime", return_value="20261109-120001"):
+            self.desktop.prepare_webview_profile()
+        self.assertFalse(self.profile.exists())
+        self.assertTrue((self.data_dir / "webview.old-20261109-120001").is_dir())
+        self.assertEqual((self.data_dir / "app_version.txt").read_text(), "2.0\n")
+        self.assert_protected_data_unchanged()
+
+    def test_same_version_leaves_webview_profile_alone(self):
+        (self.data_dir / "app_version.txt").write_text("2.0\n")
+        self.desktop.prepare_webview_profile()
+        self.assertEqual((self.profile / "browser-state").read_text(), "stale")
+        self.assertEqual(list(self.data_dir.glob("webview.old-*")), [])
+        self.assert_protected_data_unchanged()
+
+    def test_windows_launch_prepares_profile_before_window(self):
+        process = mock.Mock()
+        with mock.patch.object(self.desktop.sys, "platform", "win32"), \
+                mock.patch.object(self.desktop.sys, "argv", ["opscore_desktop.py"]), \
+                mock.patch.object(self.desktop, "acquire_lock", return_value=mock.Mock()), \
+                mock.patch.object(self.desktop, "active_app", return_value=None), \
+                mock.patch.object(self.desktop, "windows_port_available", return_value=True), \
+                mock.patch.object(self.desktop, "start_backend", return_value=(process, self.desktop.APP_URL)), \
+                mock.patch.object(self.desktop, "open_window", side_effect=lambda *_, **__: (
+                    self.assertFalse(self.profile.exists()), 0)[1]), \
+                mock.patch.object(self.desktop, "stop_backend"):
+            self.assertEqual(self.desktop.main(), 0)
+        self.assertTrue(any(self.data_dir.glob("webview.old-*")))
+        self.assertEqual((self.data_dir / "app_version.txt").read_text(), "2.0\n")
+
+
 class TestPortCheck(unittest.TestCase):
     def setUp(self):
         self.desktop = load_desktop_module()
