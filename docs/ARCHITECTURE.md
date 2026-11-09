@@ -33,7 +33,7 @@ Opscore is a full-stack Python app built with **Reflex 0.10**. Reflex compiles t
 │  Database          store_ops_db.py + auth_db.py (schema, migrations)│
 └───────────────┬─────────────────────────────────────────────────────┘
                 ▼
-        ~/.local/share/opscore/store_ops.db   (SQLite, schema v9)
+        ~/.local/share/opscore/store_ops.db   (SQLite, schema v10)
 ```
 
 ## 2. Technology
@@ -106,14 +106,14 @@ can restyle open figures without cross-module imports.
 
 ## 4. Data model
 
-One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **9**). Initialization is idempotent and migrations are additive.
+One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **10**). Initialization is idempotent and migrations are additive.
 
 ### Operations tables
 
 | Table | Holds |
 |---|---|
 | `stores` | Code (unique), name, Concept, State, zone, zone PIC, branch manager, active flag |
-| `monthly_configs` | One row per store and month: minimum RTM target, Level 1 base, Level 2 to 4 uplifts, last year and last month sales, salary ratio target, budget headcount, turnover threshold, stock loss target, transaction/SPR/IPR targets, opening headcount, part-timer factor, payroll figures |
+| `monthly_configs` | One row per store and month: minimum RTM target, Level 1 base, Level 2 to 4 uplifts, last year and last month sales, salary ratio target, budget headcount, turnover threshold, stock loss target, transaction/BV/UPT targets, opening headcount, part-timer factor, payroll figures |
 | `public_holidays` | Holiday dates per store and month |
 | `daily_records` | One row per store and date: sales, transactions, units, staffing and leave counts |
 | `daily_stock_losses` | Stock loss amount per daily record and loss code |
@@ -124,7 +124,7 @@ One SQLite file holds both operations data and accounts. Schema version is track
 | `actions` | Action Tracker items: pillar, issue, owner, priority, status, due date |
 | `monthly_snapshots` | Finalized monthly reports, versioned |
 | `contribution_shares` | Daily Sales Contribution: each day type's share of the month by State and Concept |
-| `basket_benchmarks` | State average SPR and IPR by Concept and month |
+| `basket_benchmarks` | State average BV and UPT by Concept and month |
 | `reference_data_info` | When and from which file the reference data was loaded |
 | `staff` | Store-scoped staff roster: name, staff ID, position and employment type (`Full-Time`, `Part-Time` or `Not Set`) |
 | `shift_codes` | Shared shift codes, labels, working times and colors |
@@ -151,7 +151,7 @@ Pure functions with no database or UI access. The main groups:
 | Sales | Days entered, sales to date, projected month-end sales (actual if every day is entered, otherwise sales ÷ days entered × days in month) |
 | Target levels | Level 1 = base. Levels 2 to 4 = Level 1 × (1 + uplift). Level 4 is never below the minimum RTM target. Highest level reached. Sales needed per remaining day. |
 | Growth | SSSG/Year and SSSG/Month against last year and last month |
-| Basket | SPR = sales ÷ transactions. IPR is total items per receipt; UPT is total SKU per transaction. ASP = sales ÷ units. Blank when the divisor is 0 or missing. |
+| Basket | BV (basket value) = sales ÷ transactions. UPT = units per transaction. ASP = sales ÷ units. Blank when the divisor is 0 or missing. |
 | Daily targets | Each day's target = Level 1 × that day's contribution share (weekday or public holiday, by State and Concept). A shortfall carries forward to the next *reported* day only. |
 | Expenses | Paid, incurred and pending totals, budget status, lines needing review |
 | Manpower | Salary ratio and status, salary budget, headcount variance, turnover |
@@ -226,7 +226,7 @@ None of these are needed for the desktop app. There are no secret keys: session 
 `dsc_import.py` reads the Daily Sales Contribution workbook by column position:
 
 - **DSC sheet:** State, Concept, day type (Mon to Sun or PH), and each month's share from November to October.
-- **SPR sheet:** average SPR and IPR by Concept and State for each month.
+- **SPR sheet:** average BV and UPT by Concept and State for each month (the workbook labels these SPR and IPR).
 
 Blank State or Concept cells under a merged group take the value above. Both tables are replaced in one transaction: the whole file imports or nothing changes. The same function powers **Settings → Reference Data** and `scripts/import_dsc.py`.
 

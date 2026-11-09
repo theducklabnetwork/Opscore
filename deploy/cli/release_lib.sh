@@ -105,29 +105,35 @@ PY
 }
 
 # --- health check -------------------------------------------------------------------
-# Usage: release_health_check <base_url> [timeout_sec]
-# Checks: login page HTTP 200, /api/health, and an expected WebSocket protocol
+# Usage: release_health_check <base_url>
+# Polls /_event for readiness for up to DUCKLAB_READINESS_TIMEOUT seconds (60
+# by default), then checks the login page and /api/health. Reports the event
+# URL and last HTTP status on timeout. Checks: an expected WebSocket protocol
 # response (a 404 means the event endpoint is not mounted). Returns non-zero on
 # failure.
 release_health_check() {
-    local base="$1" timeout="${2:-60}" deadline=$((SECONDS + ${2:-60}))
-    local code
+    local base="$1"
+    local timeout="${DUCKLAB_READINESS_TIMEOUT:-60}"
+    local deadline=$((SECONDS + timeout))
+    local event_url="$base/_event/?EIO=4&transport=polling"
+    local code=000
     while (( SECONDS < deadline )); do
-        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base/api/health" || echo 000)"
-        if [[ "$code" == "200" ]]; then break; fi
+        # WebSocket endpoint: the event namespace is socket.io at /_event.
+        # A plain GET returns 4xx (not 5xx/000) when the mount is alive.
+        code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$event_url" || echo 000)"
+        case "$code" in
+            200|400|401|403|426) break ;;  # socket.io endpoint responding
+        esac
         sleep 2
     done
+    case "$code" in
+        200|400|401|403|426) : ;;
+        *) release_warn "health: timed out after ${timeout}s waiting for $event_url (last status: $code)"; return 1 ;;
+    esac
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$base/api/health" || echo 000)"
     [[ "$code" == "200" ]] || { release_warn "health: /api/health not 200 (got $code)"; return 1; }
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 -L "$base/login" || echo 000)"
     [[ "$code" == "200" ]] || { release_warn "health: /login not 200 (got $code)"; return 1; }
-    # WebSocket endpoint: the event namespace is socket.io at /_event.
-    # A plain GET returns 4xx (not 5xx/000) when the mount is alive.
-    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-        "$base/_event/?EIO=4&transport=polling" || echo 000)"
-    case "$code" in
-        200|400|401|403|426) : ;;  # socket.io endpoint responding
-        *) release_warn "health: /_event unexpected code $code"; return 1 ;;
-    esac
     release_log "health check OK: $base"
     return 0
 }

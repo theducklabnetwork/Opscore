@@ -38,7 +38,7 @@ PYTHON_BIN="${DUCKLAB_PYTHON:-python3.14}"
 SKIP_BROWSER=0
 SKIP_BUILD=0
 DRY_RUN=0
-BACKEND_TIMEOUT=900
+READINESS_TIMEOUT="${DUCKLAB_READINESS_TIMEOUT:-60}"
 
 die() { release_die "$@"; }
 log() { release_log "$@"; }
@@ -391,7 +391,8 @@ cmd_verify_staged() {
     local pid=$!
     trap 'kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true' EXIT
     local ok=1
-    if release_health_check "http://127.0.0.1:$STAGE_PORT" "$BACKEND_TIMEOUT" \
+    if DUCKLAB_READINESS_TIMEOUT="$READINESS_TIMEOUT" \
+       release_health_check "http://127.0.0.1:$STAGE_PORT" \
        && release_route_check "http://127.0.0.1:$STAGE_PORT"; then
         ok=0
         # Confirm release identity is served.
