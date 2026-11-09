@@ -58,7 +58,7 @@ Other effects seen: stores are hard to compare, there's no record of the ABM's o
 
 | Impact | Opscore answer |
 |---|---|
-| Weak Store Understanding | **Clear Daily Picture:** sales, SPR, IPR, salary ratio and stock loss for each store on one screen |
+| Weak Store Understanding | **Clear Daily Picture:** sales, BV, UPT, salary ratio and stock loss for each store on one screen |
 | Shortfalls Found Late | **Daily Target:** every day shows its target and whether it was achieved |
 | Issues Forgotten | **Action Tracker:** every issue logged with an owner and status until done |
 | Not Ready to Lead | **Monthly Report:** a full month-end report, ready to export |

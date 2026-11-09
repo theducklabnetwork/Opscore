@@ -60,13 +60,17 @@ installation, and `systemctl restart` at cutover/rollback. Filesystem-level
 verification of this model: `deploy/test_release_permissions.sh` (creates a
 throwaway uid, requires sudo once for useradd/setfacl).
 
-- `deploy/release.sh prepare` — source sanity, stage source, create venv in
-  place, install locked deps, full backend test suite, production build,
-  manifest.
+- `deploy/release.sh prepare` — source sanity, stage source (including
+  `packaging/`), create venv in place, install locked deps, full backend test
+  suite, production build, manifest. The frontend build uses a temporary
+  `DUCKLAB_DB_PATH`, and the manifest records the actual application
+  `SCHEMA_VERSION` as `schema_version_code`.
 - `deploy/release.sh verify-staged` — boots the release on an isolated
   loopback port with a disposable DB; checks `/api/health`, `/login`,
   `/_event` (socket.io), and all production routes; verifies the served
-  release identity. Refuses port 3000 and occupied ports.
+  release identity. A 404 from `/_event` fails the health check. Readiness
+  times out after 60 seconds by default; override with
+  `DUCKLAB_READINESS_TIMEOUT`. Refuses port 3000 and occupied ports.
 - `deploy/release.sh activate --release-id <ID>` — atomic symlink flip;
   refuses unverified releases; records `previous` for rollback.
 - `deploy/release.sh rollback` — restores the previous release; refuses if

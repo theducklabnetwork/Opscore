@@ -26,7 +26,7 @@ The app opens in its own window. You don't need internet after installing.
 
 1. **Create Account.** Enter your name, email and a password (at least 10 characters, with letters and numbers). This first account is the Super Admin and can do everything.
 2. **Welcome tour.** A short tour shows you around. Each page has its own tour the first time you open it. Replay any tour with the **?** button at the top right.
-3. **Upload reference data.** Go to **Settings → Reference Data** and upload the Daily Sales Contribution file. This gives each day its target.
+3. **Check reference data.** Opscore loads the bundled Daily Sales Contribution workbook automatically when both reference tables are empty. Go to **Settings → Reference Data** to review it or upload a replacement. This gives each day its target.
 4. **Add your stores.** Go to **Store Management** (see section 4).
 
 ## 3. Getting around
@@ -63,13 +63,13 @@ Pick the store and month, then fill in:
 
 | Group | Fields |
 |---|---|
-| Sales Targets | Minimum RTM target, Level 1 base target, Level 2, 3 and 4 uplift. Use **HQ defaults** for +10%, +20% and +30%. Sales same month last year, sales last month. |
-| Daily Sales | Target Transactions, Target SPR, Target IPR, Public Holidays |
+| Sales Targets | Minimum RTM target, Level 1 base target, Level 2, 3 and 4 uplift. Use **HQ defaults** to fill Minimum RTM (RM 200,000) and +10%, +20% and +30% uplifts. Sales same month last year, sales last month. |
+| Daily Sales | Target Transactions, Target BV, Target UPT, Public Holidays. If Target Transactions is blank, the form suggests Level 1 ÷ Target BV, rounded to a whole transaction. |
 | Manpower | Salary ratio target, budget headcount, opening headcount, turnover threshold, part-timer factor, payroll figures |
 | Stock | Stock loss target |
 | Expenses | Budget for each expense category |
 
-Click **Save Setup**.
+Click **Save Setup**. Use **Copy From Last Month** to pre-fill the form and expense budgets from the previous month; review the values and click **Save Setup** to apply them.
 
 **Tips:**
 - Once Level 1 is set, all four levels must be filled in.
@@ -82,7 +82,7 @@ Under **User Assignment**, choose a user and a store and click **Assign**. Users
 
 ### Deactivate a store
 
-**Deactivate** makes a store read-only. All its history is kept, and **Activate** brings it back.
+**Deactivate** makes a store read-only, including payroll editing in Manpower Efficiency. All its history is kept, and **Activate** brings it back.
 
 ## 5. Daily Operations
 
@@ -100,7 +100,7 @@ Enter each day's figures here.
 
 **Blank is not zero.** Leave a field blank if it wasn't reported. Enter 0 only for a real zero, such as a closed day. A blank day shows as not reported and is left out of averages and targets.
 
-**Monthly Summary** at the top shows sales, projected sales and achievement for the month so far.
+**Monthly Summary** at the top shows sales, projected sales and achievement for the month so far. Daily records and the entry form also show paid expenses for each day, including an entered RM0 expense.
 
 ## 6. Sales Performance
 
@@ -108,7 +108,7 @@ Enter each day's figures here.
 |---|---|
 | Sales Summary | Sales to date, **Projected Sales** (until the month is complete), **Level Reached**, and achievement against Levels 1 to 4 |
 | Growth | **SSSG/Year** and **SSSG/Month** |
-| Basket | **SPR**, **IPR**, **ASP**, compared with the **State Average** |
+| Basket | **BV**, **UPT**, **ASP**, compared with the **State Average** |
 | Sales Trend | Chart of daily and cumulative sales against target levels |
 | Sales Calendar | The month at a glance, colour-coded by result |
 | Daily Sales | Each day's **Daily Target**, **Adjusted Target**, **Sales** and **Result** |
@@ -135,7 +135,7 @@ Fill in the incurred date, paid date, category, description, amount, **Paid By**
 - **Expense Ratio** against sales
 - Lines that need review, such as a missing category or recorder
 
-Expense categories are set up in **Settings → Reference Data**.
+Expense categories are set up in **Settings → Reference Data**. Stores without categories receive ten defaults automatically on startup; stores with existing categories are left unchanged.
 
 ## 8. Manpower Efficiency
 
@@ -150,9 +150,9 @@ Open the **Schedule** tab to plan staff shifts for the selected store. The exist
 1. Open **Staff**, click **Add Staff**, and enter each person's name, staff ID, position and **Employment Type** (**Full-Time**, **Part-Time** or **Not Set**). Use **Save & Add Another** to enter a roster quickly. Set the employment type before using the schedule to fill daily staffing figures.
 2. Open **Planner** and choose a week. Select a shift code for each person and day. Changes save automatically.
 3. Enter **Target Manpower** for the week. The **Headcount** row shows scheduled working staff each day and highlights days below target in red. Only shift codes with start and end times count toward headcount.
-4. Open **Config** to add or edit shift codes, labels, times and colors. Start and End must either both be set or both be blank. Shift codes are shared by all stores; deleting a code used by a schedule is not allowed.
+4. Super Admin and Administrator users can open **Config** to add or edit shift codes, labels, times and colors. Start and End must either both be set or both be blank. Shift codes are shared by all stores; deleting a code used by a schedule is not allowed.
 5. Click **Generate** to open the formatted schedule in **View**, then **Print** to print it or save it as a PDF.
-6. Click **Export CSV** in Planner to save one CSV per staff member who has shifts that week. Each file contains `date,shift_code` and is saved at `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+6. Click **Export CSV** in Planner to save one CSV per staff member who has shifts that week. Each file contains `date,shift_code` and is saved at `~/Documents/Opscore Schedules/<store-code>/<week-start>/`. Select a valid week before exporting; a malformed week produces an error instead of an export.
 
 Deleting a staff member also deletes that person's schedule entries. Viewers can read schedules but cannot edit them or export CSV files. Other store-writing roles can manage schedules for their assigned, active stores.
 
@@ -194,7 +194,7 @@ Update the **Status** as it moves: **Open**, **In progress**, **Blocked**, **Don
 
 ### Dashboard
 
-The month at a glance for the selected store: sales, expenses, manpower, stock and actions, with **Alerts** for anything off track. Choose **All Stores** in the Store selector to see an aggregate across your assigned stores.
+The month at a glance for the selected store: sales, expenses, manpower, stock and actions, with **Alerts** for anything off track. Choose **All Stores** in the Store selector to see an aggregate across your assigned stores. A dashboard link such as `/ops?store=12` selects store ID 12 on the first load; changing the selector afterwards takes precedence over the original link.
 
 ### Monthly Report
 
@@ -204,21 +204,21 @@ The Store selector also offers **All Stores**, a live aggregate report across yo
 
 Click **Export** to download the selected report as Excel. A live report is named `opscore-<store>-<month>.xlsx`; a finalized report is named `opscore-<store>-<month>-finalized-v<version>.xlsx`.
 
-For a single-store report, **Live** shows current figures. Users with finalization permission can click **Finalize Month**, review the warnings and confirm to save a finalized version from the current live figures. The **Finalized** view retains every version and provides a version selector. Click **Correct Month** there to create a new version from current live figures; previous versions are never overwritten. Editing a finalized month shows a warning that live figures may now differ.
+For a single-store report, **Live** shows current figures. Users with finalization permission can click **Finalize Month**, review the warnings and confirm to save a finalized version from the current live figures. The **Finalized** view retains every finalized version and provides a version selector; draft snapshots are not presented as finalized. Click **Correct Month** there to create a new version from current live figures; previous versions are never overwritten. Editing a finalized month shows a warning that live figures may now differ.
 
 ## 12. Settings
 
 | Section | What you can do |
 |---|---|
 | Account | See your name and email. **Change Password**. |
-| Reference Data | Upload the Daily Sales Contribution file. Add and rename expense categories. |
+| Reference Data | Super Admin and Administrator users can upload a Daily Sales Contribution file up to 64 MiB, and add or rename expense categories. The store selector reloads that store's categories. |
 | Data (Super Admin) | **Download Backup**. **Restore Database** from a backup file. |
 | About | See the app name, app version and database schema version. Super Admin also sees the database path. |
 
 ### Backup and restore
 
 - **Back up regularly**, especially before reinstalling. Keep the file somewhere safe.
-- **Restore** replaces everything with the backup's data. The current database is saved automatically first, so a restore can be undone.
+- **Restore** saves the current database automatically, then validates and migrates a temporary copy of the uploaded backup. Checks include SQLite integrity, foreign keys, required tables and columns, and schema compatibility. Only a valid temporary copy atomically replaces the live database; the pre-restore backup is kept so a restore can be undone.
 - After a reinstall: create an account, then **Restore**. The restored backup brings back its own accounts too.
 
 ## 13. Roles
@@ -263,9 +263,8 @@ A suggested routine for an ABM with two or more stores:
 | Adjusted Target | Daily Target plus shortfall carried forward |
 | Projected Sales | Expected month-end sales at the current pace |
 | SSSG/Year, SSSG/Month | Sales growth against last year and last month |
-| SPR | Sales per receipt (sales ÷ transactions) |
-| IPR | Total items per receipt |
-| UPT | Total SKU per transaction |
+| BV | Basket value (sales ÷ transactions) |
+| UPT | Units per transaction (units sold ÷ transactions) |
 | ASP | Average selling price (sales ÷ units) |
 | Salary Ratio | Salary cost ÷ sales |
 | Turnover | Resignations ÷ opening headcount |

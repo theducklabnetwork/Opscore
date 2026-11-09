@@ -4,6 +4,14 @@
 
 ### Added
 
+- Bundled the Git-tracked `ducklab/data/DSCSPR_alias_2027.xlsx` reference workbook in `.deb` and Windows builds, with automatic first-run loading into empty reference tables.
+- Added schema v10 for bundled-reference tracking while keeping DSC imports compatible with v5 through v9.
+- Made restores safer with pre-restore backups, integrity and foreign-key checks, temporary-copy migration and atomic replacement; migrations now commit each schema change and version update in one transaction.
+- Restricted global shift-code changes and DSC uploads to configuration managers, with role validation before upload reads and a 64 MiB DSC size limit.
+- Included paid RM0 expenses in Daily Operations, seeded ten default categories for stores without any, and excluded draft snapshots from finalized reports and warnings.
+- Updated Monthly Setup with BV/UPT terms, Target Transaction suggestions, Minimum RTM in HQ defaults, and Copy From Last Month.
+- Fixed Dashboard `?store=` deep links, Action Tracker status refreshes, Settings selectors, stale Store Management state, payroll editing on deactivated stores, and malformed schedule-week CSV exports.
+- Updated release staging with temporary frontend-build databases, actual schema versions in manifests, strict `/_event` health checks, a 60-second readiness deadline (`DUCKLAB_READINESS_TIMEOUT`), `packaging/` in release sources, and installer creation of `/opt/ducklab-current`.
 - Windows compatibility and Windows test coverage.
 - Native Windows application windows through pywebview/WebView2, with Microsoft Edge app mode and the default browser as fallbacks.
 - Self-contained Windows folder builds using standalone CPython 3.14.

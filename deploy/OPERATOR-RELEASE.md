@@ -40,7 +40,7 @@ only, no `..`, no symlinks/hardlinks/devices/fifos). `release.sh`
 re-validates the archive independently and extracts it as the release
 identity with `--no-same-owner --no-same-permissions`, then normalizes
 modes (dirs 750, files 640, exec bits restored from the archive listing). The publisher copies ONLY an explicit include-list
-(`ducklab rxconfig.py assets scripts deploy tests requirements*.txt
+(`ducklab rxconfig.py assets scripts packaging deploy tests requirements*.txt
 AGENTS.md README.md`) with strict excludes (venvs, `.env*`, keys, `*.db`,
 caches, git metadata, screenshots/logs) and refuses symlinks; a post-copy
 audit fails the snapshot if any database, secret, cache, venv, symlink, or
@@ -82,9 +82,10 @@ sudo chown root:ducklab /etc/ducklab/ducklab-release.env
 sudo systemctl daemon-reload
 ```
 
-Do NOT restart the service yet — `/opt/ducklab-current` does not exist until
-the first activation. The legacy service keeps running on `/opt/ducklab`
-until then.
+The initial installer creates `/opt/ducklab-current` pointing at
+`/opt/ducklab`; if that link is absent, do NOT restart the versioned service
+until the first activation creates it. The legacy installation remains at
+`/opt/ducklab`.
 
 ## Running the pipeline as the service identity
 
@@ -143,7 +144,9 @@ sudo systemd-run --uid=ducklab --gid=ducklab --collect --wait --pty \
 ```
 
 Review the manifest (`sudo -u ducklab cat /opt/ducklab-releases/<ID>/release.json`).
-Approve or reject.
+Its `schema_version_code` is read from the staged application's actual
+`SCHEMA_VERSION`. The production frontend build uses a temporary
+`DUCKLAB_DB_PATH`, not the persistent database. Approve or reject.
 
 ### 2. OpenCode stages the cutover (no sudo, no restart)
 
@@ -206,7 +209,11 @@ curl -s https://app.theducklab.com/api/health
 # Log in as Super Admin through the UI once; verify dashboard loads.
 ```
 
-Readiness = all of the above, not merely a clean `systemctl restart`.
+Readiness = all of the above, not merely a clean `systemctl restart`. For
+`verify-staged`, the automated health check polls `/_event` first, treats 404
+as a missing event endpoint and failure, and enforces a 60-second readiness
+deadline by default. Set `DUCKLAB_READINESS_TIMEOUT` to override the deadline
+in seconds.
 
 ### 6. If readiness fails — application rollback
 

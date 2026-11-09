@@ -73,7 +73,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Finalize and Correct on the Monthly Report page | Done |
 
 **Test suite:** 1,069 passing, 115 subtests passing (verified 2026-11-07).
-**Database schema:** version 9.
+**Database schema:** version 10.
 
 ---
 
@@ -83,10 +83,10 @@ The display name is **Opscore**. The code name, Python package and repository st
 
 | Page | Route | What it shows |
 |---|---|---|
-| Dashboard | `/ops` | Month at a glance across modules, with an All Stores view |
+| Dashboard | `/ops` | Month at a glance across modules, with an All Stores view; accepts `/ops?store=<store-id>` deep links |
 | Monthly Report | `/ops/report` | Live or finalized monthly report, All Stores live view, corrections and Excel export |
-| Daily Operations | `/ops/daily` | Daily entry: sales, transactions, units, stock loss, staffing |
-| Sales Performance | `/ops/sales` | Level 1 to 4 achievement, Daily Target, Adjusted Target, SSSG/Year, SSSG/Month, SPR, IPR |
+| Daily Operations | `/ops/daily` | Daily entry: sales, transactions, units, stock loss, staffing, and paid expenses by day |
+| Sales Performance | `/ops/sales` | Level 1 to 4 achievement, Daily Target, Adjusted Target, SSSG/Year, SSSG/Month, BV, UPT |
 | Expenses Management | `/ops/expenses` | Expense register and category budgets |
 | Manpower Efficiency | `/ops/manpower` | Headcount, salary ratio, turnover and weekly staff schedules |
 | Stock Management | `/ops/stock` | Stock loss by code against target |
@@ -134,7 +134,7 @@ cd ~/ducklab-dev && git checkout main && git pull
 scripts/build_deb.sh 1.0
 ```
 
-The package lands in `dist/` as `opscore_<version>_amd64.deb`. The version defaults to today's date. The build bundles Python 3.14 and the prebuilt frontend, so the installed app needs no internet, Node or system Python.
+The package lands in `dist/` as `opscore_<version>_amd64.deb`. The version defaults to today's date. The build bundles Python 3.14, the prebuilt frontend and the Git-tracked reference workbook `ducklab/data/DSCSPR_alias_2027.xlsx`, so the installed app needs no internet, Node or system Python.
 
 ### Install and remove
 
@@ -145,7 +145,7 @@ sudo apt remove opscore
 
 Opscore then appears in the app menu. It opens in its own window on `127.0.0.1:47811`. Closing the window stops the app. Clicking the icon again focuses the open window.
 
-Before upgrading, download a backup in **Settings → Data**. Migrations run automatically on first launch and preserve existing records and accounts. Current schema version: 9 (see `deploy/MIGRATIONS.md` for the full history).
+Before upgrading, download a backup in **Settings → Data**. Migrations run automatically on first launch and preserve existing records and accounts. Each migration and its schema-version update commit together in one transaction. Current schema version: 10 (see `deploy/MIGRATIONS.md` for the full history).
 
 ### Where the data lives
 
@@ -169,7 +169,7 @@ Build on 64-bit Windows with internet access:
 .\scripts\build_windows.ps1 -Version 1.0
 ```
 
-The script bundles standalone CPython 3.14, the locked dependencies and the production frontend in `dist\Opscore`. Copy the entire folder to any Windows 10/11 PC and double-click `Opscore.cmd`; Python, Git and Node are not required. The launcher uses `pythonw.exe` for a windowed start, and the package includes `assets\opscore.ico`. WebView2 is preferred, with Edge app mode and the default browser as fallbacks.
+The script bundles standalone CPython 3.14, the locked dependencies, the production frontend and the reference workbook in `dist\Opscore`. Copy the entire folder to any Windows 10/11 PC and double-click `Opscore.cmd`; Python, Git and Node are not required. The launcher uses `pythonw.exe` for a windowed start, and the package includes `assets\opscore.ico`. WebView2 is preferred, with Edge app mode and the default browser as fallbacks.
 
 The build checks that both frontend entry points exist and that `.web\env.json` targets `127.0.0.1:47811`. The folder build itself does not create an installer or an archive.
 
@@ -192,7 +192,7 @@ User data, including `store_ops.db` and `opscore.log`, is stored under `%LOCALAP
 
 1. Opscore opens at **Create Account**. The first account is Super Admin.
 2. The welcome tour starts, and each page runs its own tour on first visit.
-3. In **Settings → Reference Data**, upload the Daily Sales Contribution file.
+3. Reference data is loaded automatically from the bundled workbook when both reference tables are empty. In **Settings → Reference Data**, Super Admin and Administrator users can upload a replacement Daily Sales Contribution file (up to 64 MiB).
 4. In **Store Management**, add a store and set Monthly Setup.
 
 ---
@@ -218,7 +218,7 @@ Four months (June to September 2026) of demo sales for presentations. Keep the C
    | August | RM 292,007.10 |
    | September | RM 259,646.65 |
 
-4. **Settings → Backup** and keep the file. After any reinstall, create the account and **Restore** it.
+4. **Settings → Data → Download Backup** and keep the file. After any reinstall, create the account and use **Restore Database**. Restore keeps a pre-restore backup, validates and migrates a temporary copy (including integrity and foreign-key checks), then atomically replaces the live database.
 
 CSV headers:
 
@@ -315,6 +315,8 @@ ducklab/
   app_service.py              Authenticated service boundary
   auth_*.py, authz.py         Accounts, sessions, roles
   dsc_import.py               Daily Sales Contribution import
+  reference_bootstrap.py      Bundled reference data and expense-category seeds
+  data/DSCSPR_alias_2027.xlsx Git-tracked default reference workbook
   backup.py                   Backup and restore
   report_export.py            Excel export
   ops_*_pages.py / _state.py  Pages and their state
@@ -356,4 +358,4 @@ assets/                       Logo, icons, favicon
 
 ## Data privacy
 
-Real company data never goes into the repo. Workbook-derived tests live in the git-ignored `tests/private/`. Demo CSVs and reference files stay in `~/Documents/ducklab-private/`. Concept names in code are aliases only.
+Real company data never goes into the repo. Workbook-derived tests live in the git-ignored `tests/private/`. Demo CSVs and private reference files stay in `~/Documents/ducklab-private/`; the aliased default workbook `ducklab/data/DSCSPR_alias_2027.xlsx` is intentionally tracked in Git and bundled with desktop builds. Concept names in code are aliases only.

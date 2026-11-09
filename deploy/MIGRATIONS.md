@@ -43,6 +43,8 @@ application schema version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
   current reference tables came from the bundled workbook. The startup
   loader imports that workbook only when both reference tables are empty;
   an explicit upload clears the flag. Existing reference data is unchanged.
+  DSC import remains compatible with v5 through v9 by detecting whether the
+  `bundled` column exists before writing reference-data metadata.
 
 ## Desktop upgrades
 
@@ -55,7 +57,9 @@ reverse a database migration.
 
 1. **Migrations are additive-only and idempotent.** `init_db()` runs at app
    startup and applies pending steps in ascending order; it never drops or
-   rewrites existing data. `SCHEMA_VERSION` in code is the ceiling.
+   rewrites existing data. Each migration runs in one transaction, including
+   its `PRAGMA user_version` update, so a failed step rolls back completely
+   and can be retried. `SCHEMA_VERSION` in code is the ceiling.
 2. **Backup before any schema change.** A release that raises
    `SCHEMA_VERSION` requires a verified backup (created after the backup
    service reports success) before activation. The release pipeline's

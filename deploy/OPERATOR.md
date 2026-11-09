@@ -20,7 +20,7 @@ started, so the app was never publicly exposed.
 
 ## Layout
 
-- Running app: `/opt/ducklab` (controlled copy; source checkout untouched)
+- Running app: `/opt/ducklab` (controlled copy; source checkout untouched), with `/opt/ducklab-current` symlinked to it for the versioned service
 - Service user: `ducklab` (non-root)
 - DB: `/var/lib/ducklab/store_ops.db` · Backups: `/var/lib/ducklab/backups`
 - Config: `/etc/ducklab/ducklab.env`

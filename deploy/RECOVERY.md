@@ -6,29 +6,14 @@ They are safe to take while the app is running (WAL-aware). The backup job runs
 as the `ducklab` user; the backup directory is owned by `ducklab` (mode 700)
 and backup files are mode 600 — the main app never needs root for backups.
 
-## Restore procedure (live DB)
+## Restore procedure (application)
 
-> Destructive to current state — confirm you have a fresh backup of the
-> *current* DB before restoring an older one.
-
-```bash
-# 1. Stop the app so no writes occur during restore.
-sudo systemctl stop ducklab
-
-# 2. Safety-copy the CURRENT database aside (never lose it).
-sudo -u ducklab cp -a /var/lib/ducklab/store_ops.db \
-          /var/lib/ducklab/store_ops.pre-restore.$(date -u +%Y%m%dT%H%M%SZ).db
-
-# 3. Restore the chosen backup into place.
-sudo install -o ducklab -g ducklab -m 600 \
-  /var/lib/ducklab/backups/store_ops.<timestamp>.db \
-  /var/lib/ducklab/store_ops.db
-
-# 4. Restart and verify.
-sudo systemctl start ducklab
-journalctl -u ducklab -f
-curl -s http://127.0.0.1:3000/ping
-```
+Use **Settings → Data → Restore Database** as Super Admin. Restore first keeps
+an automatic pre-restore backup, then validates and migrates a temporary copy
+of the uploaded database. Validation includes SQLite integrity, foreign keys,
+required tables and columns, and schema compatibility. Only after every check
+and pending migration succeeds does an atomic replacement update the live DB;
+a failed restore leaves it unchanged. The pre-restore backup is retained.
 
 ## Verify a backup is restorable (non-destructive test)
 
@@ -41,6 +26,7 @@ python3 - "$TMP/restore.db" <<'PY'
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 print("integrity:", c.execute("PRAGMA integrity_check").fetchone()[0])
+print("foreign keys:", c.execute("PRAGMA foreign_key_check").fetchall())
 print("users:", c.execute("SELECT COUNT(*) FROM auth_users").fetchone()[0])
 print("schema_version:", c.execute("PRAGMA user_version").fetchone()[0])
 c.close()

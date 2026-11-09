@@ -104,9 +104,15 @@ cross-page refreshes by yielding each other's events. Chart-capable states
 register in `ops_charts.CHART_STATES` at import time so the theme toggle
 can restyle open figures without cross-module imports.
 
+Store-selection refreshes preserve current state: Dashboard applies `?store=`
+once after selector initialization, Action Tracker refreshes active/write
+status, Settings populates both global selectors and reloads categories on a
+store change, and Store Management clears cached rows and privileged controls
+after authentication or authorization failures.
+
 ## 4. Data model
 
-One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **10**). Initialization is idempotent and migrations are additive.
+One SQLite file holds both operations data and accounts. Schema version is tracked in `schema_migrations` and `PRAGMA user_version` (currently **10**). Initialization is idempotent and migrations are additive. Each migration runs in its own transaction, and its `PRAGMA user_version` update commits in that same transaction; a failure rolls back the whole step so it can be retried.
 
 ### Operations tables
 
@@ -164,7 +170,7 @@ Parsing helpers (`parse_money_cents`, `parse_count`, `parse_decimal`) are shared
 
 ### Weekly schedules
 
-Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared. Each staff member has an employment type (`Full-Time`, `Part-Time` or `Not Set`). Only shift codes with working times count toward daily headcount, and schedule staffing uses employment type to separate full-time and part-time workers. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, a sibling of ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/`.
+Schedule reads and writes go through `AppService`, with store access enforced by `authz.py`. Staff rosters and entries are store-scoped; shift codes are shared and can only be changed by users with the global configuration permission (Super Admin or Administrator). Each staff member has an employment type (`Full-Time`, `Part-Time` or `Not Set`). Only shift codes with working times count toward daily headcount, and schedule staffing uses employment type to separate full-time and part-time workers. `ops_schedule_pages.py` provides the planner, generated view and print styling, while `ops_schedule_state.py` (ScheduleState, a sibling of ManpowerState) writes per-staff CSV files to `~/Documents/Opscore Schedules/<store-code>/<week-start>/` and reports malformed schedule weeks as validation errors.
 
 Daily Operations can apply a selected day's schedule through **Apply Schedule**. The **Schedule Preview** shows derived working staff and leave counts, with warnings where applicable, before the user applies them to the entry.
 
@@ -175,7 +181,7 @@ Daily Operations can apply a selected day's schedule through **Apply Schedule**.
 - **Correct:** **Correct Month** creates a new version from current live data and supersedes the previous one. Old versions are kept and never overwritten, and the finalized view provides a version selector.
 - **Export:** `report_export.py` writes the selected report and its source records to Excel. Live reports use `opscore-<store>-<month>.xlsx`; finalized reports use `opscore-<store>-<month>-finalized-v<version>.xlsx`.
 
-Snapshots keep KPI outputs, not a full history of the input records.
+Snapshots keep KPI outputs, not a full history of the input records. Latest-version lookups and the Finalized version list include only rows with `finalized = 1`, so draft snapshots never appear as finalized reports or finalized-month warnings.
 
 Finalize and Correct are available on screen to Super Admin and Administrator users for active single-store months that pass the live-report preflight. All Stores remains live-only.
 
@@ -201,7 +207,7 @@ Deny by default. Store access comes only from explicit assignments, never from m
 | Branch Manager | Assigned stores: daily, stock, expenses, actions. Read reports. |
 | Viewer | Assigned stores: read only |
 
-Payroll figures never enter page state unless the user can manage configuration (Super Admin or Administrator). A deactivated store becomes read-only but keeps all its history.
+Payroll figures never enter page state unless the user can manage configuration (Super Admin or Administrator). A deactivated store becomes read-only but keeps all its history; authorized users can still view its payroll figures, but payroll editing controls are hidden.
 
 ### Environment settings
 
@@ -228,7 +234,9 @@ None of these are needed for the desktop app. There are no secret keys: session 
 - **DSC sheet:** State, Concept, day type (Mon to Sun or PH), and each month's share from November to October.
 - **SPR sheet:** average BV and UPT by Concept and State for each month (the workbook labels these SPR and IPR).
 
-Blank State or Concept cells under a merged group take the value above. Both tables are replaced in one transaction: the whole file imports or nothing changes. The same function powers **Settings → Reference Data** and `scripts/import_dsc.py`.
+Blank State or Concept cells under a merged group take the value above. Both tables are replaced in one transaction: the whole file imports or nothing changes. Import supports database schemas v5 through v9 as well as v10; on pre-v10 databases it updates `reference_data_info` without assuming the later `bundled` column exists. The same function powers **Settings → Reference Data** and `scripts/import_dsc.py`. The upload handler checks the global configuration permission before reading the file and rejects uploads larger than 64 MiB.
+
+The Git-tracked default workbook `ducklab/data/DSCSPR_alias_2027.xlsx` is loaded by `reference_bootstrap.py` only when both reference tables are empty. It is bundled into `.deb` and Windows builds.
 
 ## 9. Backup and restore (`backup.py`)
 
@@ -246,6 +254,7 @@ Super Admin only.
 |---|---|
 | `/opt/opscore/python` | Bundled standalone Python 3.14 with all dependencies |
 | `/opt/opscore/ducklab` | App code |
+| `/opt/opscore/ducklab/data/DSCSPR_alias_2027.xlsx` | Bundled default reference workbook |
 | `/opt/opscore/.web/build` | Prebuilt frontend |
 | `/opt/opscore/packaging` | Launcher and backend scripts |
 | `/usr/share/applications/opscore.desktop` | App menu entry |

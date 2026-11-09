@@ -45,8 +45,9 @@ sudo bash deploy/operator-install.sh
 The installer, in order: preflight checks (port free, no conflicting service,
 existing DB preserved) → creates `ducklab` user → creates `/var/lib/ducklab`
 and `/var/lib/ducklab/backups` → deploys the app copy to `/opt/ducklab` with
-narrow permissions → installs/validates `/etc/ducklab/ducklab.env` (preserving
-an existing one) → installs systemd units + backup script → prompts for the
+narrow permissions → creates `/opt/ducklab-current` as a symlink to that copy
+(the stable path used by `ducklab.service`) → installs/validates
+`/etc/ducklab/ducklab.env` (preserving an existing one) → installs systemd units + backup script → prompts for the
 operator IP and gate password (interactive, never on argv) → builds, validates,
 and atomically installs the **gated** Caddyfile (previous one backed up) →
 **reloads Caddy to activate the gate** → verifies the gate responds.
@@ -56,9 +57,9 @@ It does **not** start the app.
 ### Step B — bootstrap the first Super Admin (before starting the app)
 
 ```bash
-cd /opt/ducklab
+cd /opt/ducklab-current
 sudo -u ducklab DUCKLAB_DB_PATH=/var/lib/ducklab/store_ops.db \
-  /opt/ducklab/.venv/bin/python scripts/bootstrap_admin.py
+  /opt/ducklab-current/.venv/bin/python scripts/bootstrap_admin.py
 ```
 
 Interactive (password not echoed), refuses if a Super Admin exists, no default
