@@ -51,6 +51,10 @@ The display name is **Opscore**. The code name, Python package and repository st
 - [Project Overview](docs/PROJECT_OVERVIEW.md): why Opscore exists, the problem it solves, scope and timeline
 - [Architecture](docs/ARCHITECTURE.md): layers, data model, KPI engine, security and packaging
 - [User Guide](docs/USER_GUIDE.md): installing and using every page
+- [Windows development](docs/windows-dev.md): running and building from source on Windows
+- [Changelog](CHANGELOG.md): release history and current verification results
+
+The overview, architecture, user guide and platform runbooks describe current behavior. Phase-specific documents and `docs/windows-build-plan.md` are historical records, not current procedures. Update the relevant current document when behavior changes; keep dated release entries as historical records.
 
 ---
 
@@ -72,7 +76,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 | Wording pass (remove leftover subtitles and helper sentences) | Pending |
 | Finalize and Correct on the Monthly Report page | Done |
 
-**Test suite:** 1,069 passing, 115 subtests passing (verified 2026-11-07).
+**Latest local verification:** full test suite and production frontend build passed on 2026-11-09. See [Verification results](CHANGELOG.md#verification) for the recorded counts.
 **Database schema:** version 10.
 
 ---

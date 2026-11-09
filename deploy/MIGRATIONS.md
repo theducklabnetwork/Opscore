@@ -1,8 +1,10 @@
 # DuckLab — Database Migration Safety
 
-The store-ops database (`/var/lib/ducklab/store_ops.db`) is versioned by
-`PRAGMA user_version` plus a `schema_migrations` audit table. Current
-application schema version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+The store-ops database is versioned by `PRAGMA user_version` plus a
+`schema_migrations` audit table. The VPS server database is at
+`/var/lib/ducklab/store_ops.db`; desktop installations keep their own database
+in the per-user location documented in `README.md`. Current application schema
+version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 

@@ -291,13 +291,13 @@ Depends on GTK 3 and WebKit2GTK 4.1. Supports Ubuntu 22.04 and newer.
 
 ## 11. Other deployment: VPS
 
-`deploy/` holds an older server pipeline (systemd service, Caddy, versioned releases, rollback, nightly backups) used during early development on the VPS. It's kept for reference. The desktop app is now the main way Opscore is used. See `deploy/RELEASES.md`.
+`deploy/` holds the separate legacy server pipeline (systemd service, Caddy, versioned releases, rollback and nightly backups) used for VPS installations. It is not part of the desktop runtime or desktop build. The desktop app is the primary distribution; use the server runbooks only for an existing or deliberately provisioned VPS installation. See `deploy/RELEASES.md`.
 
 ## 12. Testing
 
 | Kind | Where | Notes |
 |---|---|---|
-| Unit and integration | `tests/` | 1,069 tests and 115 subtests passed on 2026-11-07; disposable databases |
+| Unit and integration | `tests/` | Disposable databases; current results are recorded in `CHANGELOG.md` |
 | KPI rules | `test_kpi_synthetic.py`, `test_ops_levels_synthetic.py`, `test_daily_targets_t1.py` | Hand-made cases for every rule |
 | Security | `test_security.py`, `test_auth.py`, `test_ops_payroll_policy.py` | Roles, sessions, payroll visibility |
 | Packaging | `test_release_pipeline.py`, `test_deployment.py` | Build and release checks |

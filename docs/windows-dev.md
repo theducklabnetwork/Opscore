@@ -8,6 +8,7 @@ These steps run the source checkout directly. They do not create a package or in
 - [Python 3.14](https://www.python.org/downloads/)
 - Git
 
+The first frontend export downloads its build tools and dependencies, so internet access is required during setup and builds.
 Use a normal PowerShell window. Opscore opens in a native WebView2 window when the optional Windows dependency below is installed. Without it, Opscore tries Microsoft Edge app mode and then the default browser.
 
 ## Set up the checkout

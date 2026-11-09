@@ -6,6 +6,8 @@ This guide shows you how to install Opscore, set up your stores and use each pag
 
 ## 1. Install
 
+### Ubuntu and Debian
+
 Opscore runs on **Ubuntu 22.04 or newer** (and Debian-based systems).
 
 1. Download `opscore_<version>_amd64.deb`.
@@ -21,6 +23,18 @@ When upgrading from 0.1.0, your database is automatically upgraded on first laun
 The app opens in its own window. You don't need internet after installing.
 
 **To uninstall:** `sudo apt remove opscore`. Your data is kept.
+
+### Windows
+
+Opscore supports **64-bit Windows 10 and 11**. Windows packaging is implemented, but published-release and real-machine validation remain outstanding.
+
+1. Before upgrading, open your current Opscore and use **Settings → Data → Download Backup**.
+2. Run `Opscore-Setup-<version>.exe`. The per-user installer does not require administrator rights.
+3. Open **Opscore** from the Start Menu. The app uses WebView2, with Microsoft Edge app mode and the default browser as fallbacks.
+
+The installer places the program under `%LOCALAPPDATA%\Programs\Opscore`. Your database, log and backups are kept separately under `%LOCALAPPDATA%\Opscore` and are preserved by upgrades and uninstallation.
+
+A self-contained folder build is also available: copy the whole `Opscore` folder and double-click `Opscore.cmd`. For source setup and build instructions, see [Windows development](windows-dev.md).
 
 ## 2. First launch
 
@@ -250,8 +264,9 @@ A suggested routine for an ABM with two or more stores:
 1. Make sure every day is entered.
 2. Enter payroll figures in Monthly Setup.
 3. Review the **Monthly Report**, then **Export** it.
-4. **Download Backup**.
-5. Set up next month's targets and holidays.
+4. **Finalize Month** to retain a versioned report. If corrections are needed later, use **Correct Month** in the **Finalized** view to create a new version.
+5. **Download Backup**.
+6. Set up next month's targets and holidays.
 
 ## 15. Glossary
 
@@ -279,7 +294,7 @@ A suggested routine for an ABM with two or more stores:
 | A day shows Not Reported | No sales were entered for that day. Enter them, or enter 0 if the store was closed. |
 | Salary ratio shows Awaiting Payroll | Enter the month's payroll figures in Monthly Setup. |
 | "No stores assigned" | Ask the Super Admin to assign you a store, or create one if you're the Super Admin. |
-| Opscore won't open | Check the log at `~/.local/share/opscore/opscore.log`. Another program may be using port 47811. |
+| Opscore won't open | Check `~/.local/share/opscore/opscore.log` on Linux or `%LOCALAPPDATA%\Opscore\opscore.log` on Windows. Another program may be using port 47811. |
 | Forgot the password | There's no reset by email. Restore a backup, or ask whoever set up your account. |
 
-Your data is at `~/.local/share/opscore/store_ops.db`.
+Your database is at `~/.local/share/opscore/store_ops.db` on Linux or `%LOCALAPPDATA%\Opscore\store_ops.db` on Windows.

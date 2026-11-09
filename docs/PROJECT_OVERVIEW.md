@@ -89,6 +89,7 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 - Five roles with server-side access control
 - First-launch account creation and guided page tours
 - Ubuntu/Debian desktop package
+- Self-contained Windows folder and per-user installer (real-machine validation pending)
 
 ### Out of scope (for now)
 
@@ -107,7 +108,7 @@ It also removes the causes: it's ready-made (Tools), needs no formulas (People),
 | Demo data (AB01 / DEMO, June to September 2026) | Done |
 | Light mode default | Done |
 | Weekly scheduling, printing and CSV export | Done |
-| Tests | 1,069 passing, 115 subtests passing (verified 2026-11-07) |
+| Verification | Full test suite and production frontend build passed locally on 2026-11-09 |
 | Wording pass | Pending |
 | Finalize and Correct on screen | Done |
 | Windows packaging and installer | Implemented; published-release and real-machine validation status unverified |
