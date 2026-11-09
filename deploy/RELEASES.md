@@ -1,5 +1,7 @@
 # DuckLab — Versioned Releases & Dependency Management
 
+This document covers the **legacy VPS server release pipeline**. It is not used to build or run the desktop app; see `README.md` for desktop builds.
+
 ## Dependency management
 
 - `requirements.txt` — direct runtime dependencies only (`reflex`,

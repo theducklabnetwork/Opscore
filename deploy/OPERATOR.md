@@ -1,7 +1,7 @@
 # DuckLab Operations — Operator Quick Reference (post-install)
 
-Short operational runbook for after `deploy/operator-install.sh` has been run
-with sudo. Full procedure: `deploy/DEPLOYMENT.md`.
+Short **VPS server** runbook for after `deploy/operator-install.sh` has been run
+with sudo. It does not apply to the desktop app. Full procedure: `deploy/DEPLOYMENT.md`.
 
 ## Maintenance gate (active until public launch is approved)
 

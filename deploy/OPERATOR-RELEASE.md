@@ -1,6 +1,6 @@
 # DuckLab — Operator Release Runbook
 
-This runbook is the operator-side workflow for versioned releases.
+This runbook is the operator-side workflow for **versioned VPS server releases**, not desktop application builds.
 OpenCode (unprivileged) prepares and validates releases; the operator
 (sudo) performs the one-time layout setup and each cutover/rollback.
 

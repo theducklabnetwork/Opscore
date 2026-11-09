@@ -1,6 +1,6 @@
 # DuckLab Operations — Legacy Initial-Install Runbook
 
-> **Legacy procedure.** This runbook documents the initial non-versioned `/opt/ducklab` installation. Future releases use the versioned pipeline in `deploy/RELEASES.md` and `deploy/OPERATOR-RELEASE.md`; do not repeat this procedure for routine updates.
+> **Legacy server procedure.** This runbook documents the initial non-versioned `/opt/ducklab` VPS installation. It does not apply to the desktop app. Future server releases use the versioned pipeline in `deploy/RELEASES.md` and `deploy/OPERATOR-RELEASE.md`; do not repeat this procedure for routine updates.
 
 Target: **https://app.theducklab.com/** on DuckVM (Ubuntu 26.04, Caddy,
 systemd, SQLite). Operator runbook for the approved cutover.

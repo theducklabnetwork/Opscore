@@ -18,9 +18,19 @@
 - Per-user Windows installer built with Inno Setup and installed under `%LOCALAPPDATA%\Programs\Opscore`.
 - GitHub Actions workflows for Windows checks, frozen-build smoke tests and installer release artifacts.
 
+### Fixed
+
+- Rotated stale WebView profiles after application version changes while preserving the database and other user data.
+
 ### Release status
 
 - Windows packaging and installer automation are implemented in source. Published-release and real-machine validation status are unverified.
+
+### Verification
+
+- 1,113 tests passed and 131 subtests passed on 2026-11-09.
+- The production Reflex frontend export passed with a disposable database on 2026-11-09.
+- One non-failing Starlette deprecation warning was reported for its HTTPX test-client integration.
 
 ## v1.0 — 2026-10-31
 
