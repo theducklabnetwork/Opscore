@@ -147,6 +147,7 @@ One SQLite file holds both operations data and accounts. Schema version is track
 | `auth_sessions` | Server-side sessions (12-hour lifetime) |
 | `auth_audit_events` | Sign-in, password and admin events |
 | `auth_page_tours` | Which page tours each user has completed |
+| `auth_recovery_keys` | SHA-256 hashes of single-use recovery keys (raw keys never stored) |
 
 ## 5. KPI engine (`kpi.py`)
 
@@ -194,6 +195,10 @@ Finalize and Correct are available on screen to Super Admin and Administrator us
 - Signing in rotates the session. Signing out revokes it on the server.
 - Sign-in attempts are rate-limited per email and per client, stored in SQLite.
 - The session endpoint and the WebSocket both check that Origin matches Host.
+
+### Password recovery (recovery keys)
+
+Each account can hold one **single-use recovery key**, issued at first-admin bootstrap and replaceable in **Settings → Account → Recovery Key** (requires the current password). Only the key's SHA-256 hash is stored; the raw key is shown once and saved by the owner as a recovery-kit text file (per-user data directory, owner-only permissions, or a browser download). On `/login`, **Forgot password?** accepts the key and a new password via `POST /api/session` `action=recover`: the key is consumed atomically, the Argon2id hash replaced, all sessions revoked, and a replacement key returned once in the response. Failures return a generic "Invalid recovery key" and are rate-limited per client; keys and passwords never enter audit metadata or logs. If both password and key are lost, the offline `scripts/recover_admin_password.py` remains the last resort.
 
 ### Authorization (`authz.py`)
 

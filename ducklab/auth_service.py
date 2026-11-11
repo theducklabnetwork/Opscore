@@ -10,6 +10,12 @@ Session model:
   changing their password revokes all of their sessions.
 - Login is rate-limited per normalized email (in-process limiter) and
   failures produce a generic message to avoid account enumeration.
+
+Recovery keys: each user may hold one single-use recovery key (see
+auth_recovery_keys). Only the SHA-256 hash of the key is stored; the raw
+key is returned once at issuance and never persisted. Verification and use
+consume the key atomically (single UPDATE guarded by used_at IS NULL), so
+concurrent attempts cannot reuse it.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ import secrets
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -86,6 +92,10 @@ class User:
     store_ids: tuple[int, ...]
     last_login_at: Optional[str]
     tour_done: bool = False
+    # Raw recovery key, populated ONLY by bootstrap_first_admin so the
+    # operator sees it exactly once; "" everywhere else. Never persisted,
+    # logged, or sent to the client outside the bootstrap response.
+    recovery_key: str = ""
 
     @property
     def is_super_admin(self) -> bool:
@@ -106,6 +116,42 @@ def normalize_email(email: str) -> str:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# recovery keys
+# ---------------------------------------------------------------------------
+# A recovery key is a one-time credential that resets a forgotten password
+# without email delivery (the app has no mail integration). Format:
+# "DLAB-" + 7 dash-separated groups of 5 unambiguous uppercase/digit chars
+# (no 0/O/1/I), 32 secrets-drawn characters ≈ 160 bits of entropy.
+_RECOVERY_KEY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_RECOVERY_KEY_RE = re.compile(
+    r"^DLAB(?:-[A-Z2-9]{5}){7}$", re.IGNORECASE)
+
+
+def generate_recovery_key() -> str:
+    """Return a new random recovery key in display form."""
+    groups = ["".join(secrets.choice(_RECOVERY_KEY_ALPHABET)
+                      for _ in range(5)) for _ in range(7)]
+    return "DLAB-" + "-".join(groups)
+
+
+def normalize_recovery_key(key: str) -> str:
+    """Canonical form: stripped, uppercased, whitespace collapsed out.
+
+    Users may paste the key with stray spaces or lowercase letters; dashes
+    are required as printed.
+    """
+    return re.sub(r"\s+", "", key or "").upper()
+
+
+def is_recovery_key_format(key: str) -> bool:
+    return bool(_RECOVERY_KEY_RE.match(normalize_recovery_key(key)))
+
+
+def _hash_recovery_key(key: str) -> str:
+    return hashlib.sha256(normalize_recovery_key(key).encode()).hexdigest()
 
 
 class _RateLimiter:
@@ -435,6 +481,30 @@ class AuthService:
         if limiter_key:
             self._limiter.record_failure(limiter_key)
 
+    def verify_password(self, email: str, password: str) -> bool:
+        """Re-authenticate without creating a session (e.g. Settings
+        re-auth prompts). Returns False for unknown email, wrong password,
+        or a disabled account; never raises for those cases."""
+        norm = normalize_email(email)
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT password_hash, is_active FROM auth_users "
+                "WHERE email = ?", (norm,)).fetchone()
+            if row is None:
+                try:
+                    _ph.verify(_DUMMY_HASH, password or "")
+                except (VerifyMismatchError, VerificationError, InvalidHash):
+                    pass
+                return False
+            try:
+                _ph.verify(row["password_hash"], password or "")
+            except (VerifyMismatchError, VerificationError, InvalidHash):
+                return False
+            return bool(row["is_active"])
+        finally:
+            conn.close()
+
     def authenticate_token(self, token: str) -> User:
         """Resolve a raw session token to an active user, or raise."""
         if not token:
@@ -695,11 +765,113 @@ class AuthService:
             conn.close()
 
     # ------------------------------------------------------------------
+    # recovery keys (single-use; raw keys never stored or logged)
+    # ------------------------------------------------------------------
+    def _issue_recovery_key(self, conn, user_id: int) -> str:
+        """Issue a fresh key inside an open transaction; returns the raw
+        key exactly once. Any previous key is revoked."""
+        key = generate_recovery_key()
+        conn.execute(
+            "INSERT INTO auth_recovery_keys (user_id, key_hash) "
+            "VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET "
+            "key_hash = excluded.key_hash, "
+            "created_at = datetime('now'), used_at = NULL",
+            (user_id, _hash_recovery_key(key)))
+        self._audit(conn, "recovery_key_issue", "success", user_id)
+        return key
+
+    def has_recovery_key(self, user_id: int) -> bool:
+        """True when the user holds an unused recovery key."""
+        conn = self._connect()
+        try:
+            return conn.execute(
+                "SELECT 1 FROM auth_recovery_keys "
+                "WHERE user_id = ? AND used_at IS NULL", (user_id,)
+            ).fetchone() is not None
+        finally:
+            conn.close()
+
+    def regenerate_recovery_key(self, user_id: int) -> str:
+        """Revoke any existing key and return a new raw key once."""
+        conn = self._connect()
+        try:
+            self._load_user(conn, user_id)
+            key = self._issue_recovery_key(conn, user_id)
+            conn.commit()
+            return key
+        finally:
+            conn.close()
+
+    def recover_password(self, recovery_key: str, new_password: str,
+                         limiter_key: Optional[str] = None) -> str:
+        """Reset a forgotten password with a valid single-use recovery key.
+
+        On success, atomically in one transaction: the key is consumed, the
+        password hash is replaced, every session is revoked, and a fresh
+        replacement key is issued. Returns the replacement raw key exactly
+        once so the caller can hand it to the account owner.
+
+        Failures are always generic AuthenticationError("Invalid recovery
+        key") so the response never reveals whether a key exists. The
+        limiter is checked first and failures recorded against the client
+        key (IP); there is no per-email bucket because recovery does not
+        ask for an email.
+        """
+        if limiter_key:
+            self._limiter.check(limiter_key)
+        norm = normalize_recovery_key(recovery_key)
+        if not is_recovery_key_format(norm):
+            if limiter_key:
+                self._limiter.record_failure(limiter_key)
+            raise AuthenticationError("Invalid recovery key")
+        self.validate_password(new_password)
+        conn = self._connect()
+        try:
+            # Atomic single-use consume: only one concurrent request can
+            # flip used_at from NULL for this key hash.
+            cur = conn.execute(
+                "UPDATE auth_recovery_keys SET used_at = datetime('now') "
+                "WHERE key_hash = ? AND used_at IS NULL",
+                (_hash_recovery_key(norm),))
+            if cur.rowcount != 1:
+                conn.rollback()
+                if limiter_key:
+                    self._limiter.record_failure(limiter_key)
+                raise AuthenticationError("Invalid recovery key")
+            row = conn.execute(
+                "SELECT user_id FROM auth_recovery_keys WHERE key_hash = ?",
+                (_hash_recovery_key(norm),)).fetchone()
+            user_id = row["user_id"]
+            conn.execute(
+                "UPDATE auth_users SET password_hash = ?, updated_at = ?, "
+                "password_changed_at = ? WHERE id = ?",
+                (_ph.hash(new_password), _now_iso(), _now_iso(), user_id))
+            conn.execute(
+                "UPDATE auth_sessions SET revoked_at = ? "
+                "WHERE user_id = ? AND revoked_at IS NULL",
+                (_now_iso(), user_id))
+            self._audit(conn, "password_recovery", "success", user_id)
+            # The consumed key must be replaced immediately: the owner
+            # saves the replacement while the success screen is showing.
+            new_key = self._issue_recovery_key(conn, user_id)
+            conn.commit()
+        finally:
+            conn.close()
+        if limiter_key:
+            self._limiter.clear(limiter_key)
+        return new_key
+
+    # ------------------------------------------------------------------
     # first-admin bootstrap (first-launch only; refuses once any user
     # account exists)
     # ------------------------------------------------------------------
     def bootstrap_first_admin(self, email: str, display_name: str,
                               password: str) -> User:
+        """Create the first (Super Admin) account and its recovery key.
+
+        The returned User carries the raw recovery key in `recovery_key`
+        (exactly once, in-memory only) so the bootstrap transport can hand
+        it to the operator to save."""
         conn = self._connect()
         try:
             existing = conn.execute(
@@ -718,7 +890,8 @@ class AuthService:
                 "INSERT INTO auth_user_roles (user_id, role_id) VALUES (?,?)",
                 (user.id, rid))
             self._audit(conn, "bootstrap_first_admin", "success", user.id)
+            key = self._issue_recovery_key(conn, user.id)
             conn.commit()
-            return self._load_user(conn, user.id)
+            return replace(self._load_user(conn, user.id), recovery_key=key)
         finally:
             conn.close()

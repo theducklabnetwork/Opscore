@@ -16,6 +16,7 @@ import reflex as rx
 
 from ducklab import auth_service
 from ducklab import ops_charts
+from ducklab import platform_utils
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthenticationError
 from ducklab.session_transport import (
@@ -44,6 +45,18 @@ class AuthState(rx.State):
     bootstrap_password: str = ""
     bootstrap_confirm: str = ""
     has_users: bool = True
+    # Raw recovery key held in memory exactly once (bootstrap success,
+    # recovery success, or settings regeneration) until the operator saves
+    # the kit. Never persisted or re-requested from the server.
+    recovery_key: str = ""
+    recovery_email: str = ""     # account the pending key belongs to
+    kit_error: str = ""
+
+    # recovery flow ("recover" | "reset" | "done" | "")
+    recovery_mode: str = ""
+    recovery_key_input: str = ""
+    recovery_password: str = ""
+    recovery_confirm: str = ""
 
     @rx.event
     async def toggle_is_dark(self) -> None:
@@ -201,18 +214,154 @@ class AuthState(rx.State):
             ok = isinstance(result, dict) and bool(result.get("ok"))
             error = str(result.get("error") or "") if isinstance(
                 result, dict) else ""
+            key = str(result.get("recovery_key") or "") if isinstance(
+                result, dict) else ""
         except Exception:
-            ok, error = False, ""
+            ok, error, key = False, "", ""
         if not ok:
             self.has_users = app_service.auth.user_count() > 0
             self.error = error or (
                 "Could not create the account. Please try again.")
             return None
         # The endpoint created the Super Admin account and set the
-        # HttpOnly session cookie; full navigation re-handshakes the
-        # WebSocket with the new cookie.
-        self.reset()
+        # HttpOnly session cookie. The recovery key is shown exactly once:
+        # the operator must save the kit before entering the dashboard.
+        self.recovery_key = key
+        self.recovery_email = self.bootstrap_email
+        self.kit_error = ""
+        self.bootstrap_name = self.bootstrap_email = ""
+        return None
+
+    # ------------------------------------------------------------------
+    # recovery kit (shown once after bootstrap / recovery / regeneration)
+    # ------------------------------------------------------------------
+    @rx.event
+    def save_recovery_kit(self) -> rx.event.EventSpec | None:
+        """Write the recovery kit into the per-user data directory."""
+        self.kit_error = ""
+        if not self.recovery_key:
+            self.kit_error = "No recovery key to save."
+            return None
+        try:
+            platform_utils.write_recovery_kit(self.recovery_key,
+                                              self.recovery_email)
+        except OSError:
+            self.kit_error = (
+                "Could not write the kit file. Use Download Kit instead, "
+                "or copy the key and keep it private.")
+        return None
+
+    @rx.event
+    def download_recovery_kit(self) -> rx.event.EventSpec:
+        """Offer the same kit as a browser download (no server file)."""
+        body = (
+            "Opscore account recovery kit\n"
+            "============================\n\n"
+            f"Account: {self.recovery_email}\n"
+            f"Recovery key: {self.recovery_key}\n\n"
+            "Use this key on the sign-in page under 'Forgot password?' to "
+            "set a new password. The key is single-use: after a successful "
+            "recovery a replacement key is issued. Keep this file private; "
+            "do not upload, email, or sync it to cloud storage.\n"
+        )
+        return rx.download(data=body.encode("utf-8"),
+                           filename=platform_utils.RECOVERY_KIT_NAME)
+
+    @rx.event
+    def finish_bootstrap(self) -> rx.event.EventSpec:
+        """Leave the recovery-kit screen after the operator saved it."""
+        # Full navigation re-handshakes the WebSocket with the new cookie.
+        self.recovery_key = ""
         return rx.call_script("window.location.assign('/ops')")
+
+    @rx.event
+    def clear_recovery_kit(self) -> None:
+        """Post-recovery kit dismissal: back to the plain sign-in form."""
+        self.recovery_key = ""
+        self.recovery_email = ""
+        self.kit_error = ""
+        self.recovery_mode = ""
+        self.error = ""
+
+    # ------------------------------------------------------------------
+    # forgot-password recovery (single-use recovery key)
+    # ------------------------------------------------------------------
+    @rx.event
+    def open_recovery(self) -> None:
+        self.recovery_mode = "recover"
+        self.error = ""
+        self.recovery_key_input = ""
+        self.recovery_password = self.recovery_confirm = ""
+        self.show_password = False
+
+    @rx.event
+    def close_recovery(self, *args) -> None:
+        self.recovery_mode = ""
+        self.recovery_key_input = ""
+        self.recovery_password = self.recovery_confirm = ""
+        self.error = ""
+
+    @rx.event
+    def set_recovery_key_input(self, value: str) -> None:
+        self.recovery_key_input = value
+
+    @rx.event
+    def set_recovery_password(self, value: str) -> None:
+        self.recovery_password = value
+
+    @rx.event
+    def set_recovery_confirm(self, value: str) -> None:
+        self.recovery_confirm = value
+
+    @rx.event
+    def submit_recovery_key(self) -> rx.event.EventSpec | None:
+        self.error = ""
+        if not self.recovery_key_input.strip():
+            self.error = "Enter your recovery key."
+            return None
+        self.recovery_mode = "reset"
+        return None
+
+    @rx.event
+    def submit_recovery(self) -> rx.event.EventSpec | None:
+        self.error = ""
+        if self.recovery_password != self.recovery_confirm:
+            self.error = "Passwords do not match"
+            return None
+        if len(self.recovery_password) < auth_service.MIN_PASSWORD_LENGTH:
+            self.error = PASSWORD_RULES
+            return None
+        self.loading = True
+        yield
+        yield rx.call_script(
+            _RECOVERY_JS,
+            callback=AuthState.recovery_result,
+        )
+
+    @rx.event
+    def recovery_result(self, result) -> rx.event.EventSpec | None:
+        self.loading = False
+        self.recovery_password = self.recovery_confirm = ""
+        self.recovery_key_input = ""
+        try:
+            ok = isinstance(result, dict) and bool(result.get("ok"))
+            error = str(result.get("error") or "") if isinstance(
+                result, dict) else ""
+            key = str(result.get("recovery_key") or "") if isinstance(
+                result, dict) else ""
+        except Exception:
+            ok, error, key = False, "", ""
+        if not ok:
+            self.error = error or "Invalid recovery key"
+            self.recovery_mode = "recover"
+            return None
+        # Password reset succeeded and all sessions were revoked. Show the
+        # replacement key once; the user then returns to sign in normally.
+        self.recovery_key = key
+        self.recovery_email = ""
+        self.kit_error = ""
+        self.recovery_mode = "done"
+        return None
 
 
 # fetch() to the session endpoint. Production single-port serves frontend +
@@ -237,6 +386,29 @@ _LOGIN_JS = """
                       window.location.hostname + ':8000');
   }
   return {ok: !!(r && r.ok)};
+})()
+"""
+
+_RECOVERY_JS = """
+(async () => {
+  const attempt = (base) => fetch(base + '/api/session', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'recover',
+                          recovery_key: document.getElementById('recovery-key')?.value ?? '',
+                          password: document.getElementById('recovery-password')?.value ?? ''}),
+  }).catch(() => null);
+  let r = await attempt(window.location.origin);
+  if (!r || r.status === 405) {  // dev: Vite port has no /api proxy -> :8000
+    r = await attempt(window.location.protocol + '//' +
+                      window.location.hostname + ':8000');
+  }
+  if (!r) return {ok: false};
+  let body = {};
+  try { body = await r.json(); } catch (e) {}
+  if (r.ok) return {ok: true, recovery_key: body.recovery_key || ''};
+  return {ok: false, error: body.error || ''};
 })()
 """
 
@@ -431,12 +603,17 @@ def login_page() -> rx.Component:
             rx.vstack(
                 _brand(),
                 rx.cond(
-                    AuthState.has_users,
-                    _sign_in_form(),
-                    _bootstrap_form(),
+                    AuthState.recovery_key != "",
+                    _recovery_kit_panel(),
+                    rx.cond(
+                        AuthState.has_users,
+                        _sign_in_form(),
+                        _bootstrap_form(),
+                    ),
                 ),
                 rx.cond(
-                    AuthState.has_users,
+                    (AuthState.has_users)
+                    & (AuthState.recovery_key == ""),
                     rx.text(
                         "Private access. Accounts are provisioned by your "
                         "administrator.",
@@ -458,6 +635,55 @@ def login_page() -> rx.Component:
         padding="1em",
         ),
         position="relative",
+    )
+
+
+def _recovery_kit_panel() -> rx.Component:
+    """Shown exactly once while AuthState.recovery_key is set: after
+    bootstrap (Continue to dashboard) and after a successful recovery
+    (Back to sign in)."""
+    return rx.vstack(
+        rx.hstack(
+            rx.icon("key-round", size=20, color=rx.color("indigo", 9)),
+            rx.heading("Save Your Recovery Key", size="5"),
+            spacing="2",
+        ),
+        rx.text(
+            "This key can reset your password if you forget it. It is "
+            "single-use and shown only once. Save the kit file now and "
+            "keep it private — Opscore cannot display it again.",
+            size="2", color=rx.color("slate", 11),
+        ),
+        rx.code(AuthState.recovery_key, size="2", width="100%",
+                style={"overflowWrap": "anywhere", "userSelect": "all"}),
+        rx.cond(AuthState.kit_error != "",
+                rx.callout(AuthState.kit_error, icon="triangle-alert",
+                           color_scheme="red", variant="soft",
+                           width="100%", role="alert")),
+        rx.vstack(
+            rx.button("Save Kit to Data Folder",
+                      on_click=AuthState.save_recovery_kit,
+                      color_scheme="indigo", size="3", width="100%",
+                      id="kit-save"),
+            rx.button("Download Kit",
+                      on_click=AuthState.download_recovery_kit,
+                      variant="soft", color_scheme="indigo", size="3",
+                      width="100%", id="kit-download"),
+            rx.cond(
+                AuthState.has_users,
+                rx.button("Back to Sign In",
+                          on_click=AuthState.clear_recovery_kit,
+                          variant="ghost", size="3", width="100%",
+                          id="kit-done-recovery"),
+                rx.button("Continue to Dashboard",
+                          on_click=AuthState.finish_bootstrap,
+                          color_scheme="indigo", size="3", width="100%",
+                          id="kit-done-bootstrap"),
+            ),
+            spacing="3", width="100%",
+        ),
+        spacing="4",
+        width="100%",
     )
 
 
@@ -523,10 +749,108 @@ def _sign_in_form() -> rx.Component:
                 color_scheme="indigo",
                 id="login-submit",
             ),
+            rx.link(
+                "Forgot password?",
+                size="2",
+                color=rx.color("indigo", 9),
+                on_click=AuthState.open_recovery,
+                id="forgot-password",
+                cursor="pointer",
+                text_align="center",
+            ),
+            _recovery_dialog(),
             spacing="4",
             width="100%",
         ),
         on_submit=lambda _: AuthState.sign_in(),
+    )
+
+
+def _recovery_dialog() -> rx.Component:
+    """Forgot-password flow driven by a single-use recovery key."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Recover Account"),
+            rx.cond(
+                AuthState.recovery_mode == "recover",
+                rx.vstack(
+                    rx.text(
+                        "Enter the recovery key from your recovery kit. "
+                        "It is single-use: a successful recovery issues a "
+                        "replacement key.",
+                        size="2", color=rx.color("slate", 11),
+                    ),
+                    _field(
+                        "Recovery Key",
+                        placeholder="DLAB-XXXXX-XXXXX-…",
+                        required=True,
+                        value=AuthState.recovery_key_input,
+                        on_change=AuthState.set_recovery_key_input,
+                        id="recovery-key",
+                    ),
+                    _error_callout(),
+                    rx.hstack(
+                        rx.button("Cancel", variant="soft",
+                                  color_scheme="gray",
+                                  on_click=AuthState.close_recovery),
+                        rx.button("Continue", color_scheme="indigo",
+                                  on_click=AuthState.submit_recovery_key,
+                                  id="recovery-key-submit"),
+                        spacing="3", justify="end", width="100%",
+                    ),
+                    spacing="4", width="100%",
+                ),
+                rx.form(
+                    rx.vstack(
+                        rx.text(
+                            "Choose a new password. This immediately "
+                            "consumes the recovery key and signs out all "
+                            "sessions.",
+                            size="2", color=rx.color("slate", 11),
+                        ),
+                        _field(
+                            "New Password",
+                            placeholder="••••••••••",
+                            type="password",
+                            required=True,
+                            value=AuthState.recovery_password,
+                            on_change=AuthState.set_recovery_password,
+                            id="recovery-password",
+                        ),
+                        _field(
+                            "Confirm New Password",
+                            placeholder="••••••••••",
+                            type="password",
+                            required=True,
+                            value=AuthState.recovery_confirm,
+                            on_change=AuthState.set_recovery_confirm,
+                            id="recovery-confirm",
+                        ),
+                        rx.text(PASSWORD_RULES, size="1",
+                                color=rx.color("slate", 10)),
+                        _error_callout(),
+                        rx.hstack(
+                            rx.button("Cancel", variant="soft",
+                                      color_scheme="gray", type="button",
+                                      on_click=AuthState.close_recovery),
+                            rx.button(
+                                rx.cond(AuthState.loading,
+                                        "Resetting…", "Reset Password"),
+                                type="submit",
+                                loading=AuthState.loading,
+                                color_scheme="indigo",
+                                id="recovery-submit"),
+                            spacing="3", justify="end", width="100%",
+                        ),
+                        spacing="4", width="100%",
+                    ),
+                    on_submit=lambda _: AuthState.submit_recovery(),
+                ),
+            ),
+            max_width="440px",
+        ),
+        open=AuthState.recovery_mode != "",
+        on_open_change=lambda _open: AuthState.close_recovery(),
     )
 
 
