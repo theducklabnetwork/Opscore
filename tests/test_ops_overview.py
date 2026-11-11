@@ -41,8 +41,10 @@ class OverviewFixture(unittest.TestCase):
                 turnover_threshold=0.05,
                 salary_basic_allowance_cents=rm(10000),
                 overtime_cents=rm(1000))
-        self.cat = self.app.add_expense_category(
-            self.admin, self.sa, "Electricity", sort_order=1)
+        # Reuse the default "Electricity" category seeded by create_store().
+        self.cat = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.sa)
+            if c.name == "Electricity")
         self.app.set_expense_budget(self.admin, self.sa, self.month,
                                     self.cat, rm(100))  # tiny -> over budget
         # sales below target + expenses over budget + review line + overdue

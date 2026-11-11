@@ -45,10 +45,13 @@ class ExpenseFixture(unittest.TestCase):
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 salary_basic_allowance_cents=rm(10500),
                 overtime_cents=rm(1000))
-        self.cat_a = self.app.add_expense_category(
-            self.admin, self.sa, "Electricity", sort_order=1)
-        self.cat_b = self.app.add_expense_category(
-            self.admin, self.sb, "Electricity", sort_order=1)
+        # Reuse the default "Electricity" categories seeded by create_store().
+        self.cat_a = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.sa)
+            if c.name == "Electricity")
+        self.cat_b = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.sb)
+            if c.name == "Electricity")
 
     def tearDown(self):
         self._tmp.cleanup()

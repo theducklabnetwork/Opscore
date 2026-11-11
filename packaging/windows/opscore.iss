@@ -1,9 +1,54 @@
 ; Per-user installer for the self-contained folder from scripts/build_windows.ps1.
-; Pass the version written to dist\Opscore\RELEASE:
-;   ISCC.exe /DOPSCORE_VERSION=1.0 packaging\windows\opscore.iss
+; The version is read from the packaged RELEASE file at compile time, so the
+; installer cannot drift from the folder it packages. Optionally pass
+; /DOPSCORE_VERSION=<version> to require an exact expected version.
+;
+; Candidate builds (the default) package a candidate folder and write a
+; candidate installer, leaving the published release artifacts untouched:
+;   ISCC.exe /DOPSCORE_PACKAGE_NAME=Opscore-candidate packaging\windows\opscore.iss
+; A release build packages dist\Opscore:
+;   ISCC.exe packaging\windows\opscore.iss
 
-#ifndef OPSCORE_VERSION
-  #error "Define OPSCORE_VERSION with the value from dist\Opscore\RELEASE."
+#define OPSCORE_DIST "..\..\dist"
+#ifndef OPSCORE_PACKAGE_NAME
+  #define OPSCORE_PACKAGE_NAME "Opscore"
+#endif
+#define OPSCORE_PACKAGE OPSCORE_DIST + "\" + OPSCORE_PACKAGE_NAME
+#define OPSCORE_RELEASE OPSCORE_PACKAGE + "\RELEASE"
+#define OPSCORE_RELEASE_HANDLE FileOpen(OPSCORE_RELEASE)
+#if OPSCORE_RELEASE_HANDLE == 0
+  #error "Build the package folder first: its RELEASE file is missing."
+#endif
+#define OPSCORE_PACKAGE_VERSION Trim(FileRead(OPSCORE_RELEASE_HANDLE))
+#expr FileClose(OPSCORE_RELEASE_HANDLE)
+#ifndef OPSCORE_PACKAGE_VERSION
+  #error "The packaged RELEASE file is empty."
+#endif
+#ifdef OPSCORE_VERSION
+  #if OPSCORE_VERSION != OPSCORE_PACKAGE_VERSION
+    #error "OPSCORE_VERSION does not match the packaged RELEASE file."
+  #endif
+#else
+  #define OPSCORE_VERSION OPSCORE_PACKAGE_VERSION
+#endif
+
+; The installer file name follows the package folder: a candidate package
+; produces a candidate installer and never replaces a published one.
+#ifndef OPSCORE_OUTPUT_NAME
+  #if OPSCORE_PACKAGE_NAME == "Opscore"
+    #define OPSCORE_OUTPUT_NAME "Opscore-Setup-" + OPSCORE_VERSION
+  #else
+    #define OPSCORE_OUTPUT_NAME "Opscore-Setup-" + OPSCORE_VERSION + "-candidate"
+  #endif
+#endif
+#define OPSCORE_OUTPUT_PATH OPSCORE_DIST + "\" + OPSCORE_OUTPUT_NAME + ".exe"
+
+; Never silently replace an existing installer. Pass /DOPSCORE_ALLOW_OVERWRITE
+; to allow it deliberately.
+#ifndef OPSCORE_ALLOW_OVERWRITE
+  #if FileExists(OPSCORE_OUTPUT_PATH)
+    #error "The installer output already exists. Remove it or pass /DOPSCORE_ALLOW_OVERWRITE."
+  #endif
 #endif
 
 [Setup]
@@ -15,8 +60,8 @@ DefaultDirName={localappdata}\Programs\Opscore
 DefaultGroupName=Opscore
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
-OutputDir=..\..\dist
-OutputBaseFilename=Opscore-Setup-{#OPSCORE_VERSION}
+OutputDir={#OPSCORE_DIST}
+OutputBaseFilename={#OPSCORE_OUTPUT_NAME}
 SetupIconFile=..\..\assets\opscore.ico
 UninstallDisplayIcon={app}\assets\opscore.ico
 Compression=lzma2
@@ -30,7 +75,7 @@ AppMutex=Local\Opscore
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\..\dist\Opscore\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#OPSCORE_PACKAGE}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 ; Launch pythonw.exe directly: unlike Opscore.cmd, this never opens a console.

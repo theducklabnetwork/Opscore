@@ -45,7 +45,10 @@ class SnapFixture(unittest.TestCase):
             turnover_threshold=0.45, stock_loss_target=0.015,
             part_timer_factor=0.5,
             salary_basic_allowance_cents=rm(10000), overtime_cents=rm(1000))
-        cat = self.svc.add_expense_category(sid, "Electricity")
+        # create_store() now seeds the default categories; reuse the seeded
+        # "Electricity" category instead of inserting a duplicate.
+        cat = next(c.id for c in self.repo.get_expense_categories(sid)
+                   if c.name == "Electricity")
         return sid, cat
 
     def count_snapshots(self):

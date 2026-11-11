@@ -295,6 +295,6 @@ A suggested routine for an ABM with two or more stores:
 | Salary ratio shows Awaiting Payroll | Enter the month's payroll figures in Monthly Setup. |
 | "No stores assigned" | Ask the Super Admin to assign you a store, or create one if you're the Super Admin. |
 | Opscore won't open | Check `~/.local/share/opscore/opscore.log` on Linux or `%LOCALAPPDATA%\Opscore\opscore.log` on Windows. Another program may be using port 47811. |
-| Forgot the password | There's no reset by email. Restore a backup, or ask whoever set up your account. |
+| Forgot the password | There's no reset by email. Ask whoever set up your account, or run the offline recovery tool `scripts/recover_admin_password.py` (it backs up the database first and revokes your old sessions). Restoring a backup also works. |
 
 Your database is at `~/.local/share/opscore/store_ops.db` on Linux or `%LOCALAPPDATA%\Opscore\store_ops.db` on Windows.

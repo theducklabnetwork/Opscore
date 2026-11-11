@@ -26,9 +26,9 @@ jobs:
           REFLEX_CHECK_LATEST_VERSION: 'false'
         run: |
           Set-Content -Path RELEASE -Value 'windows-${{ github.run_id }}'
-          python -m reflex export --env prod --frontend-only --no-zip
+          python -m reflex export --env prod --frontend-only --no-zip --no-ssr
           if (-not (Test-Path .web/build/client/index.html)) { throw 'Frontend export missing' }
-          if (-not (Test-Path .web/build/client/login.html)) { throw 'Login frontend export missing' }
+          if (-not (Test-Path .web/build/client/404.html)) { throw 'SPA shell export missing' }
           $raw = Get-Content .web/env.json -Raw
           $endpoints = $raw | ConvertFrom-Json
           if ($endpoints.EVENT -ne 'ws://127.0.0.1:47811/_event') { throw "Unexpected desktop endpoint: $raw" }

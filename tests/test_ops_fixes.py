@@ -101,8 +101,7 @@ class EngineFixture(unittest.TestCase):
 
     # 4 ------------------------------------------------------------------
     def test_total_budget_none_when_all_null(self):
-        self.app.add_expense_category(self.admin, self.sa, "Electricity",
-                                      sort_order=1)  # no budget set
+        # create_store() seeds "Electricity" with no budget set; reuse it.
         self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
                               sales_cents=rm(100))
         # pay something so the count-based "No payments yet" rule passes,

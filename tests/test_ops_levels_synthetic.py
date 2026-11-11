@@ -320,9 +320,15 @@ class MonthlySetupTests(Fixture):
             "s_pt_factor": "0.5", "s_stock_target": "1.5",
         }
         self.assertEqual({attr: getattr(state, attr) for attr in copied}, copied)
-        self.assertEqual([row["value"] for row in state.budget_rows],
-                         ["300.00", ""])
-        self.assertEqual([row["clear"] for row in state.budget_rows], ["", "1"])
+        # Scope to the test's own categories (the store also has the 10 seeded
+        # defaults, whose budgets are unset).
+        rows_by_name = {row["name"]: row for row in state.budget_rows}
+        self.assertEqual(
+            {n: rows_by_name[n]["value"] for n in ("Power", "Rent")},
+            {"Power": "300.00", "Rent": ""})
+        self.assertEqual(
+            {n: rows_by_name[n]["clear"] for n in ("Power", "Rent")},
+            {"Power": "", "Rent": "1"})
         untouched = {
             "s_level1": "200000.00", "s_last_year": "170000.00",
             "s_last_month": "175000.00", "s_target_txn": "3200",

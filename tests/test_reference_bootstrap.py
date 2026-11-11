@@ -225,6 +225,42 @@ class DefaultExpenseCategoryTests(unittest.TestCase):
         self.assertEqual(self.category_rows(first), before)
         self.assertEqual(len(self.category_rows(second)), 10)
 
+    def test_startup_repairs_legacy_store_with_no_categories(self):
+        """A store created before the create_store() seeding fix has zero
+        categories; the startup lifespan task repairs it on next launch."""
+        legacy = self.add_store("LEGACY")
+        self.assertEqual(self.category_rows(legacy), [])
+        self.assertTrue(reference_bootstrap.seed_default_expense_categories(
+            self.db))
+        self.assertEqual(len(self.category_rows(legacy)), 10)
+
+    def test_startup_does_not_duplicate_already_seeded_store(self):
+        """A store created by create_store() already has 10 categories; the
+        startup task must be a no-op for it (no duplicates, no re-order)."""
+        from ducklab.operations_write_service import OperationsWriteService
+        store_id = OperationsWriteService(self.db).register_store(
+            "NEW", "New Store")
+        before = self.category_rows(store_id)
+        self.assertEqual(len(before), 10)
+        # Startup seeding: nothing to do.
+        self.assertFalse(reference_bootstrap.seed_default_expense_categories(
+            self.db))
+        self.assertEqual(self.category_rows(store_id), before)
+
+    def test_customised_categories_survive_startup(self):
+        """A store that has customised (renamed / added) categories is not
+        touched by startup seeding — even if some defaults were renamed."""
+        from ducklab.operations_write_service import OperationsWriteService
+        svc = OperationsWriteService(self.db)
+        store_id = svc.register_store("CUST", "Customised")
+        cats = self.category_rows(store_id)
+        svc.rename_expense_category(store_id, cats[0][0], "My Power")
+        svc.add_expense_category(store_id, "Custom Extra", sort_order=99)
+        before = self.category_rows(store_id)
+        self.assertFalse(reference_bootstrap.seed_default_expense_categories(
+            self.db))
+        self.assertEqual(self.category_rows(store_id), before)
+
 
 if __name__ == "__main__":
     unittest.main()
