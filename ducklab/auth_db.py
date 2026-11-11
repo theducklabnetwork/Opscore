@@ -5,7 +5,7 @@ no existing operational tables or records are touched.
 
 Entities: auth_users, auth_roles, auth_user_roles,
 auth_user_store_assignments, auth_sessions, auth_audit_events,
-auth_page_tours.
+auth_page_tours, auth_recovery_keys.
 
 Security notes:
 - Sessions are stored as SHA-256 hashes of the bearer token; raw tokens
@@ -79,6 +79,19 @@ CREATE TABLE IF NOT EXISTS auth_page_tours (
     page_key TEXT NOT NULL,
     completed_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (user_id, page_key)
+);
+
+-- One active recovery key per user. Only the SHA-256 hash of the key is
+-- stored; the raw key lives solely with the account owner (recovery kit).
+-- A key is single-use: used_at is set when it resets a password, and a
+-- replacement key must be issued before the account can be recovered again.
+CREATE TABLE IF NOT EXISTS auth_recovery_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES auth_users(id)
+        ON DELETE CASCADE,
+    key_hash TEXT NOT NULL,                 -- sha256 of the recovery key
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    used_at TEXT                            -- set on use (single-use)
 );
 """
 

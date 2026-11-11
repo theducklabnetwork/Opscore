@@ -24,6 +24,46 @@ def documents_dir() -> Path:
     return Path.home() / "Documents"
 
 
+RECOVERY_KIT_NAME = "opscore-recovery-key.txt"
+
+
+def write_recovery_kit(key: str, account_email: str,
+                       directory: Path | None = None) -> Path:
+    """Write the recovery kit file once into the per-user data directory.
+
+    The file contains the raw recovery key exactly once at issue; the
+    database stores only its SHA-256 hash. On POSIX the directory is
+    created 0700 and the file 0600 (owner only). On Windows the file
+    inherits the per-user profile ACL.
+
+    Raises OSError on failure; the caller must surface the error without
+    logging the key.
+    """
+    folder = Path(directory) if directory is not None else data_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    if os.name == "posix":
+        os.chmod(folder, 0o700)
+    path = folder / RECOVERY_KIT_NAME
+    body = (
+        "Opscore account recovery kit\n"
+        "============================\n\n"
+        f"Account: {account_email}\n"
+        f"Recovery key: {key}\n\n"
+        "Use this key on the sign-in page under 'Forgot password?' to set a\n"
+        "new password. The key is single-use: after a successful recovery a\n"
+        "replacement key is issued. Keep this file private; do not upload,\n"
+        "email, or sync it to cloud storage.\n"
+    )
+    if os.name == "posix":
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        os.chmod(path, 0o600)
+    else:
+        path.write_text(body, encoding="utf-8")
+    return path
+
+
 def acquire_single_instance(lock_path: Path):
     """Acquire the non-blocking per-user instance lock, or return None."""
     if sys.platform == "win32":

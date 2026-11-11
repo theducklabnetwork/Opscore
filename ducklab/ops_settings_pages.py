@@ -103,6 +103,15 @@ class SettingsState(SharedOpsState):
     pw_notice: str = ""
     pw_saving: bool = False
 
+    # --- Account: recovery key -------------------------------------------
+    rk_has_key: bool = False
+    rk_confirm_open: bool = False
+    rk_current_password: str = ""
+    rk_new_key: str = ""         # raw key, shown once until cleared
+    rk_error: str = ""
+    rk_notice: str = ""
+    rk_saving: bool = False
+
     # --- Reference Data: expense categories (per selected store) --------
     ref_store_label: str = ""
     ref_categories: list[dict[str, str]] = []
@@ -168,6 +177,11 @@ class SettingsState(SharedOpsState):
         self.about_db_path = str(DB_PATH) if user.is_super_admin else ""
         self.pw_current = self.pw_new = self.pw_confirm = ""
         self.pw_error = self.pw_notice = ""
+        self.rk_has_key = app_service.auth.has_recovery_key(user.id)
+        self.rk_confirm_open = False
+        self.rk_current_password = ""
+        self.rk_new_key = ""
+        self.rk_error = self.rk_notice = ""
         if self.can_manage_reference:
             self._load_reference(user)
         if user.is_super_admin:
@@ -218,6 +232,79 @@ class SettingsState(SharedOpsState):
             self.pw_notice = ("Password changed. Other sessions were "
                               "signed out; this tab stays signed in until "
                               "you sign out.")
+
+    # --- Account: recovery key -------------------------------------------
+    @rx.event
+    def open_recovery_key_regen(self) -> None:
+        self.rk_confirm_open = True
+        self.rk_current_password = ""
+        self.rk_error = self.rk_notice = ""
+
+    @rx.event
+    def cancel_recovery_key_regen(self, *args) -> None:
+        self.rk_confirm_open = False
+        self.rk_current_password = ""
+        self.rk_error = ""
+
+    @rx.event
+    def set_rk_current_password(self, v: str) -> None:
+        self.rk_current_password = v
+        self.rk_error = ""
+
+    @rx.event
+    def regenerate_recovery_key(self) -> None:
+        """Replace the account's recovery key (current password required).
+
+        The old key stops working immediately; the new raw key is shown
+        once in rk_new_key for the owner to save."""
+        self.rk_error = self.rk_notice = ""
+        self.rk_saving = True
+        try:
+            try:
+                user = self._actor()
+            except AuthenticationError:
+                self.rk_error = SESSION_EXPIRED
+                return
+            if not self.rk_current_password:
+                self.rk_error = "Enter your current password."
+                return
+            # Re-authenticate without minting a session: a wrong password
+            # is rejected before the key rotates.
+            if not app_service.auth.verify_password(
+                    user.email, self.rk_current_password):
+                self.rk_error = "Current password is incorrect."
+                return
+            self.rk_new_key = app_service.auth.regenerate_recovery_key(
+                user.id)
+            self.rk_has_key = True
+            self.rk_confirm_open = False
+            self.rk_current_password = ""
+            self.rk_notice = (
+                "New recovery key generated. Save it now — the previous "
+                "key no longer works.")
+        finally:
+            self.rk_saving = False
+
+    @rx.event
+    def clear_recovery_key(self) -> None:
+        """Dismiss the once-shown key after the owner saved it."""
+        self.rk_new_key = ""
+
+    @rx.event
+    def download_recovery_key(self) -> rx.event.EventSpec:
+        """Download the once-shown key as a recovery-kit text file."""
+        body = (
+            "Opscore account recovery kit\n"
+            "============================\n\n"
+            f"Account: {self.account_email}\n"
+            f"Recovery key: {self.rk_new_key}\n\n"
+            "Use this key on the sign-in page under 'Forgot password?' to "
+            "set a new password. The key is single-use: after a successful "
+            "recovery a replacement key is issued. Keep this file private; "
+            "do not upload, email, or sync it to cloud storage.\n"
+        )
+        return rx.download(data=body.encode("utf-8"),
+                           filename="opscore-recovery-key.txt")
 
     # --- internals --------------------------------------------------------
     def _load_reference(self, user) -> None:
@@ -653,6 +740,38 @@ def _password_field(label, value, setter, fid) -> rx.Component:
         required=True)
 
 
+def _recovery_key_dialog() -> rx.Component:
+    """Confirm regeneration with the current password (re-auth)."""
+    return rx.dialog.root(
+        rx.dialog.content(
+            rx.dialog.title("Regenerate Recovery Key"),
+            rx.vstack(
+                rx.text(
+                    "The current recovery key stops working immediately. "
+                    "Enter your password to confirm.",
+                    size="2", color=ds.TEXT_MUTED),
+                _password_field("Current Password", S.rk_current_password,
+                                S.set_rk_current_password, "rk-current"),
+                rx.cond(S.rk_error != "", ds.error_callout(S.rk_error)),
+                rx.hstack(
+                    rx.button("Cancel", variant="soft", color_scheme="gray",
+                              on_click=S.cancel_recovery_key_regen,
+                              id="rk-cancel"),
+                    rx.button(
+                        rx.cond(S.rk_saving, rx.spinner(size="1"),
+                                rx.icon("key-round", size=14)),
+                        "Regenerate", color_scheme="indigo",
+                        on_click=S.regenerate_recovery_key,
+                        disabled=S.rk_saving, id="rk-confirm"),
+                    spacing="3", justify="end", width="100%"),
+                spacing="4", width="100%"),
+            max_width="420px",
+        ),
+        open=S.rk_confirm_open,
+        on_open_change=lambda _open: S.cancel_recovery_key_regen(),
+    )
+
+
 def _account_tab() -> rx.Component:
     return ui.section_card(
         ui.form_grid(
@@ -682,6 +801,54 @@ def _account_tab() -> rx.Component:
                     id="pw-save"),
                 spacing="3", align="center"),
             hint=PASSWORD_RULES, id="pw-section"),
+        ui.form_section(
+            "Recovery Key",
+            rx.text(
+                "A single-use key that resets your password on the sign-in "
+                "page if you forget it. The key is shown once when issued "
+                "— save the kit file and keep it private.",
+                size="2", color=ds.TEXT_MUTED),
+            rx.text(
+                rx.cond(S.rk_has_key,
+                        "A recovery key is active for your account.",
+                        "No active recovery key. Generate one now."),
+                size="2", color=ds.TEXT, id="rk-status"),
+            rx.cond(
+                S.rk_new_key != "",
+                rx.vstack(
+                    rx.code(S.rk_new_key, size="2", width="100%",
+                            style={"overflowWrap": "anywhere",
+                                   "userSelect": "all"}),
+                    rx.hstack(
+                        rx.button("Download Kit",
+                                  on_click=S.download_recovery_key,
+                                  color_scheme="indigo", size="2",
+                                  id="rk-download"),
+                        rx.button("I Saved It",
+                                  on_click=S.clear_recovery_key,
+                                  variant="soft", color_scheme="gray",
+                                  size="2", id="rk-done"),
+                        spacing="3", align="center"),
+                    spacing="3", width="100%", align="start"),
+            ),
+            rx.cond(S.rk_error != "", ds.error_callout(S.rk_error)),
+            rx.cond(S.rk_notice != "",
+                    rx.callout(S.rk_notice, icon="circle-check",
+                               color_scheme="green", variant="soft",
+                               width="100%", id="rk-notice")),
+            rx.hstack(
+                rx.button(
+                    rx.cond(S.rk_saving, rx.spinner(size="1"),
+                            rx.icon("key-round", size=14)),
+                    rx.cond(S.rk_has_key, "Regenerate Recovery Key",
+                            "Generate Recovery Key"),
+                    color_scheme="indigo", variant="soft",
+                    on_click=S.open_recovery_key_regen,
+                    disabled=S.rk_saving, id="rk-regenerate"),
+                spacing="3", align="center"),
+            _recovery_key_dialog(),
+            hint="Regenerating replaces the previous key immediately.",
+            id="rk-section"),
         ui.form_section(
             "Guided Tour",
             rx.hstack(

@@ -185,7 +185,8 @@ async def session_endpoint(request: Request) -> JSONResponse:
             auth.check_rate_limit(limiter_key)
             if auth.user_count():
                 return _error(403, "Forbidden")
-            auth.bootstrap_first_admin(email, name, password)
+            admin = auth.bootstrap_first_admin(email, name, password)
+            recovery_key = admin.recovery_key
             token, _user = auth.login(email, password,
                                       limiter_key=limiter_key)
         except RateLimitError:
@@ -196,9 +197,29 @@ async def session_endpoint(request: Request) -> JSONResponse:
             return _error(401)
         max_age = int(auth_service.SESSION_TTL.total_seconds())
         return JSONResponse(
-            {"ok": True},
+            {"ok": True, "recovery_key": recovery_key},
             headers={"Set-Cookie": _cookie_header(token, max_age)},
         )
+    if action == "recover":
+        # Forgot-password recovery via a single-use recovery key. The raw
+        # replacement key is returned in this response body exactly once;
+        # it must never be echoed into logs or client-side storage beyond
+        # the in-memory "save your kit" screen. No cookie is set — the
+        # user signs in normally with their new password afterwards.
+        recovery_key = str(body.get("recovery_key") or "")[:256]
+        password = str(body.get("password") or "")[:1024]
+        try:
+            auth.check_rate_limit(limiter_key)
+            new_key = auth.recover_password(recovery_key, password,
+                                            limiter_key=limiter_key)
+        except RateLimitError:
+            return _error(429)
+        except auth_service.ValidationError as exc:
+            return _error(400, str(exc))
+        except AuthenticationError:
+            # Generic: never reveals whether the key exists.
+            return _error(401, "Invalid recovery key")
+        return JSONResponse({"ok": True, "recovery_key": new_key})
     if action != "login":
         return _error(400, "Bad request")
     email = str(body.get("email") or "")[:254]
