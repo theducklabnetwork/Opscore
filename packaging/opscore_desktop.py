@@ -31,6 +31,8 @@ DB_PATH = DATA_DIR / "store_ops.db"
 LOCK_PATH = DATA_DIR / "launcher.lock"
 URL_PATH = DATA_DIR / "current.json"
 LOG_PATH = DATA_DIR / "opscore.log"
+DB_CHOICE_PATH = DATA_DIR / "db-choice.json"
+VERSION_PATH = DATA_DIR / "app_version.txt"
 STARTUP_TIMEOUT = 90
 APP_URL = "http://127.0.0.1:47811/"
 HEALTH_URL = APP_URL + "api/health"
@@ -113,10 +115,121 @@ def installed_version() -> str:
     return release_file.read_text().strip() if release_file.exists() else "source"
 
 
+def next_backup_path(db_path: Path) -> Path:
+    """Return store_ops.db.backup-N with the lowest free positive N."""
+    number = 1
+    while (candidate := db_path.with_name(f"{db_path.name}.backup-{number}")).exists():
+        number += 1
+    return candidate
+
+
+def archive_existing_database() -> Path:
+    """Rename the existing database to a numbered backup, preserving its data."""
+    backup = next_backup_path(DB_PATH)
+    DB_PATH.rename(backup)
+    print(f"Existing database backed up to {backup}")
+    return backup
+
+
+def consume_installer_db_choice() -> str | None:
+    """Return the installer's one-shot database choice ("keep"/"fresh"), if any.
+
+    The Windows installer records the wizard choice in db-choice.json so the
+    first launch after install/upgrade does not ask twice. The marker is
+    removed when read; a malformed marker is discarded, keeping the database.
+    """
+    try:
+        choice = json.loads(DB_CHOICE_PATH.read_text())
+    except OSError:
+        return None
+    except ValueError:
+        DB_CHOICE_PATH.unlink(missing_ok=True)
+        return None
+    DB_CHOICE_PATH.unlink(missing_ok=True)
+    return choice.get("choice") if choice.get("version") == installed_version() else "keep"
+
+
+def ask_use_existing_database() -> bool:
+    """Ask whether to keep the existing database; default keeps it.
+
+    Uses a GTK dialog like show_error, with a zenity fallback. When no display
+    toolkit is available the existing database is kept without prompting.
+    """
+    try:
+        import gi
+
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+
+        dialog = Gtk.MessageDialog(
+            transient_for=None,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            title="Opscore database",
+            text="An existing Opscore database was found.",
+        )
+        dialog.format_secondary_text(
+            "Keep your existing data, or start with a fresh database. "
+            "A fresh start keeps a numbered backup of the existing database."
+        )
+        dialog.add_button("Use existing database", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Start fresh (backup kept)", Gtk.ResponseType.YES)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        keep = dialog.run() != Gtk.ResponseType.YES
+        dialog.destroy()
+        return keep
+    except Exception:
+        pass
+    if shutil.which("zenity"):
+        result = subprocess.run(
+            [
+                opener,
+                "--question",
+                "--title=Opscore database",
+                "--text=An existing Opscore database was found.\n\n"
+                "OK keeps your existing data; Cancel starts fresh "
+                "(a numbered backup of the existing database is kept).",
+                "--ok-label=Use existing database",
+                "--cancel-label=Start fresh (backup kept)",
+            ],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    return True
+
+
+def prepare_database_choice() -> None:
+    """Offer the keep/fresh database choice on the first launch of this version.
+
+    Runs only when a database exists and app_version.txt does not yet record
+    the installed version (the first launch after install or upgrade). The
+    Windows installer's wizard choice takes precedence via db-choice.json;
+    otherwise a dialog asks, defaulting to keeping the existing database.
+    prepare_webview_profile() later stamps app_version.txt, ending the cycle.
+    """
+    if not DB_PATH.exists():
+        return
+    try:
+        seen_version = VERSION_PATH.read_text().strip()
+    except OSError:
+        seen_version = None
+    if seen_version == installed_version():
+        return
+    choice = consume_installer_db_choice()
+    if choice is None:
+        choice = "keep" if ask_use_existing_database() else "fresh"
+    if choice == "fresh":
+        archive_existing_database()
+    DB_CHOICE_PATH.write_text(
+        json.dumps({"version": installed_version(), "choice": choice}) + "\n"
+    )
+
+
 def prepare_webview_profile() -> None:
     """Discard a browser profile from a different app version."""
     version = installed_version()
-    version_path = DATA_DIR / "app_version.txt"
+    version_path = VERSION_PATH
     try:
         previous_version = version_path.read_text().strip()
     except OSError:
@@ -555,8 +668,11 @@ def main() -> int:
                 raise port_in_use_error() from error
             else:
                 raise port_in_use_error()
-        process, url = start_backend()
+        # Resolve keep/fresh before the backend opens the database, then stamp
+        # app_version.txt so the choice is offered once per installed version.
+        prepare_database_choice()
         prepare_webview_profile()
+        process, url = start_backend()
         if args.backend_only:
             print(url, flush=True)
             try:

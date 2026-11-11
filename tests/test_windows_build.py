@@ -476,6 +476,26 @@ class TestInstallerVersionConsistency(unittest.TestCase):
     def test_installer_packages_the_built_folder(self):
         self.assertIn('Source: "{#OPSCORE_PACKAGE}\\*"', self.iss)
 
+    def test_database_choice_page_defaults_to_keep(self):
+        self.assertIn('CreateInputOptionPage(', self.iss)
+        self.assertIn('Use the existing database (recommended)', self.iss)
+        self.assertIn('Create a fresh database (the existing one is kept as a numbered backup)', self.iss)
+        self.assertIn('DatabasePage.SelectedValueIndex := 0;', self.iss)
+
+    def test_database_choice_page_only_shows_with_existing_database(self):
+        self.assertIn("FileExists(ExistingDatabasePath())", self.iss)
+        self.assertIn("(PageID = DatabasePage.ID) and not ShouldShowDatabasePage()", self.iss)
+        self.assertIn("{localappdata}\\Opscore\\store_ops.db", self.iss)
+
+    def test_database_choice_is_recorded_for_first_launch(self):
+        self.assertIn("{localappdata}\\Opscore\\db-choice.json", self.iss)
+        self.assertIn('SaveStringToFile(', self.iss)
+        self.assertIn('"{#OPSCORE_VERSION}"', self.iss)
+        # The installer never renames or deletes the database itself; the
+        # launcher consumes the marker before starting the backend.
+        self.assertNotIn("DeleteFile(ExistingDatabasePath())", self.iss)
+        self.assertNotIn("RenameFile(ExistingDatabasePath()", self.iss)
+
 
 class TestReleaseWorkflowConsistency(unittest.TestCase):
     """The published-release CI job must opt into the release output folder."""

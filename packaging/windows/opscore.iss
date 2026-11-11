@@ -84,3 +84,58 @@ Name: "{autodesktop}\Opscore"; Filename: "{app}\python\pythonw.exe"; Parameters:
 
 ; Do not add an UninstallDelete entry for {localappdata}\Opscore.
 ; The database, logs, backups and other user data must survive upgrades and removal.
+
+[Code]
+var
+  DatabasePage: TInputOptionWizardPage;
+
+function ExistingDatabasePath(): String;
+begin
+  Result := ExpandConstant('{localappdata}\Opscore\store_ops.db');
+end;
+
+function ShouldShowDatabasePage(): Boolean;
+begin
+  { Offer the keep/fresh choice only when an existing database is detected. }
+  Result := FileExists(ExistingDatabasePath());
+end;
+
+procedure InitializeWizard();
+begin
+  DatabasePage := CreateInputOptionPage(
+    wpReady,
+    'Opscore database',
+    'An existing database was found',
+    'Choose whether to keep your existing data or start fresh.',
+    True, False);
+  DatabasePage.Add('Use the existing database (recommended)');
+  DatabasePage.Add('Create a fresh database (the existing one is kept as a numbered backup)');
+  DatabasePage.SelectedValueIndex := 0;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (PageID = DatabasePage.ID) and not ShouldShowDatabasePage();
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Choice: String;
+begin
+  if CurStep <> ssPostInstall then
+    exit;
+  if not ShouldShowDatabasePage() then
+    exit;
+  { Record the wizard choice for the first launch; never touch the database
+    itself here, because a running Opscore instance may still hold it open.
+    The launcher consumes and deletes this one-shot marker. }
+  if DatabasePage.SelectedValueIndex = 1 then
+    Choice := 'fresh'
+  else
+    Choice := 'keep';
+  ForceDirectories(ExpandConstant('{localappdata}\Opscore'));
+  SaveStringToFile(
+    ExpandConstant('{localappdata}\Opscore\db-choice.json'),
+    '{"version": "{#OPSCORE_VERSION}", "choice": "' + Choice + '"}' + #10,
+    False);
+end;
