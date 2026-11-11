@@ -34,6 +34,8 @@ Opscore supports **64-bit Windows 10 and 11**. Windows packaging is implemented,
 
 The installer places the program under `%LOCALAPPDATA%\Programs\Opscore`. Your database, log and backups are kept separately under `%LOCALAPPDATA%\Opscore` and are preserved by upgrades and uninstallation.
 
+**Database choice on install or upgrade.** When the installer detects an existing database, it asks whether to use the existing database (the default) or create a fresh one. The same question appears on the first launch after installing or upgrading the Linux package. Choosing a fresh database renames the existing file to `store_ops.db.backup-1` (or the next free number), so your old data is never deleted.
+
 A self-contained folder build is also available: copy the whole `Opscore` folder and double-click `Opscore.cmd`. For source setup and build instructions, see [Windows development](windows-dev.md).
 
 ## 2. First launch

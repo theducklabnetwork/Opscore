@@ -91,6 +91,7 @@ class TestWebviewProfileUpgrade(unittest.TestCase):
         self.patches = [
             mock.patch.object(self.desktop, "DATA_DIR", self.data_dir),
             mock.patch.object(self.desktop, "APP_ROOT", self.app_root),
+            mock.patch.object(self.desktop, "VERSION_PATH", self.data_dir / "app_version.txt"),
         ]
         for patcher in self.patches:
             patcher.start()
@@ -146,6 +147,109 @@ class TestWebviewProfileUpgrade(unittest.TestCase):
             self.assertEqual(self.desktop.main(), 0)
         self.assertTrue(any(self.data_dir.glob("webview.old-*")))
         self.assertEqual((self.data_dir / "app_version.txt").read_text(), "2.0\n")
+
+
+class TestDatabaseChoice(unittest.TestCase):
+    def setUp(self):
+        self.desktop = load_desktop_module()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self.tmp.name)
+        self.db = self.data_dir / "store_ops.db"
+        self.choice_path = self.data_dir / "db-choice.json"
+        self.version_path = self.data_dir / "app_version.txt"
+        self.patches = [
+            mock.patch.object(self.desktop, "DATA_DIR", self.data_dir),
+            mock.patch.object(self.desktop, "DB_PATH", self.db),
+            mock.patch.object(self.desktop, "DB_CHOICE_PATH", self.choice_path),
+            mock.patch.object(self.desktop, "VERSION_PATH", self.version_path),
+            mock.patch.object(self.desktop, "installed_version", return_value="2.0"),
+        ]
+        for patcher in self.patches:
+            patcher.start()
+
+    def tearDown(self):
+        for patcher in reversed(self.patches):
+            patcher.stop()
+        self.tmp.cleanup()
+
+    def test_backup_numbering_uses_lowest_free_number(self):
+        self.assertEqual(self.desktop.next_backup_path(self.db).name, "store_ops.db.backup-1")
+        (self.data_dir / "store_ops.db.backup-1").write_text("old")
+        self.assertEqual(self.desktop.next_backup_path(self.db).name, "store_ops.db.backup-2")
+        (self.data_dir / "store_ops.db.backup-3").write_text("old")
+        self.assertEqual(self.desktop.next_backup_path(self.db).name, "store_ops.db.backup-2")
+
+    def test_archive_moves_database_to_numbered_backup(self):
+        self.db.write_text("database")
+        backup = self.desktop.archive_existing_database()
+        self.assertFalse(self.db.exists())
+        self.assertEqual(backup.name, "store_ops.db.backup-1")
+        self.assertEqual(backup.read_text(), "database")
+
+    def test_no_database_never_prompts(self):
+        with mock.patch.object(self.desktop, "ask_use_existing_database") as ask:
+            self.desktop.prepare_database_choice()
+        ask.assert_not_called()
+        self.assertFalse(self.choice_path.exists())
+
+    def test_same_version_launch_never_prompts(self):
+        self.db.write_text("database")
+        self.version_path.write_text("2.0\n")
+        with mock.patch.object(self.desktop, "ask_use_existing_database") as ask:
+            self.desktop.prepare_database_choice()
+        ask.assert_not_called()
+        self.assertEqual(self.db.read_text(), "database")
+
+    def test_upgrade_launch_keeps_database_by_default(self):
+        self.db.write_text("database")
+        self.version_path.write_text("1.0\n")
+        with mock.patch.object(self.desktop, "ask_use_existing_database", return_value=True) as ask:
+            self.desktop.prepare_database_choice()
+        ask.assert_called_once_with()
+        self.assertEqual(self.db.read_text(), "database")
+        import json
+        record = json.loads(self.choice_path.read_text())
+        self.assertEqual(record, {"version": "2.0", "choice": "keep"})
+
+    def test_upgrade_launch_fresh_archives_database(self):
+        self.db.write_text("database")
+        with mock.patch.object(self.desktop, "ask_use_existing_database", return_value=False):
+            self.desktop.prepare_database_choice()
+        self.assertFalse(self.db.exists())
+        self.assertEqual((self.data_dir / "store_ops.db.backup-1").read_text(), "database")
+        import json
+        record = json.loads(self.choice_path.read_text())
+        self.assertEqual(record, {"version": "2.0", "choice": "fresh"})
+
+    def test_installer_fresh_choice_skips_dialog(self):
+        self.db.write_text("database")
+        self.choice_path.write_text('{"version": "2.0", "choice": "fresh"}\n')
+        with mock.patch.object(self.desktop, "ask_use_existing_database") as ask:
+            self.desktop.prepare_database_choice()
+        ask.assert_not_called()
+        self.assertFalse(self.db.exists())
+        self.assertTrue((self.data_dir / "store_ops.db.backup-1").exists())
+
+    def test_installer_keep_choice_skips_dialog(self):
+        self.db.write_text("database")
+        self.choice_path.write_text('{"version": "2.0", "choice": "keep"}\n')
+        with mock.patch.object(self.desktop, "ask_use_existing_database") as ask:
+            self.desktop.prepare_database_choice()
+        ask.assert_not_called()
+        self.assertEqual(self.db.read_text(), "database")
+
+    def test_stale_installer_choice_keeps_database(self):
+        self.db.write_text("database")
+        self.choice_path.write_text('{"version": "1.0", "choice": "fresh"}\n')
+        with mock.patch.object(self.desktop, "ask_use_existing_database") as ask:
+            self.desktop.prepare_database_choice()
+        ask.assert_not_called()
+        self.assertEqual(self.db.read_text(), "database")
+
+    def test_malformed_installer_choice_is_discarded(self):
+        self.choice_path.write_text("not json")
+        self.assertIsNone(self.desktop.consume_installer_db_choice())
+        self.assertFalse(self.choice_path.exists())
 
 
 class TestPortCheck(unittest.TestCase):

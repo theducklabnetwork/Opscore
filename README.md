@@ -224,6 +224,8 @@ The installer is per-user and does not require administrator rights. It installs
 
 User data, including `store_ops.db` and `opscore.log`, is stored under `%LOCALAPPDATA%\Opscore`, separately from the program. Upgrades and uninstallation preserve this data folder. Moving or replacing the application folder also preserves user data.
 
+When an existing database is detected, the installer asks whether to use it (default) or start fresh; a fresh start renames the old database to `store_ops.db.backup-<N>` and never deletes data. On Linux the same choice appears once on the first launch after each install or upgrade.
+
 ## First launch
 
 1. Opscore opens at **Create Account**. The first account is Super Admin.
