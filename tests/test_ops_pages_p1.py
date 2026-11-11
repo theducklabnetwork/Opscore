@@ -188,7 +188,12 @@ class ExpensesTests(Fixture):
         budget, paid = st.budget_fig_dark.data
         self.assertEqual((budget.name, paid.name), ("Budget", "Paid"))
         self.assertEqual(paid.orientation, "h")
-        self.assertEqual(list(paid.y), ["Repairs & Maintenance"])
+        # The chart lists every category: the ten seeded defaults plus this
+        # test's own "Repairs & Maintenance".
+        from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
+        self.assertEqual(
+            sorted(paid.y),
+            sorted([*DEFAULT_EXPENSE_CATEGORIES, "Repairs & Maintenance"]))
 
 
 # Stock ------------------------------------------------------------------------

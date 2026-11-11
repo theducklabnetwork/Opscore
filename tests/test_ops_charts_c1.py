@@ -271,8 +271,10 @@ class ExpenseMixStateTests(Fixture):
                                  level3_pct=0.2, level4_pct=0.3)
         self.rent = self.app.add_expense_category(
             self.admin, self.sid, "Rent", sort_order=1)
-        self.elec = self.app.add_expense_category(
-            self.admin, self.sid, "Electricity", sort_order=2)
+        # Reuse the default "Electricity" category seeded by create_store().
+        self.elec = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.sid)
+            if c.name == "Electricity")
 
     def pay(self, cat, amount, status="Paid", paid=date(2026, 10, 3)):
         self.app.record_expense(

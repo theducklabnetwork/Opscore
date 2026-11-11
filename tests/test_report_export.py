@@ -41,7 +41,11 @@ class ReportExportTest(unittest.TestCase):
             turnover_threshold=0.45, stock_loss_target=0.015,
             part_timer_factor=0.5, salary_basic_allowance_cents=rm(10000),
             overtime_cents=rm(1000))
-        self.category = self.write.add_expense_category(self.store_id, "Electricity")
+        # create_store() seeds the default categories; reuse the seeded
+        # "Electricity" category instead of inserting a duplicate.
+        self.category = next(
+            c.id for c in self.repo.get_expense_categories(self.store_id)
+            if c.name == "Electricity")
         self.write.set_expense_budget(self.store_id, "2026-09", self.category,
                                       rm(4000))
         self.write.record_daily(

@@ -38,6 +38,11 @@ class WriteFixture(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    def seeded_category(self, store_id, name):
+        """The default category seeded by create_store(), by name."""
+        return next(c.id for c in self.r.get_expense_categories(store_id)
+                    if c.name == name)
+
 
 class TestStoreWrites(WriteFixture):
     def test_create_and_update(self):
@@ -48,6 +53,33 @@ class TestStoreWrites(WriteFixture):
         s = self.r.get_store(sid)
         self.assertEqual((s.zone, s.branch_manager, s.concept),
                          ("KV5", "NEW BM", "Mall"))  # partial update preserved concept
+
+    def test_new_store_seeds_default_categories(self):
+        from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
+        sid = self.svc.register_store("S01", "Store A")
+        cats = self.r.get_expense_categories(sid)
+        self.assertEqual([c.name for c in cats],
+                         list(DEFAULT_EXPENSE_CATEGORIES))
+        self.assertEqual([c.sort_order for c in cats], list(range(10)))
+
+    def test_create_store_is_atomic(self):
+        # If category seeding fails, the store row is rolled back too.
+        # Patch the by-value import inside the repository module itself.
+        from ducklab import operations_write_repository as repo_mod
+        original = repo_mod.DEFAULT_EXPENSE_CATEGORIES
+        try:
+            repo_mod.DEFAULT_EXPENSE_CATEGORIES = (None,)  # invalid: name NOT NULL
+            with self.assertRaises(Exception):
+                self.svc.register_store("S01", "Store A")
+        finally:
+            repo_mod.DEFAULT_EXPENSE_CATEGORIES = original
+        # No store, no categories.
+        with self.assertRaises(StoreNotFoundError):
+            self.r.get_store_by_code("S01")
+        conn = store_ops_db.connect(self.db_path)
+        n = conn.execute("SELECT COUNT(*) FROM expense_categories").fetchone()[0]
+        conn.close()
+        self.assertEqual(n, 0)
 
     def test_duplicate_code_rejected(self):
         self.svc.register_store("S01", "Store A")
@@ -130,7 +162,7 @@ class TestCategoryBudgetWrites(WriteFixture):
         super().setUp()
         self.s1 = self.svc.register_store("A01", "A")
         self.s2 = self.svc.register_store("B02", "B")
-        self.cat1 = self.svc.add_expense_category(self.s1, "Electricity")
+        self.cat1 = self.seeded_category(self.s1, "Electricity")
         self.svc.configure_month(self.s1, "2026-09")
 
     def test_rename_keeps_id_and_transactions(self):
@@ -249,8 +281,8 @@ class TestExpenseWrites(WriteFixture):
         super().setUp()
         self.s1 = self.svc.register_store("A01", "A")
         self.s2 = self.svc.register_store("B02", "B")
-        self.cat1 = self.svc.add_expense_category(self.s1, "Electricity")
-        self.cat2 = self.svc.add_expense_category(self.s2, "Electricity")
+        self.cat1 = self.seeded_category(self.s1, "Electricity")
+        self.cat2 = self.seeded_category(self.s2, "Electricity")
 
     def test_draft_allowed_then_lifecycle(self):
         eid = self.svc.record_expense(self.s1, incurred_date=date(2026, 9, 5),

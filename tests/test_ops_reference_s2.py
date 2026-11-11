@@ -203,6 +203,13 @@ class CategoryFixture(unittest.TestCase):
             "admin@ducklab.com", "Root", PW)
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         self.other = self.app.register_store(self.admin, "B02", "Beta")
+        # Category CRUD tests need a known empty list; strip the seeded
+        # defaults in this fixture only (production keeps them).
+        conn = sqlite3.connect(self.db)
+        conn.execute("DELETE FROM expense_categories WHERE store_id IN (?, ?)",
+                     (self.sid, self.other))
+        conn.commit()
+        conn.close()
 
     def tearDown(self):
         self._tmp.cleanup()

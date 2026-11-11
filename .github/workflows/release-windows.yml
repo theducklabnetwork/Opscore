@@ -25,7 +25,9 @@ jobs:
             [DateTime]::UtcNow.ToString('yyyy.MM.dd', [Globalization.CultureInfo]::InvariantCulture)
           }
           if ($version.StartsWith('v')) { $version = $version.Substring(1) }
-          .\scripts\build_windows.ps1 -Version $version
+          # This is the published release pipeline: build the release folder
+          # explicitly. Candidate builds never touch these artifacts.
+          .\scripts\build_windows.ps1 -Version $version -AllowReleaseOutput
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Install Inno Setup if needed
@@ -53,6 +55,8 @@ jobs:
           if (-not $compiler) { throw 'ISCC.exe was not found after installing Inno Setup.' }
           $version = (Get-Content -LiteralPath 'dist\Opscore\RELEASE' -Raw).Trim()
           if (-not $version) { throw 'The packaged RELEASE file is empty.' }
+          # The installer output name is derived from dist\Opscore\RELEASE; the
+          # explicit version define asserts that the packaged version matches.
           & $compiler /DOPSCORE_VERSION=$version 'packaging\windows\opscore.iss'
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
           $installer = "dist\Opscore-Setup-$version.exe"

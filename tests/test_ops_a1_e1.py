@@ -83,10 +83,13 @@ class Fixture(unittest.TestCase):
             self.admin, self.sid, "2026-10", level1_base_cents=rm(250000),
             level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             part_timer_factor=0.5)
-        self.cat = self.app.add_expense_category(
-            self.admin, self.sid, "Electricity", sort_order=1)
-        self.cat_b = self.app.add_expense_category(
-            self.admin, self.other, "Electricity", sort_order=1)
+        # Reuse the default "Electricity" categories seeded by create_store().
+        self.cat = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.sid)
+            if c.name == "Electricity")
+        self.cat_b = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.other)
+            if c.name == "Electricity")
 
     def tearDown(self):
         self._tmp.cleanup()

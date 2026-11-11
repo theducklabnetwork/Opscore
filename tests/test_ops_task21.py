@@ -313,7 +313,11 @@ class ClearBudgetTests(Fixture):
     def _status(self):
         rep = self.app.preview_month(self.admin, self.sid, "2026-10",
                                      as_of=TODAY)
-        return (rep.expenses.categories[0].budget_status,
+        # Scope to the test's own category: the store also carries the ten
+        # seeded defaults, whose budgets are unset.
+        cat = next(c for c in rep.expenses.categories
+                   if c.category_id == self.cat)
+        return (cat.budget_status,
                 rep.expenses.budget_control_status,
                 rep.expenses.total_budget_cents)
 
@@ -449,7 +453,9 @@ class DevCleanupTests(Fixture):
         self.assertEqual(plan["store_counts"], {
             "daily_stock_losses": 1, "daily_records": 1,
             "monthly_expense_budgets": 1, "expense_transactions": 1,
-            "expense_categories": 1, "monthly_configs": 1, "actions": 1,
+            # 10 seeded defaults each on the QA and Debug stores + the
+            # test's own "Elec" on QA = 21
+            "expense_categories": 21, "monthly_configs": 1, "actions": 1,
             "monthly_snapshots": 2, "auth_user_store_assignments": 2})
         self.assertEqual(plan["user_counts"]["auth_user_roles"], 2)
         self.assertEqual(plan["user_counts"]["auth_user_store_assignments"], 1)
@@ -478,7 +484,11 @@ class DevCleanupTests(Fixture):
                     [(self.sid,)])
             self.assertEqual(conn.execute(
                 "SELECT COUNT(*) FROM daily_stock_losses").fetchone()[0], 1)
-            for table in ("expense_categories", "monthly_expense_budgets",
+            # The kept store A01 retains its 10 seeded default categories;
+            # the removed stores' categories are gone.
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM expense_categories").fetchone()[0], 10)
+            for table in ("monthly_expense_budgets",
                           "expense_transactions", "actions",
                           "monthly_snapshots"):
                 self.assertEqual(conn.execute(

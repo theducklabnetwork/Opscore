@@ -186,23 +186,39 @@ mv ~/.local/share/opscore ~/.local/share/opscore.old-$(date +%F)
 Build on 64-bit Windows with internet access:
 
 ```powershell
-.\scripts\build_windows.ps1 -Version 1.0
+.\scripts\build_windows.ps1 -Version 1.2
 ```
 
-The script bundles standalone CPython 3.14, the locked dependencies, the production frontend and the reference workbook in `dist\Opscore`. Copy the entire folder to any Windows 10/11 PC and double-click `Opscore.cmd`; Python, Git and Node are not required. The launcher uses `pythonw.exe` for a windowed start, and the package includes `assets\opscore.ico`. WebView2 is preferred, with Edge app mode and the default browser as fallbacks.
+By default this is a **candidate build**: it writes `dist\Opscore-candidate` and leaves the published release artifacts (`dist\Opscore` and any `dist\Opscore-Setup-<version>.exe`) completely untouched. The build refuses to replace the published release folder, and it verifies afterwards that those artifacts were not modified or removed. Nothing is promoted automatically.
+
+The script bundles standalone CPython 3.14, the locked dependencies, the production frontend and the reference workbook in the output folder. Copy the entire folder to any Windows 10/11 PC and double-click `Opscore.cmd`; Python, Git and Node are not required. The launcher uses `pythonw.exe` for a windowed start, and the package includes `assets\opscore.ico`. WebView2 is preferred, with Edge app mode and the default browser as fallbacks.
 
 The build checks that both frontend entry points exist and that `.web\env.json` targets `127.0.0.1:47811`. The folder build itself does not create an installer or an archive.
 
+Every run rebuilds the output folder from a clean staging tree, so stale application files can never survive into a new build. The downloaded CPython archive and the extracted runtime with its installed dependencies are kept in `dist\build-windows` and reused. After the frontend export, the build removes the files Reflex generates in the project root (`.gitignore`, `requirements.txt`) together with the `__pycache__` directories and `.pyc`/`.pyo` files left by the application import, and it then verifies that the package contains the Python runtime, the frontend entry points, the launcher, the backend and the reference workbook, and that `RELEASE` matches the requested version. A failed check aborts the build before the output folder is replaced.
+
 ### Build the Windows installer locally
 
-After building `dist\Opscore`, install [Inno Setup 6](https://jrsoftware.org/isinfo.php), open **Developer Command Prompt for Inno Setup**, and run from the repository root:
+Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), open **Developer Command Prompt for Inno Setup**, and run from the repository root. For a candidate build, point the installer at the candidate folder:
 
 ```powershell
-$version = (Get-Content -Raw dist\Opscore\RELEASE).Trim()
-ISCC.exe /DOPSCORE_VERSION=$version packaging\windows\opscore.iss
+ISCC.exe /DOPSCORE_PACKAGE_NAME=Opscore-candidate /DOPSCORE_VERSION=1.2 packaging\windows\opscore.iss
 ```
 
-This creates `dist\Opscore-Setup-<version>.exe`. The version comes from `RELEASE`, which `build_windows.ps1` writes using its `-Version` argument, `OPSCORE_VERSION`, or the current UTC date—the same version inputs as the `.deb` build.
+This creates `dist\Opscore-Setup-1.2-candidate.exe`. A candidate package always produces a candidate installer, so the published installer is never replaced. The installer refuses to overwrite an existing file; remove it first, or pass `/DOPSCORE_ALLOW_OVERWRITE=1` deliberately.
+
+The installer reads its version from the packaged `RELEASE` file, which `build_windows.ps1` writes using its `-Version` argument, `OPSCORE_VERSION`, or the current UTC date—the same version inputs as the `.deb` build. The installer therefore cannot describe a different version than the folder it packages. To require an exact version, pass `/DOPSCORE_VERSION=<version>`; a mismatch fails the compile.
+
+### Release build
+
+A release build writes `dist\Opscore` and must be requested explicitly:
+
+```powershell
+.\scripts\build_windows.ps1 -Version 1.2 -AllowReleaseOutput
+ISCC.exe packaging\windows\opscore.iss
+```
+
+This creates `dist\Opscore-Setup-1.2.exe`. Use `-OutputName <folder>` to choose another folder name, and `-AllowOverwrite` to replace an existing output folder.
 
 The installer is per-user and does not require administrator rights. It installs into `%LOCALAPPDATA%\Programs\Opscore`, adds an Opscore Start Menu shortcut, and offers an optional Desktop shortcut. Both shortcuts use `pythonw.exe`, so no console window flashes. Close Opscore when asked during installation or upgrade.
 
@@ -316,6 +332,7 @@ Title Case, short one or two word labels (Salary Ratio, Stock Loss, Daily Target
 | `scripts/import_dsc.py` | Import the Daily Sales Contribution file (needs `DUCKLAB_DB_PATH`) |
 | `scripts/import_workbook_dev.py` | Import a workbook into the dev database, with `--verify` parity check |
 | `scripts/bootstrap_admin.py` | Create the first admin from the terminal |
+| `scripts/recover_admin_password.py` | Offline admin password recovery (backs up the DB, revokes sessions) |
 | `scripts/seed_ui_*.py` | Seed disposable dev databases for screenshots and browser tests |
 | `scripts/browser_test_*.py` | Playwright browser checks |
 | `scripts/dev-live.sh` | Start and stop the dev instance on the VPS |

@@ -228,7 +228,7 @@ build_release() {
     log "production build (reflex export) in $dir — this can take minutes"
     local rc=0
     (cd "$dir" && DUCKLAB_DB_PATH="$tmpd/build.db" \
-        "./.venv/bin/reflex" export --env prod --frontend-only --no-zip >/dev/null) || rc=$?
+        "./.venv/bin/reflex" export --env prod --frontend-only --no-zip --no-ssr >/dev/null) || rc=$?
     rm -rf "$tmpd"
     [[ "$rc" -eq 0 ]] || return "$rc"
     [[ -d "$dir/.web" ]] || die "build produced no .web directory in $dir"

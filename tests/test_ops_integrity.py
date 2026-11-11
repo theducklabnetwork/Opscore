@@ -95,8 +95,10 @@ class Fixture(unittest.TestCase):
         """Setup save writes budgets where the Expenses page reads them."""
         c1 = self.app.add_expense_category(self.admin, self.sid, "Elec",
                                            sort_order=1)
-        c2 = self.app.add_expense_category(self.admin, self.sid, "Water",
-                                           sort_order=2)
+        # Reuse the default "Water" category seeded by create_store().
+        c2 = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.sid)
+            if c.name == "Water")
         self.app.configure_month_with_budgets(
             self.admin, self.sid, self.month,
             {"level1_base_cents": 12345600, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3}, {c1: 50000, c2: 12345})
@@ -109,7 +111,8 @@ class Fixture(unittest.TestCase):
                                      as_of=TODAY)
         self.assertEqual(rep.expenses.total_budget_cents, 62345)
         self.assertEqual(
-            {c.name: c.budget_cents for c in rep.expenses.categories},
+            {c.name: c.budget_cents for c in rep.expenses.categories
+             if c.budget_cents is not None},
             {"Elec": 50000, "Water": 12345})
         # second save updates in place (no duplicate rows)
         self.app.configure_month_with_budgets(
@@ -230,7 +233,7 @@ class Fixture(unittest.TestCase):
             "record_payroll": lambda: self.app.record_payroll(
                 self.admin, self.sid, self.month, 100000, 0),
             "add_expense_category": lambda: self.app.add_expense_category(
-                self.admin, self.sid, "Water"),
+                self.admin, self.sid, "Brand New Category"),
             "rename_expense_category":
                 lambda: self.app.rename_expense_category(
                     self.admin, self.sid, cat, "Power"),
@@ -247,13 +250,16 @@ class Fixture(unittest.TestCase):
                     call()
                 self.assertEqual(str(ctx.exception),
                                  "Store is deactivated: read-only")
-        # nothing changed
+        # nothing changed: only the seeded defaults + the test's own "Elec"
+        # exist (the failed "Brand New Category" add and rename did not persist)
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, self.month),
             {cat: 50000})
+        from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
         self.assertEqual(
-            [c.name for c in self.app.get_expense_categories(
-                self.admin, self.sid)], ["Elec"])
+            sorted(c.name for c in self.app.get_expense_categories(
+                self.admin, self.sid)),
+            sorted([*DEFAULT_EXPENSE_CATEGORIES, "Elec"]))
         cfg = self.app.get_month_config(self.admin, self.sid, self.month)
         self.assertIsNone(cfg.salary_basic_allowance_cents)
         self.assertEqual(

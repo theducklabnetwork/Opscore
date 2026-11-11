@@ -6,23 +6,15 @@ import logging
 from pathlib import Path
 
 from ducklab import dsc_import, store_ops_db
+from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
 
 log = logging.getLogger("ducklab.reference_bootstrap")
 
 WORKBOOK = Path(__file__).parent / "data" / "DSCSPR_alias_2027.xlsx"
 
-DEFAULT_EXPENSE_CATEGORIES = (
-    "Electricity",
-    "Water",
-    "Consumables",
-    "Store Supplies",
-    "Summons & Penalties",
-    "Licenses & Permits Fees",
-    "Mall/Building Fees",
-    "Maintenance/Repairs/Renovation",
-    "Telecommunications",
-    "Cash Shortages",
-)
+# Re-exported for callers that already import it from this module.
+__all__ = ["DEFAULT_EXPENSE_CATEGORIES", "seed_default_expense_categories",
+           "load_bundled_reference_data"]
 
 
 def seed_default_expense_categories(

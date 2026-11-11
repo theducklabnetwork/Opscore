@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 from ducklab import kpi, store_ops_db
+from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
 from ducklab.operations_repository import (
     InvalidMonthError, RepositoryError, StoreNotFoundError,
 )
@@ -162,12 +163,33 @@ class OperationsWriteRepository:
         if not code or not name:
             raise ValidationError("Store code and name are required")
         _check_store_choices({"state": state, "concept": concept})
-        cur = self._execute(
-            "INSERT INTO stores (code, name, concept, zone, zone_pic, "
-            "branch_manager, state) VALUES (?,?,?,?,?,?,?)",
-            (code, name, concept, zone, zone_pic, branch_manager, state),
-        )
-        return cur.lastrowid
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "INSERT INTO stores (code, name, concept, zone, zone_pic, "
+                "branch_manager, state) VALUES (?,?,?,?,?,?,?)",
+                (code, name, concept, zone, zone_pic, branch_manager, state),
+            )
+            store_id = cur.lastrowid
+            # Seed the ten default expense categories immediately so that a
+            # fresh store never starts with an empty Expenses module. This
+            # runs in the same transaction as the store insert.
+            conn.executemany(
+                "INSERT INTO expense_categories (store_id, name, sort_order) "
+                "VALUES (?, ?, ?)",
+                [(store_id, cat_name, order)
+                 for order, cat_name in enumerate(DEFAULT_EXPENSE_CATEGORIES)],
+            )
+            conn.commit()
+            return store_id
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise DuplicateRecordError(str(exc)) from exc
+        except sqlite3.OperationalError as exc:  # e.g. database is locked
+            conn.rollback()
+            raise WriteError(f"Database operational error: {exc}") from exc
+        finally:
+            conn.close()
 
     def update_store(self, store_id: int, **fields) -> None:
         """Partial update of store details (name/concept/zone/zone_pic/

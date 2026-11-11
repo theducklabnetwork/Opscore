@@ -113,10 +113,10 @@ fi
     DUCKLAB_DB_PATH="$WORK/build.db" \
     DUCKLAB_RELEASE_ID="$VERSION" \
     REFLEX_CHECK_LATEST_VERSION=false \
-    "$APP/python/bin/python3" -m reflex export --env prod --frontend-only --no-zip
+    "$APP/python/bin/python3" -m reflex export --env prod --frontend-only --no-zip --no-ssr
 )
 [[ -f "$APP/.web/build/client/index.html" ]] || { printf 'Frontend export missing.\n' >&2; exit 1; }
-[[ -f "$APP/.web/build/client/login.html" ]] || { printf 'Login frontend export missing.\n' >&2; exit 1; }
+[[ -f "$APP/.web/build/client/404.html" ]] || { printf 'SPA shell export missing.\n' >&2; exit 1; }
 "$APP/python/bin/python3" -c 'import json, pathlib, sys; raw = pathlib.Path(sys.argv[1]).read_text(); endpoints = json.loads(raw); assert endpoints["EVENT"] == "ws://127.0.0.1:47811/_event", endpoints; assert all("127.0.0.1:47811" in url for url in endpoints.values() if isinstance(url, str) and url.startswith(("http://", "ws://"))), endpoints; assert "8000" not in raw, endpoints' "$APP/.web/env.json" || {
     printf 'Frontend was not exported for the fixed desktop port.\n' >&2
     exit 1

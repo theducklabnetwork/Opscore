@@ -115,8 +115,10 @@ class PortfolioTests(unittest.TestCase):
         self.app.configure_month(
             self.admin, self.a, "2026-10", opening_headcount_ft=1,
             turnover_threshold=0.01, stock_loss_target=0.001)
-        category = self.app.add_expense_category(
-            self.admin, self.a, "Electricity", sort_order=1)
+        # Reuse the default "Electricity" category seeded by create_store().
+        category = next(
+            c.id for c in self.app.get_expense_categories(self.admin, self.a)
+            if c.name == "Electricity")
         self.app.set_expense_budget(
             self.admin, self.a, "2026-10", category, rm(1))
         self.app.record_expense(

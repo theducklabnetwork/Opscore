@@ -1,9 +1,20 @@
 # Build a self-contained Windows x64 Opscore folder (no installer).
+# Rebuilds the output folder from a clean staging tree and validates its
+# contents. The Inno Setup script derives its version from the folder's
+# RELEASE file.
+#
+# By default the build writes a CANDIDATE output (dist\Opscore-candidate) and
+# never touches the published release artifacts in dist\. A release build
+# writes dist\Opscore and must be requested explicitly with
+# -AllowReleaseOutput.
 [CmdletBinding()]
 param(
     [string]$Version = $env:OPSCORE_VERSION,
     [string]$PythonVersion = "3.14.10",
-    [string]$PythonBuildStandaloneTag = "20261026"
+    [string]$PythonBuildStandaloneTag = "20261026",
+    [string]$OutputName = "",
+    [switch]$AllowReleaseOutput,
+    [switch]$AllowOverwrite
 )
 
 Set-StrictMode -Version Latest
@@ -28,9 +39,24 @@ if ($PythonVersion -notmatch '^3\.14\.\d+$') {
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Dist = Join-Path $Root "dist"
 $Work = Join-Path $Dist "build-windows"
+# $App is rebuilt from scratch every run. Only the downloaded CPython archive
+# and the extracted runtime (with its installed dependencies) are reused.
 $App = Join-Path $Work "app"
-$Output = Join-Path $Dist "Opscore"
+$Runtime = Join-Path $Work "python"
 $Downloads = Join-Path $Work "downloads"
+
+# A candidate build writes a separate folder and leaves the published release
+# folder and installers untouched. A release build must be requested explicitly.
+if (-not $OutputName) {
+    $OutputName = if ($AllowReleaseOutput) { "Opscore" } else { "Opscore-candidate" }
+}
+if ($OutputName -match '[\\/:*?"<>|]' -or $OutputName -in @(".", "..")) {
+    throw "Invalid output folder name: $OutputName"
+}
+if ($AllowReleaseOutput -and $OutputName -ne "Opscore") {
+    throw "-AllowReleaseOutput requires the output folder name 'Opscore'."
+}
+$Output = Join-Path $Dist $OutputName
 
 function Assert-Build([bool]$Condition, [string]$Message) {
     if (-not $Condition) {
@@ -44,8 +70,20 @@ function Remove-IfPresent([string]$Path) {
     }
 }
 
+# Shared package assertions live in scripts/windows_build_lib.ps1 so the test
+# suite can exercise them without running a build.
+. (Join-Path $PSScriptRoot "windows_build_lib.ps1")
+
 New-Item -ItemType Directory -Path $Dist -Force | Out-Null
-# Keep the work directory so an interrupted build can reuse its runtime and downloads.
+# Refuse to replace the published release folder during a candidate build, and
+# record the state of the published artifacts so the build can prove it left
+# them alone.
+Assert-SafeOutputFolder $Output $Dist ([bool]$AllowReleaseOutput)
+$ProtectedArtifacts = Get-ProtectedArtifactSnapshot $Dist
+# Always start the application tree from scratch; stale app files must never
+# survive into a new build. Reusable downloads and the extracted runtime with
+# its installed dependencies are kept under $Work, not under $App.
+Remove-IfPresent $App
 New-Item -ItemType Directory -Path $App, $Downloads -Force | Out-Null
 
 Write-Host "==> Downloading standalone CPython $PythonVersion (install_only)"
@@ -72,20 +110,18 @@ if (-not (Test-Path -LiteralPath $Archive)) {
 $ActualHash = (Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash.ToLowerInvariant()
 Assert-Build ($ActualHash -eq $ExpectedHash) "Checksum mismatch for $AssetName"
 
-$Python = Join-Path $App "python\python.exe"
-$PythonW = Join-Path $App "python\pythonw.exe"
+$Python = Join-Path $Runtime "python.exe"
+$PythonW = Join-Path $Runtime "pythonw.exe"
 $DependenciesStamp = Join-Path $Work "dependencies-installed.txt"
 if (-not (Test-Path -LiteralPath $Python)) {
     $Tar = Get-Command tar -ErrorAction SilentlyContinue
     Assert-Build ($null -ne $Tar) "tar.exe is required (included with current Windows 10/11)."
-    Remove-IfPresent (Join-Path $Work "python")
+    Remove-IfPresent $Runtime
     & $Tar.Source -xzf $Archive -C $Work
     if ($LASTEXITCODE -ne 0) {
         throw "Could not extract the standalone Python archive."
     }
-    $ExtractedPython = Join-Path $Work "python"
-    Assert-Build (Test-Path -LiteralPath (Join-Path $ExtractedPython "python.exe")) "The archive did not contain python\python.exe."
-    Move-Item -LiteralPath $ExtractedPython -Destination (Join-Path $App "python")
+    Assert-Build (Test-Path -LiteralPath $Python) "The archive did not contain python\python.exe."
     Remove-IfPresent $DependenciesStamp
 }
 else {
@@ -118,6 +154,9 @@ else {
 }
 
 Write-Host "==> Copying application (without databases or development data)"
+# Copy the cached runtime into the fresh app tree. The cached copy is only
+# modified when the locked dependency hash changes.
+Copy-Item -LiteralPath $Runtime -Destination (Join-Path $App "python") -Recurse
 New-Item -ItemType Directory -Path (Join-Path $App "ducklab"), (Join-Path $App "assets"), (Join-Path $App "packaging") -Force | Out-Null
 Copy-Item -Path (Join-Path $Root "ducklab\*.py") -Destination (Join-Path $App "ducklab")
 New-Item -ItemType Directory -Path (Join-Path $App "ducklab\data") -Force | Out-Null
@@ -127,17 +166,15 @@ Copy-Item -LiteralPath (Join-Path $Root "rxconfig.py") -Destination $App
 Copy-Item -LiteralPath (Join-Path $Root "packaging\opscore_desktop.py"), (Join-Path $Root "packaging\opscore_backend.py") -Destination (Join-Path $App "packaging")
 Set-Content -LiteralPath (Join-Path $App "RELEASE") -Value $Version -Encoding Ascii -NoNewline
 Assert-Build (Test-Path -LiteralPath (Join-Path $App "assets\opscore.ico")) "The Opscore icon was not copied."
-Assert-Build (Test-Path -LiteralPath $PythonW) "The windowed Python launcher is missing."
+Assert-Build (Test-Path -LiteralPath (Join-Path $App "python\pythonw.exe")) "The windowed Python launcher is missing."
+Assert-Build (Test-Path -LiteralPath (Join-Path $App "python\python.exe")) "The bundled Python interpreter is missing."
 
 Write-Host "==> Building the production frontend once"
-# Reflex installs its own Bun and locked frontend dependencies in a clean tree.
-# Those build tools and node_modules are removed before the folder is published.
+# Always build in a fresh frontend tree: copying .web from a source checkout
+# can silently reuse stale build output or carry node_modules into the package.
+# Only the dependency lockfile is carried over to pin frontend packages.
 Remove-IfPresent (Join-Path $App ".web")
 Remove-IfPresent (Join-Path $App "reflex.lock")
-if (Test-Path -LiteralPath (Join-Path $Root ".web")) {
-    Copy-Item -LiteralPath (Join-Path $Root ".web") -Destination (Join-Path $App ".web") -Recurse
-    Remove-IfPresent (Join-Path $App ".web\env.json")
-}
 if (Test-Path -LiteralPath (Join-Path $Root "reflex.lock")) {
     Copy-Item -LiteralPath (Join-Path $Root "reflex.lock") -Destination (Join-Path $App "reflex.lock") -Recurse
 }
@@ -149,7 +186,7 @@ try {
     $env:DUCKLAB_RELEASE_ID = $Version
     $env:REFLEX_ENV_MODE = "prod"
     $env:REFLEX_CHECK_LATEST_VERSION = "false"
-    & $Python -m reflex export --env prod --frontend-only --no-zip
+    & $Python -m reflex export --env prod --frontend-only --no-zip --no-ssr
     if ($LASTEXITCODE -ne 0) {
         throw "Frontend export failed."
     }
@@ -158,7 +195,7 @@ finally {
     Pop-Location
 }
 Assert-Build (Test-Path -LiteralPath (Join-Path $App ".web\build\client\index.html")) "Frontend export missing."
-Assert-Build (Test-Path -LiteralPath (Join-Path $App ".web\build\client\login.html")) "Login frontend export missing."
+Assert-Build (Test-Path -LiteralPath (Join-Path $App ".web\build\client\404.html")) "SPA shell export missing."
 
 $VerifyEndpoints = @'
 import json
@@ -189,9 +226,26 @@ Get-ChildItem -LiteralPath (Join-Path $App ".web") -Force |
 Remove-IfPresent (Join-Path $App "reflex.lock")
 Remove-IfPresent (Join-Path $App ".states")
 Remove-IfPresent (Join-Path $App "uploaded_files")
-Get-ChildItem -LiteralPath $App -Recurse -Directory -Filter "__pycache__" |
+
+# Post-export cleanup: Reflex writes .gitignore and requirements.txt into the
+# project root during export, and the app import leaves __pycache__/.pyc files.
+# Remove these export-generated artifacts so they are never packaged. Only the
+# application trees are scanned; the bundled runtime's stdlib/site-packages
+# __pycache__/.pyc files are legitimate installed bytecode and are kept.
+Write-Host "==> Removing Reflex-generated artifacts"
+Remove-IfPresent (Join-Path $App ".gitignore")
+Remove-IfPresent (Join-Path $App "requirements.txt")
+$RuntimePrefix = Get-PackageRuntimePrefix $App
+Get-ChildItem -LiteralPath $App -Recurse -Directory -Filter "__pycache__" -Force -ErrorAction SilentlyContinue |
+    Where-Object { -not (Test-IsRuntimePath $RuntimePrefix $_.FullName) } |
     Sort-Object { $_.FullName.Length } -Descending |
     Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath $App -Recurse -File -Force -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Extension -in @(".pyc", ".pyo") -and
+        -not (Test-IsRuntimePath $RuntimePrefix $_.FullName)
+    } |
+    Remove-Item -Force
 
 Write-Host "==> Creating the windowed launcher"
 $Launcher = @'
@@ -230,11 +284,35 @@ if ($LASTEXITCODE -ne 0) {
 }
 Assert-Build (-not (Test-Path -LiteralPath (Join-Path $App ".venv"))) "A virtual environment must not be packaged."
 Assert-Build (-not (Test-Path -LiteralPath (Join-Path $App ".web\node_modules"))) "Frontend build tools must not be packaged."
-$Database = Get-ChildItem -LiteralPath $App -Recurse -File -Filter "*.db" | Select-Object -First 1
+$Database = Get-ChildItem -LiteralPath $App -Recurse -File -Force |
+    Where-Object { $_.Extension -in @(".db", ".sqlite", ".sqlite3") } |
+    Select-Object -First 1
 Assert-Build ($null -eq $Database) "Database files must not be included in the package."
+
+# Strict package assertions. A failure here aborts before the folder is
+# published, so a broken build never replaces a good output folder.
+Write-Host "==> Checking package contents"
+Assert-PackageContents $App $Version
 
 Remove-IfPresent $Output
 Move-Item -LiteralPath $App -Destination $Output
+# Re-check the published folder so the shipped tree is validated in place.
+Assert-PackageContents $Output $Version
+# The published release artifacts must be exactly as they were before the build.
+Assert-ProtectedArtifactsUnchanged $Dist $ProtectedArtifacts
 $Size = (Get-ChildItem -LiteralPath $Output -Recurse -File | Measure-Object -Property Length -Sum).Sum
 Write-Host ("Built {0} ({1:N0} bytes)" -f $Output, $Size)
-Write-Host "Copy the whole Opscore folder and double-click Opscore.cmd. No installer is created."
+if ($AllowReleaseOutput) {
+    Write-Host "Release folder built. Compile the installer with:"
+    Write-Host ("  ISCC.exe packaging\windows\opscore.iss")
+}
+else {
+    # Candidate installers get their own file name so the published installer
+    # is never replaced. The candidate installer path is printed for the
+    # operator; nothing is promoted automatically.
+    $candidateInstaller = Join-Path $Dist (Get-InstallerFileName $Version "-candidate")
+    Write-Host "Candidate folder built. The published release artifacts were not modified."
+    Write-Host ("Candidate installer to compile: {0}" -f $candidateInstaller)
+    Write-Host "  ISCC.exe /DOPSCORE_VERSION=$Version /DOPSCORE_PACKAGE_NAME=$OutputName packaging\windows\opscore.iss"
+}
+Write-Host "Copy the whole folder and double-click Opscore.cmd. No installer is created."
