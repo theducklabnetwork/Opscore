@@ -67,7 +67,7 @@ Each layer only calls the one below it.
 | Services | `operations_service.py`, `operations_write_service.py`, `operations_snapshots.py`, `auth_service.py`, `backup.py`, `report_export.py`, `dsc_import.py` | Business workflows. |
 | KPI engine | `kpi.py` | Every business calculation, as pure functions. |
 | Repositories | `operations_repository.py`, `operations_write_repository.py` | Parameterized SQL, store-scoped, explicit transactions. |
-| Database | `store_ops_db.py`, `auth_db.py`, `db_inspect.py` | Schema, migrations, connections. |
+| Database | `store_ops_db.py`, `auth_db.py` | Schema, migrations, connections. |
 
 **Hard rules:**
 
@@ -294,32 +294,27 @@ The data folder is created with mode 0700. Installing or removing the package ne
 
 Depends on GTK 3 and WebKit2GTK 4.1. Supports Ubuntu 22.04 and newer.
 
-## 11. Other deployment: VPS
-
-`deploy/` holds the separate legacy server pipeline (systemd service, Caddy, versioned releases, rollback and nightly backups) used for VPS installations. It is not part of the desktop runtime or desktop build. The desktop app is the primary distribution; use the server runbooks only for an existing or deliberately provisioned VPS installation. See `deploy/RELEASES.md`.
-
-## 12. Testing
+## 11. Testing
 
 | Kind | Where | Notes |
 |---|---|---|
 | Unit and integration | `tests/` | Disposable databases; current results are recorded in `CHANGELOG.md` |
 | KPI rules | `test_kpi_synthetic.py`, `test_ops_levels_synthetic.py`, `test_daily_targets_t1.py` | Hand-made cases for every rule |
 | Security | `test_security.py`, `test_auth.py`, `test_ops_payroll_policy.py` | Roles, sessions, payroll visibility |
-| Packaging | `test_release_pipeline.py`, `test_deployment.py` | Build and release checks |
+| Packaging | `test_source_desktop.py`, `test_windows_build.py`, `test_health.py` | Desktop launcher, build and startup checks |
 | Browser | `scripts/browser_test_*.py` | Playwright checks against seeded databases |
 | Parity | `scripts/import_workbook_dev.py --verify` | App against the real workbook |
 
 Every pull request must pass the full suite and a production Reflex compile with a disposable database.
 
-## 13. Repository layout
+## 12. Repository layout
 
 ```
 ducklab/       App code (see section 3)
 packaging/     Desktop launcher, backend runner, .desktop entry, nFPM config, install scripts
 scripts/       Build, import, seed and browser-test tools
-deploy/        VPS release pipeline
+docs/          Project documents, migration policy and screenshots
 tests/         Test suite
 assets/        Logo, icons, favicon, tour scripts and styles
-docs/          Project documents and screenshots
 rxconfig.py    Reflex config (theme, desktop port)
 ```

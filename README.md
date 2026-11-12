@@ -66,6 +66,7 @@ The display name is **Opscore**. The code name, Python package and repository st
 
 - [Project Overview](docs/PROJECT_OVERVIEW.md): why Opscore exists, the problem it solves, scope and timeline
 - [Architecture](docs/ARCHITECTURE.md): layers, data model, KPI engine, security and packaging
+- [Database Migrations](docs/MIGRATIONS.md): schema history and desktop upgrade safety
 - [User Guide](docs/USER_GUIDE.md): installing and using every page
 - [Windows development](docs/windows-dev.md): running and building from source on Windows
 - [Changelog](CHANGELOG.md): release history and current verification results
@@ -92,7 +93,7 @@ The overview, architecture, user guide and platform runbooks describe current be
 | Wording pass (remove leftover subtitles and helper sentences) | Pending |
 | Finalize and Correct on the Monthly Report page | Done |
 
-**Latest local verification:** full test suite and production frontend build passed on 2026-11-09. See [Verification results](CHANGELOG.md#verification) for the recorded counts.
+**Latest local verification:** full test suite and production frontend build passed on 2026-11-12. See [Verification results](CHANGELOG.md#verification) for the recorded counts.
 **Database schema:** version 10.
 
 ---
@@ -165,7 +166,7 @@ sudo apt remove opscore
 
 Opscore then appears in the app menu. It opens in its own window on `127.0.0.1:47811`. Closing the window stops the app. Clicking the icon again focuses the open window.
 
-Before upgrading, download a backup in **Settings → Data**. Migrations run automatically on first launch and preserve existing records and accounts. Each migration and its schema-version update commit together in one transaction. Current schema version: 10 (see `deploy/MIGRATIONS.md` for the full history).
+Before upgrading, download a backup in **Settings → Data**. Migrations run automatically on first launch and preserve existing records and accounts. Each migration and its schema-version update commit together in one transaction. Current schema version: 10 (see `docs/MIGRATIONS.md` for the full history).
 
 ### Where the data lives
 
@@ -269,14 +270,12 @@ Uplifts are whole percents. Holidays are ISO dates separated by `;`. The script 
 
 ## Development
 
-### Folders on the Ubuntu desktop
+### Local folders
 
 | Folder | Purpose |
 |---|---|
-| `~/ducklab` | Live copy, run by a systemd user service on port 3000. **No agents here.** |
 | `~/ducklab-dev` | Agent working copy (OpenCode). Branches and PRs only. |
-| `~/.local/share/ducklab/store_ops.db` | Live copy's database |
-| `~/.local/share/opscore/store_ops.db` | Installed desktop app's database |
+| `~/.local/share/opscore/store_ops.db` | Installed desktop app's database. Never use it for development or tests. |
 | `~/Documents/ducklab-private/` | Private data (workbook tests, demo CSVs). Never committed. |
 
 ### Setup
@@ -304,16 +303,9 @@ DUCKLAB_DB_PATH=$(mktemp -d)/compile.db .venv/bin/reflex export --env prod --fro
 
 Both must pass before a PR is opened.
 
-### Update the live copy after a merge
-
-```bash
-cp ~/.local/share/ducklab/store_ops.db ~/.local/share/ducklab/store_ops.db.bak-$(date +%F)
-cd ~/ducklab && git pull && systemctl --user restart ducklab
-```
-
 ### Agent rules
 
-- Work in `~/ducklab-dev` only. Never touch `~/ducklab` or `~/.local/share/ducklab`.
+- Work in `~/ducklab-dev` only. Never use the installed desktop app's data folder for development or tests.
 - One branch per task, push, open a PR. Never push to main, never merge.
 - Tests and screenshots use disposable databases only.
 - Keep prompts short: a few numbered lines, plain wording.
@@ -337,7 +329,6 @@ Title Case, short one or two word labels (Salary Ratio, Stock Loss, Daily Target
 | `scripts/recover_admin_password.py` | Offline admin password recovery (backs up the DB, revokes sessions) |
 | `scripts/seed_ui_*.py` | Seed disposable dev databases for screenshots and browser tests |
 | `scripts/browser_test_*.py` | Playwright browser checks |
-| `scripts/dev-live.sh` | Start and stop the dev instance on the VPS |
 
 ---
 
@@ -363,7 +354,7 @@ ducklab/
   store_ops_db.py             SQLite schema and migrations
 packaging/                    Desktop launcher, .desktop entry, nFPM config
 scripts/                      Build, import, seed and browser-test tools
-deploy/                       VPS release pipeline (see deploy/RELEASES.md)
+docs/MIGRATIONS.md            Schema history and desktop migration policy
 tests/                        Backend test suite
 assets/                       Logo, icons, favicon
 ```

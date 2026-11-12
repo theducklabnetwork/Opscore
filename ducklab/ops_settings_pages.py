@@ -64,7 +64,7 @@ DSC_DESCRIPTION = (
 
 
 def app_version() -> str:
-    """Release id (deploy sets DUCKLAB_RELEASE_ID), else short git commit."""
+    """Packaged release id, else the short git commit for development."""
     release = os.environ.get("DUCKLAB_RELEASE_ID", "").strip()
     if release and release != "dev":
         return release

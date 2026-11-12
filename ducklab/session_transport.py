@@ -287,9 +287,9 @@ class OriginCheckMiddleware:
 # /api/health directly and mounts the (origin-checked) Reflex backend for
 # everything else. Mounted via `rx.App(api_transformer=...)`.
 async def health_endpoint(request: Request) -> JSONResponse:
-    """Unauthenticated liveness/readiness probe for the release pipeline and
-    monitoring. Returns no sensitive data. DUCKLAB_RELEASE_ID is set by the
-    release tooling so operators can verify the active release identity."""
+    """Unauthenticated readiness probe for desktop startup and build checks.
+    Returns no sensitive data. Desktop builds set DUCKLAB_RELEASE_ID so the
+    launcher and diagnostics can verify the installed release identity."""
     import os
     return JSONResponse({
         "status": "ok",

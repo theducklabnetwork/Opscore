@@ -240,7 +240,7 @@ class TestRecoveryHTTP(RecoveryFixture):
         inner = Starlette(routes=[Route("/api/session",
                                         st.session_endpoint,
                                         methods=["POST"])])
-        self.client = TestClient(inner, base_url="http://app.theducklab.com")
+        self.client = TestClient(inner, base_url="http://opscore.test")
 
     def tearDown(self):
         import ducklab.session_transport as st
@@ -250,7 +250,7 @@ class TestRecoveryHTTP(RecoveryFixture):
     def _post(self, payload):
         return self.client.post(
             "/api/session", json=payload,
-            headers={"Origin": "http://app.theducklab.com"})
+            headers={"Origin": "http://opscore.test"})
 
     def test_recover_success_returns_replacement_key(self):
         r = self._post({"action": "recover", "recovery_key": self.key,

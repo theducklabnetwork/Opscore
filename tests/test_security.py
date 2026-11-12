@@ -28,6 +28,25 @@ from ducklab.session_transport import (  # noqa: E402
     asgi_transformer, read_session_token,
 )
 
+
+class TestSecurityEnv(unittest.TestCase):
+    def test_secure_cookies_flag(self):
+        with mock.patch.dict(os.environ, {"DUCKLAB_SECURE_COOKIES": "1"}):
+            from ducklab.security import SecurityConfig
+            self.assertTrue(SecurityConfig.from_env().secure_cookies)
+
+    def test_trust_proxy_flag(self):
+        with mock.patch.dict(os.environ, {"DUCKLAB_TRUST_PROXY": "1"}):
+            from ducklab.security import SecurityConfig
+            self.assertTrue(SecurityConfig.from_env().trust_proxy)
+
+    def test_frontend_origins_empty_by_default(self):
+        with mock.patch.dict(os.environ, clear=False) as env:
+            env.pop("DUCKLAB_FRONTEND_ORIGINS", None)
+            from ducklab.security import SecurityConfig
+            self.assertEqual(SecurityConfig.from_env().allowed_frontend_origins, ())
+
+
 PW = "Sup3rSecure!x"
 PW2 = "An0therGood42"
 
@@ -55,7 +74,7 @@ class EndpointFixture(unittest.TestCase):
         inner = Starlette(routes=[Route("/api/session",
                                         st.session_endpoint,
                                         methods=["POST"])])
-        self.client = TestClient(inner, base_url="http://app.theducklab.com")
+        self.client = TestClient(inner, base_url="http://opscore.test")
 
     def tearDown(self):
         import ducklab.session_transport as st
@@ -65,7 +84,7 @@ class EndpointFixture(unittest.TestCase):
     def _login(self, email="admin@ducklab.com", password=PW, origin=True):
         headers = {}
         if origin:
-            headers["Origin"] = "http://app.theducklab.com"
+            headers["Origin"] = "http://opscore.test"
         return self.client.post(
             "/api/session",
             json={"action": "login", "email": email, "password": password},
@@ -110,7 +129,7 @@ class TestSessionLifecycle(EndpointFixture):
         self.app.auth.authenticate_token(token)  # valid
         self.client.post(
             "/api/session", json={"action": "logout"},
-            headers={"Origin": "http://app.theducklab.com",
+            headers={"Origin": "http://opscore.test",
                      "Cookie": f"{SESSION_COOKIE}={token}"})
         with self.assertRaises(AuthenticationError):
             self.app.auth.authenticate_token(token)
@@ -121,7 +140,7 @@ class TestSessionLifecycle(EndpointFixture):
         self.assertTrue(token)
         resp = self.client.post(
             "/api/session", json={"action": "logout"},
-            headers={"Origin": "http://app.theducklab.com",
+            headers={"Origin": "http://opscore.test",
                      "Cookie": f"{SESSION_COOKIE}={token}"})
         self.assertIn("Max-Age=0", resp.headers["set-cookie"])
 
@@ -192,19 +211,19 @@ class TestCSRF(EndpointFixture):
             "/api/session",
             json={"action": "login", "email": "admin@ducklab.com",
                   "password": PW},
-            headers={"Host": "app.theducklab.com",
+            headers={"Host": "opscore.test",
                      "Origin": "https://evil.example.com"})
         self.assertEqual(r.status_code, 403)
         self.assertNotIn("set-cookie", r.headers)
 
     def test_same_site_origin_helper(self):
-        self.assertTrue(_same_site_origin("https://app.theducklab.com",
-                                          "app.theducklab.com"))
+        self.assertTrue(_same_site_origin("https://opscore.test",
+                                          "opscore.test"))
         self.assertTrue(_same_site_origin("http://localhost:3000",
                                           "localhost:3000"))
         self.assertFalse(_same_site_origin("https://evil.com",
-                                           "app.theducklab.com"))
-        self.assertFalse(_same_site_origin("", "app.theducklab.com"))
+                                           "opscore.test"))
+        self.assertFalse(_same_site_origin("", "opscore.test"))
 
     def test_allowed_frontend_origins_dev(self):
         """Dev-mode allow-list permits the Vite frontend origin only."""
@@ -349,7 +368,7 @@ class TestWebSocketOrigin(unittest.TestCase):
             "client": ("203.0.113.9", 1234),
             "headers": [
                 (b"origin", b"https://evil.example.com"),
-                (b"host", b"app.theducklab.com"),
+                (b"host", b"opscore.test"),
             ],
         }
         import asyncio
@@ -375,8 +394,8 @@ class TestWebSocketOrigin(unittest.TestCase):
             "path": "/_event",
             "client": ("127.0.0.1", 1234),
             "headers": [
-                (b"origin", b"https://app.theducklab.com"),
-                (b"host", b"app.theducklab.com"),
+                (b"origin", b"https://opscore.test"),
+                (b"host", b"opscore.test"),
             ],
         }
         import asyncio
