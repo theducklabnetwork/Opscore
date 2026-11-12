@@ -300,5 +300,45 @@ class TestRecoveryHTTP(RecoveryFixture):
             self.assertTrue(is_recovery_key_format(body["recovery_key"]))
 
 
+class TestBootstrapUICallback(unittest.TestCase):
+    """Regression: the bootstrap response keeps the one-time key and the
+    kit's completion action does not depend on has_users (which is true
+    immediately after account creation)."""
+
+    def test_successful_bootstrap_result_keeps_key_and_dashboard_action(self):
+        from ducklab.auth_pages import AuthState
+
+        with mock.patch.object(AuthState, "_mark_dirty"):
+            state = AuthState()
+            state.has_users = False
+            state.bootstrap_email = "first@ducklab.com"
+            state.bootstrap_name = "First"
+            state.recovery_key = ""
+            key = generate_recovery_key()
+            AuthState.bootstrap_result.fn(
+                state, {"ok": True, "recovery_key": key})
+
+        self.assertEqual(state.recovery_key, key)
+        self.assertEqual(state.recovery_kit_source, "bootstrap")
+        self.assertFalse(state.has_users)
+
+    def test_success_without_key_switches_to_sign_in_with_instruction(self):
+        from ducklab.auth_pages import AuthState
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(AuthState, "_mark_dirty"):
+            fresh = AppService(Path(tmp) / "bootstrap-ui.db")
+            with mock.patch("ducklab.auth_pages.app_service", fresh):
+                state = AuthState()
+                state.has_users = False
+                state.recovery_key = ""
+                state.error = ""
+                AuthState.bootstrap_result.fn(state, {"ok": True})
+
+        self.assertEqual(state.recovery_key, "")
+        self.assertTrue(state.has_users)
+        self.assertIn("Please sign in", state.error)
+
+
 if __name__ == "__main__":
     unittest.main()

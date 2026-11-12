@@ -50,6 +50,7 @@ class AuthState(rx.State):
     # the kit. Never persisted or re-requested from the server.
     recovery_key: str = ""
     recovery_email: str = ""     # account the pending key belongs to
+    recovery_kit_source: str = ""  # "bootstrap" | "recovery" | "settings"
     kit_error: str = ""
 
     # recovery flow ("recover" | "reset" | "done" | "")
@@ -223,11 +224,21 @@ class AuthState(rx.State):
             self.error = error or (
                 "Could not create the account. Please try again.")
             return None
+        if not key:
+            # The account was created, but without its one-time key payload
+            # we must not silently return to (or leave) the bootstrap form.
+            # Sign-in still works; Settings can issue a replacement key.
+            self.has_users = True
+            self.error = (
+                "Account created, but the recovery key was not received. "
+                "Please sign in, then generate a key in Settings → Account.")
+            return None
         # The endpoint created the Super Admin account and set the
         # HttpOnly session cookie. The recovery key is shown exactly once:
         # the operator must save the kit before entering the dashboard.
         self.recovery_key = key
         self.recovery_email = self.bootstrap_email
+        self.recovery_kit_source = "bootstrap"
         self.kit_error = ""
         self.bootstrap_name = self.bootstrap_email = ""
         return None
@@ -272,6 +283,7 @@ class AuthState(rx.State):
         """Leave the recovery-kit screen after the operator saved it."""
         # Full navigation re-handshakes the WebSocket with the new cookie.
         self.recovery_key = ""
+        self.recovery_kit_source = ""
         return rx.call_script("window.location.assign('/ops')")
 
     @rx.event
@@ -279,6 +291,7 @@ class AuthState(rx.State):
         """Post-recovery kit dismissal: back to the plain sign-in form."""
         self.recovery_key = ""
         self.recovery_email = ""
+        self.recovery_kit_source = ""
         self.kit_error = ""
         self.recovery_mode = ""
         self.error = ""
@@ -359,6 +372,7 @@ class AuthState(rx.State):
         # replacement key once; the user then returns to sign in normally.
         self.recovery_key = key
         self.recovery_email = ""
+        self.recovery_kit_source = "recovery"
         self.kit_error = ""
         self.recovery_mode = "done"
         return None
@@ -445,10 +459,10 @@ _BOOTSTRAP_JS = """
                       window.location.hostname + ':8000');
   }
   if (!r) return {ok: false};
-  if (r.ok) return {ok: true};
-  let msg = '';
-  try { msg = (await r.json()).error || ''; } catch (e) {}
-  return {ok: false, error: msg};
+  let body = {};
+  try { body = await r.json(); } catch (e) {}
+  if (r.ok) return {ok: true, recovery_key: body.recovery_key || ''};
+  return {ok: false, error: body.error || ''};
 })()
 """
 
@@ -670,15 +684,15 @@ def _recovery_kit_panel() -> rx.Component:
                       variant="soft", color_scheme="indigo", size="3",
                       width="100%", id="kit-download"),
             rx.cond(
-                AuthState.has_users,
-                rx.button("Back to Sign In",
-                          on_click=AuthState.clear_recovery_kit,
-                          variant="ghost", size="3", width="100%",
-                          id="kit-done-recovery"),
+                AuthState.recovery_kit_source == "bootstrap",
                 rx.button("Continue to Dashboard",
                           on_click=AuthState.finish_bootstrap,
                           color_scheme="indigo", size="3", width="100%",
                           id="kit-done-bootstrap"),
+                rx.button("Back to Sign In",
+                          on_click=AuthState.clear_recovery_kit,
+                          variant="ghost", size="3", width="100%",
+                          id="kit-done-recovery"),
             ),
             spacing="3", width="100%",
         ),
