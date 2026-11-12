@@ -93,5 +93,43 @@ class TestThirdPartyImportsDeclared(unittest.TestCase):
                          + details)
 
 
+class TestRequirementsLock(unittest.TestCase):
+    def setUp(self):
+        self.lock_lines = [
+            line.strip() for line in (ROOT / "requirements.lock")
+            .read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+    def test_lock_covers_direct_requirements(self):
+        lock_names = {
+            re.split(r"[<>=!~;\[]", line, maxsplit=1)[0].lower()
+            for line in self.lock_lines
+        }
+        for line in REQ.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            name = re.split(r"[<>=!~;\[]", line, maxsplit=1)[0].lower()
+            self.assertIn(name, lock_names,
+                          f"{name} missing from requirements.lock")
+
+    def test_lock_has_no_dev_packages(self):
+        lock_names = {
+            re.split(r"[<>=!~;\[]", line, maxsplit=1)[0].lower()
+            for line in self.lock_lines
+        }
+        self.assertNotIn("pytest", lock_names)
+        self.assertNotIn("playwright", lock_names)
+
+    def test_lock_pins_everything(self):
+        for line in self.lock_lines:
+            self.assertIn("==", line, f"unpinned: {line}")
+
+    def test_argon2_present(self):
+        self.assertTrue(any(line.startswith("argon2-cffi==")
+                            for line in self.lock_lines))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,7 @@
 #   rm -rf /tmp/opencode/lock-venv
 # Review the diff of requirements.lock before committing it.
 #
-# Python: 3.14 (see pyproject-independent note in deploy/RELEASES.md).
+# Python: 3.14, bundled by the desktop builds.
 reflex==0.10.1
 argon2-cffi==25.1.0
 openpyxl==3.1.5

@@ -1,8 +1,7 @@
-"""Production security configuration (environment-driven).
+"""Session security configuration (environment-driven).
 
-No secrets are hardcoded. Defaults are safe for local development;
-a server deployment sets the variables listed in docs/ARCHITECTURE.md
-(Security model) and deploy/ducklab.env.template.
+No secrets are hardcoded. Defaults are safe for desktop and local development;
+optional flags are documented in docs/ARCHITECTURE.md (Security model).
 """
 
 from __future__ import annotations

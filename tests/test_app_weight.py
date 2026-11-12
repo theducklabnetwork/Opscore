@@ -23,11 +23,10 @@ HEAVY_MODULES
     registry-exists check keeps this honest).
 
 Legacy offenders, restored 2026-02-15 after a refactor: ``ducklab.py`` is
-the app (reflex by definition); ``db_inspect``, ``report_export`` and
-``dsc_import`` are scripted openpyxl tooling that historically grabbed
-reactivity at module scope. Long-term these should move their heavy imports
-inside function bodies (the ``operations_repository`` pattern) and leave the
-registry.
+the app (reflex by definition); ``report_export`` and ``dsc_import`` are
+scripted openpyxl tooling that historically grabbed reactivity at module
+scope. Long-term these should move their heavy imports inside function bodies
+(the ``operations_repository`` pattern) and leave the registry.
 """
 
 from __future__ import annotations
@@ -78,7 +77,6 @@ HEAVY_MODULES = {
     "portfolio_service",  # heavyweight analytics/graphs backing service
     "ui",                 # reflex UI primitives
     # --- legacy offenders (see module docstring; restored 2026-02-15) ---
-    "db_inspect",         # release/schema inspection tooling (openpyxl-era scripted)
     "report_export",      # scripted Excel reports (openpyxl)
     "dsc_import",         # historical workbook importer (openpyxl)
 }

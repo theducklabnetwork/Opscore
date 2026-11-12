@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Removed the retired VPS deployment pipeline and hosted-development script; desktop migration guidance and reusable health, security and dependency tests are preserved.
+
 ### Added
 
 - Bundled the Git-tracked `ducklab/data/DSCSPR_alias_2027.xlsx` reference workbook in `.deb` and Windows builds, with automatic first-run loading into empty reference tables.
@@ -29,8 +33,8 @@
 
 ### Verification
 
-- 1,113 tests passed and 131 subtests passed on 2026-11-09.
-- The production Reflex frontend export passed with a disposable database on 2026-11-09.
+- 1,144 tests passed, 22 skipped and 131 subtests passed on 2026-11-12 after removing the VPS deployment tooling.
+- The production Reflex frontend export passed with a disposable database on 2026-11-12.
 - One non-failing Starlette deprecation warning was reported for its HTTPX test-client integration.
 
 ## v1.0 — 2026-10-31

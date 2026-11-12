@@ -1,10 +1,9 @@
-# DuckLab — Database Migration Safety
+# Opscore — Database Migration Safety
 
 The store-ops database is versioned by `PRAGMA user_version` plus a
-`schema_migrations` audit table. The VPS server database is at
-`/var/lib/ducklab/store_ops.db`; desktop installations keep their own database
-in the per-user location documented in `README.md`. Current application schema
-version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
+`schema_migrations` audit table. Each desktop installation keeps its own
+database in the per-user location documented in `README.md`. Current
+application schema version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
 
 ## Version history
 
@@ -34,7 +33,7 @@ version: **10** (`ducklab/store_ops_db.py: SCHEMA_VERSION`).
   `schedule_entries`, and per-store/week `schedule_targets` for Manpower
   Efficiency scheduling. Seeds the standard shift codes; no staff are seeded.
 - **v7** — soft default colors for the standard shift codes. Only codes still
-  using their v6 default colors are updated; customized colors are preserved.
+  using the v6 default colors are updated; customized colors are preserved.
 - **v8** — additive: `staff` gains `employment_type` (`Full-Time` /
   `Part-Time` / `Not Set`, default `Not Set`) for schedule-staffing
   integration. Existing staff keep `Not Set`; no other table changes.
@@ -59,45 +58,29 @@ reverse a database migration.
 
 1. **Migrations are additive-only and idempotent.** `init_db()` runs at app
    startup and applies pending steps in ascending order; it never drops or
-   rewrites existing data. Each migration runs in one transaction, including
-   its `PRAGMA user_version` update, so a failed step rolls back completely
-   and can be retried. `SCHEMA_VERSION` in code is the ceiling.
-2. **Backup before any schema change.** A release that raises
-   `SCHEMA_VERSION` requires a verified backup (created after the backup
-   service reports success) before activation. The release pipeline's
-   `check_compatibility` reports pending migrations and stops activation
-   until the operator confirms a backup exists.
-3. **Code rollback never touches the database.** Rolling back the
-   application restores only the previous code release. Restoring an old
-   database backup is a separate, manual disaster-recovery decision
-   (`deploy/RECOVERY.md`) and is never automated.
-4. **Older code vs newer schema.** The release tooling refuses to roll back
-   to code whose `SCHEMA_VERSION` is lower than the database's
-   `user_version`, unless the operator has reviewed and confirmed the older
-   code tolerates the newer schema (additive changes make this true in
-   practice, but the check is deliberate, not assumed).
+   rewrites existing data except for the documented v4 reference-data rebuild.
+   Each migration runs in one transaction, including its `PRAGMA user_version`
+   update, so a failed step rolls back completely and can be retried.
+   `SCHEMA_VERSION` in code is the ceiling.
+2. **Back up before any schema change.** Use **Settings → Data → Download
+   Backup** before installing a release that raises `SCHEMA_VERSION`.
+3. **Downgrades never restore a database automatically.** Reinstalling older
+   application code restores only the application. Restoring an old database
+   backup is a separate, deliberate operation through **Settings → Data**.
+4. **Older code versus newer schema.** Older application code must not be used
+   with a newer database schema without an explicit compatibility review.
 5. **Non-additive migrations** (drop/rename/retype a column or table) are
-   breaking changes. They require a written migration + rollback plan
-   approved by the operator *before* the release is staged, and a maintenance
-   window. Do not ship one as a routine release.
-6. **Integrity verification.** After any migration, run:
+   breaking changes. They require a written migration and recovery plan before
+   release, plus testing against a copy of an existing desktop database.
 
-   ```bash
-   sudo -u ducklab sqlite3 file:/var/lib/ducklab/store_ops.db?mode=ro \
-       'PRAGMA integrity_check; PRAGMA user_version;
-        SELECT version FROM schema_migrations ORDER BY version;'
-   ```
+## Verification
 
-   Expect `ok`, the new version, and a matching `schema_migrations` row.
+Tests and development checks must use disposable databases. Migration tests
+should start with the older schema, initialize the current application, and
+verify that existing records remain intact.
 
-## Release-time procedure
-
-1. `deploy/release.sh verify-staged` runs the app against a disposable DB —
-   the migration path is exercised there first.
-2. Before cutover, run the compatibility check (see OPERATOR-RELEASE.md
-   step 3). If it reports "will be migrated", confirm a fresh backup.
-3. Activate + restart. On first start, `init_db()` applies pending
-   migrations automatically.
-4. Verify `user_version` and `integrity_check` (above) and the app health
-   endpoint.
-5. Record the outcome in the release manifest `status` field.
+To inspect a desktop database while Opscore is closed, run `PRAGMA
+integrity_check`, `PRAGMA user_version`, and query `schema_migrations` with a
+SQLite tool. The expected integrity result is `ok`, and the schema version and
+migration rows should match the installed application. Always make a backup
+before manual database work.

@@ -1,7 +1,7 @@
 @AGENTS.md
 
 ## Agent sessions
-- This applies to any agent working in a clone without .devdata, whether cloud or local. There is no dev instance or workbook in that clone. Do not run scripts/dev-live.sh, --verify, deploy/ scripts or anything needing .devdata; note them in the report without assuming a VPS handoff.
+- Opscore is a local Windows/Linux desktop app. There is no hosted deployment pipeline.
 - Setup if .venv is missing: pip install uv && uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requirements.lock -r requirements-dev.txt
 - Tests: .venv/bin/python -m pytest tests/ -q
 - Before opening a PR, the task must pass a Reflex compile with a disposable DB: `DUCKLAB_DB_PATH=$(mktemp -d)/compile.db .venv/bin/reflex export --env prod --frontend-only --no-zip`
