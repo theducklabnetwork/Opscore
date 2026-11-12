@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import calendar
 import csv
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import reflex as rx
 
@@ -189,9 +189,9 @@ class ScheduleState(SharedOpsState):
             # Revalidate the actor and store access; never trust client rows alone.
             user = self._actor()
             week_start = date.fromisoformat(self.schedule_week)
-            data = app_service.get_schedule(
-                user, store_id, week_start, week_start.fromordinal(week_start.toordinal() + 6))
-            store = next(store for store in user.stores if store.id == store_id)
+            week_end = week_start + timedelta(days=6)
+            data = app_service.get_schedule(user, store_id, week_start, week_end)
+            store = app_service.get_store(user, store_id)
             store_part = "".join(c if c.isalnum() or c in "-_" else "_" for c in store.code)
             folder = (platform_utils.documents_dir() / "Opscore Schedules"
                       / store_part / self.schedule_week)
@@ -202,7 +202,7 @@ class ScheduleState(SharedOpsState):
             for staff in data["staff"]:
                 rows = [(day.isoformat(), entries[(staff["id"], day.isoformat())])
                         for i in range(7)
-                        if (day := week_start.fromordinal(week_start.toordinal() + i))
+                        if (day := week_start + timedelta(days=i))
                         and (staff["id"], day.isoformat()) in entries]
                 if not rows:
                     continue

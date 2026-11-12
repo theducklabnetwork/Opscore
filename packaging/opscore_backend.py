@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import sys
 
 os.environ.pop("REFLEX_SKIP_COMPILE", None)
 os.environ.update(
@@ -15,6 +16,8 @@ os.environ.update(
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 os.chdir(APP_ROOT)
+if str(APP_ROOT) not in sys.path:
+    sys.path.insert(0, str(APP_ROOT))
 # Reflex deletes its marker before importing the app. Override only that
 # lookup, preserving the absolute read-only frontend bundle in /opt/opscore.
 from reflex_base import constants  # noqa: E402
@@ -51,9 +54,22 @@ def main() -> None:
     argparse.ArgumentParser(description="Run the packaged Opscore backend").parse_args()
     from reflex_base.constants.base import LogLevel
 
-    run_backend_prod(
-        "127.0.0.1", 47811, LogLevel.INFO, mount_frontend_compiled_app=True
-    )
+    if os.name != "nt":
+        run_backend_prod(
+            "127.0.0.1", 47811, LogLevel.INFO, mount_frontend_compiled_app=True
+        )
+        return
+
+    # A hidden Windows process has no console to receive CTRL_BREAK_EVENT.
+    # Connect the launcher's stop request to Granian's own shutdown handler.
+    from ducklab import platform_utils
+
+    def run_backend():
+        run_backend_prod(
+            "127.0.0.1", 47811, LogLevel.INFO, mount_frontend_compiled_app=True
+        )
+
+    platform_utils.start_windows_shutdown(run_backend)
 
 
 if __name__ == "__main__":

@@ -78,8 +78,8 @@ class TestBackendProcesses(unittest.TestCase):
         process.poll.return_value = None
         with mock.patch.object(platform_utils.sys, "platform", "win32"), \
                 mock.patch.object(platform_utils.subprocess, "Popen", return_value=process) as popen, \
+                mock.patch.object(platform_utils, "request_windows_shutdown") as request, \
                 mock.patch.object(platform_utils.subprocess, "run") as run:
-            popen.return_value.wait.side_effect = subprocess.TimeoutExpired("backend", 20)
             result = platform_utils.start_backend(["backend"], cwd=Path("app"), env={}, log=mock.Mock())
             self.assertIs(result, process)
             self.assertEqual(
@@ -88,8 +88,64 @@ class TestBackendProcesses(unittest.TestCase):
             )
             process.wait.side_effect = [subprocess.TimeoutExpired("backend", 20), None]
             platform_utils.stop_process_tree(process)
-            process.send_signal.assert_called_once_with(getattr(signal, "CTRL_BREAK_EVENT", 1))
+            request.assert_called_once_with(123)
+            process.send_signal.assert_not_called()
             self.assertEqual(run.call_args.args[0], ["taskkill", "/PID", "123", "/T", "/F"])
+
+    def test_windows_backend_wrapper_connects_shutdown_pipe(self):
+        granian_server = mock.Mock()
+        instances = []
+
+        class Granian:
+            def __init__(self):
+                instances.append(self)
+
+            def serve(self, *args, **kwargs):
+                return "served"
+
+        granian_server.Server = Granian
+        with mock.patch.dict(sys.modules, {"granian.server": granian_server}), \
+                mock.patch.object(platform_utils, "start_shutdown_pipe") as start_pipe:
+            platform_utils.start_windows_shutdown(
+                lambda: granian_server.Server().serve()
+            )
+        self.assertEqual(len(instances), 1)
+        self.assertIsInstance(instances[0], Granian)
+        start_pipe.assert_called_once_with(instances[0])
+        self.assertIs(granian_server.Server, Granian)
+
+    def test_windows_pipe_request_targets_backend_pid(self):
+        connection = mock.MagicMock()
+        client = mock.MagicMock(return_value=connection)
+        connection_module = mock.Mock(Client=client)
+        with mock.patch.dict(sys.modules, {"multiprocessing.connection": connection_module}):
+            platform_utils.request_windows_shutdown(123)
+        client.assert_called_once_with(r"\\.\pipe\opscore-backend-123", family="AF_PIPE")
+        connection.__enter__.return_value.send_bytes.assert_called_once_with(b"stop")
+        connection.__enter__.return_value.recv_bytes.assert_called_once_with()
+
+    def test_windows_pipe_request_invokes_granian_interrupt_handler(self):
+        listener = mock.MagicMock()
+        connection = listener.accept.return_value.__enter__.return_value
+        connection.recv_bytes.return_value = b"stop"
+        connection_module = mock.Mock()
+        connection_module.Listener.return_value = listener
+        server = mock.Mock()
+        thread = mock.Mock()
+        with mock.patch.dict(sys.modules, {"multiprocessing.connection": connection_module}), \
+                mock.patch.object(platform_utils.os, "getpid", return_value=123), \
+                mock.patch("threading.Thread", return_value=thread) as thread_type:
+            platform_utils.start_shutdown_pipe(server)
+            connection_module.Listener.assert_called_once_with(
+                r"\\.\pipe\opscore-backend-123", family="AF_PIPE", backlog=1
+            )
+            thread_type.assert_called_once_with(
+                target=mock.ANY, name="opscore-shutdown", daemon=True
+            )
+            thread.start.assert_called_once_with()
+            thread_type.call_args.kwargs["target"]()
+        server.signal_handler_interrupt.assert_called_once_with()
+        connection.send_bytes.assert_called_once_with(b"stopping")
 
 
 class TestBrowser(unittest.TestCase):

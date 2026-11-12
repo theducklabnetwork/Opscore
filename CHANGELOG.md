@@ -21,6 +21,7 @@
 ### Fixed
 
 - Rotated stale WebView profiles after application version changes while preserving the database and other user data.
+- Fixed the Planner **Export CSV** button: it previously crashed with an uncaught `AttributeError` (the handler referenced a nonexistent `User.stores` attribute), surfacing only as the generic "An error occurred" toast. The export now resolves the store via `AppService.get_store` and writes the per-staff `date,shift_code` CSVs under `Documents/Opscore Schedules/<store>/<week>/` as intended.
 
 ### Release status
 
