@@ -77,7 +77,7 @@ EXPECTED_COLUMNS = {
     ),
     "monthly_expense_budgets": (
         "id", "store_id", "monthly_config_id", "category_id",
-        "budget_cents",
+        "budget_pct",
     ),
     "daily_records": (
         "id", "store_id", "date", "sales_cents", "transactions", "units",

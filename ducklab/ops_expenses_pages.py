@@ -71,6 +71,8 @@ def _kpi_cards() -> rx.Component:
 def _budget_row(row) -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text(row["name"], weight="medium"), wrap=True),
+        ui.td(rx.cond(row["pct"] != "", row["pct"] + "%", "—"),
+              numeric=True),
         ui.td(row["budget"], numeric=True),
         ui.td(row["paid"], numeric=True),
         ui.td(row["remaining"], numeric=True),
@@ -90,11 +92,11 @@ def _budget_row(row) -> rx.Component:
 
 def _budget_amount() -> rx.Component:
     # "×" clears a saved budget (replaces the "Clear saved value"
-    # checkbox); typing an amount undoes it before saving
+    # checkbox); typing a percentage undoes it before saving
     return rx.input(
         ui.clear_x(E.b_has_saved & ~E.b_clear, E.clear_budget, id="b-clear"),
         value=E.b_amount, on_change=E.set_b_amount,
-        placeholder=rx.cond(E.b_clear, "No budget", "Monthly budget (RM)"),
+        placeholder=rx.cond(E.b_clear, "No budget", "% of sales target"),
         input_mode="decimal", id="b-amount", width="100%",
     )
 
@@ -105,6 +107,11 @@ def _budget_editor() -> rx.Component:
         rx.vstack(
             rx.divider(),
             rx.text("Set Budget", size="2", weight="medium"),
+            rx.text(
+                "Budget = % × " + E.budget_basis_label + rx.cond(
+                    E.budget_basis_cents != "",
+                    " (" + E.budget_basis_cents + ")", ""),
+                size="1", color=ds.TEXT_MUTED),
             rx.hstack(
                 ui.form_field("Category",
                               rx.select(E.category_names,
@@ -112,7 +119,7 @@ def _budget_editor() -> rx.Component:
                                         on_change=E.set_b_category,
                                         placeholder="Select category",
                                         id="b-category")),
-                ui.form_field("Budget (RM)", _budget_amount()),
+                ui.form_field("Budget (%)", _budget_amount()),
                 rx.button(
                     rx.cond(E.b_saving, rx.spinner(size="1"),
                             rx.icon("save", size=14)),
@@ -140,7 +147,8 @@ def _budget_monitor() -> rx.Component:
                 rx.cond(E.is_dark, ops_charts.chart(E.budget_fig_dark),
                         ops_charts.chart(E.budget_fig_light)),
                 ui.data_table(
-                    ["Category", ("Budget", True), ("Paid", True),
+                    ["Category", ("Budget %", True), ("Budget", True),
+                     ("Paid", True),
                      ("Remaining", True), "Utilization", "Status"],
                     rx.foreach(E.budget_rows, _budget_row),
                     phone=("Category", "Paid", "Status"),

@@ -31,7 +31,8 @@ class Fixture(unittest.TestCase):
         self._tmp.cleanup()
 
     def _config(self, month, **kw):
-        base = dict(level1_base_cents=rm(200000), level2_pct=0.1,
+        base = dict(min_rtm_target_cents=rm(200000),
+                    level1_base_cents=rm(200000), level2_pct=0.1,
                     level3_pct=0.2, level4_pct=0.3, opening_headcount_ft=9,
                     stock_loss_target=0.015, salary_ratio_target=0.06818,
                     part_timer_factor=0.5, turnover_threshold=0.05)
@@ -103,21 +104,21 @@ class Fixture(unittest.TestCase):
         rep = self.app.preview_month(self.admin, self.sid, "2026-10",
                                      as_of=date(2026, 10, 21))
         self.assertEqual(rep.expenses.budget_control_status, "No budget")
-        # exactly 80% -> Watch
+        # exactly 80% -> Watch (0.05% x RM 200,000 = RM 100; RM 80 paid)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10", cat,
-                                    rm(100))
+                                    0.0005)
         rep = self.app.preview_month(self.admin, self.sid, "2026-10",
                                      as_of=date(2026, 10, 21))
         self.assertEqual(rep.expenses.budget_control_status, "Watch")
-        # over -> OVER BUDGET
+        # over -> OVER BUDGET (RM 79 budget)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10", cat,
-                                    rm(79))
+                                    0.000395)
         rep = self.app.preview_month(self.admin, self.sid, "2026-10",
                                      as_of=date(2026, 10, 21))
         self.assertEqual(rep.expenses.budget_control_status, "OVER BUDGET")
-        # under 80% -> Within budget
+        # under 80% -> Within budget (RM 200 budget)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10", cat,
-                                    rm(200))
+                                    0.001)
         rep = self.app.preview_month(self.admin, self.sid, "2026-10",
                                      as_of=date(2026, 10, 21))
         self.assertEqual(rep.expenses.budget_control_status, "Within budget")

@@ -80,7 +80,7 @@ class OperationsWriteService:
 
     def configure_month_with_budgets(self, store_id: int, month: str,
                                      fields: dict,
-                                     budgets: dict[int, Optional[int]],
+                                     budgets: dict[int, Optional[float]],
                                      holidays: Optional[list[date]] = None,
                                      ) -> dict:
         """Atomic monthly setup save: config + budgets (+ public
@@ -101,9 +101,9 @@ class OperationsWriteService:
                                           name=new_name.strip())
 
     def set_expense_budget(self, store_id: int, month: str, category_id: int,
-                           budget_cents: Optional[int]) -> int:
+                           budget_pct: Optional[float]) -> int:
         return self.repo.save_expense_budget(store_id, month, category_id,
-                                             budget_cents)
+                                             budget_pct)
 
     # -- daily operations ---------------------------------------------------
     def record_daily(self, store_id: int, day: date,

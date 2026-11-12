@@ -210,7 +210,7 @@ class FourLevelsRequiredTests(Fixture):
         with self.assertRaises(ValidationError):
             self.app.configure_month_with_budgets(
                 self.admin, self.sid, "2026-10",
-                {"level1_base_cents": rm(200000)}, {category: rm(500)})
+                {"level1_base_cents": rm(200000)}, {category: 0.05})
         self.assertEqual(self.app.get_expense_budgets(self.admin, self.sid, "2026-10"), {})
 
     def test_no_target_and_complete_config_can_be_saved(self):
@@ -302,10 +302,10 @@ class MonthlySetupTests(Fixture):
             support_team_cost_cents=rm(3000))
         self.app.configure_month_with_budgets(
             self.admin, self.sid, "2026-09", previous,
-            {power: rm(300)}, [date(2026, 9, 3)])
+            {power: 0.003}, [date(2026, 9, 3)])
         self.app.configure_month_with_budgets(
             self.admin, self.sid, "2026-10", current,
-            {power: rm(100), rent: rm(200)}, [date(2026, 10, 5)])
+            {power: 0.001, rent: 0.002}, [date(2026, 10, 5)])
         state = self.setup_state()
         self.bound(mod, SetupState, state.load_setup_data)
         self.assertTrue(state.has_previous_setup)
@@ -325,7 +325,7 @@ class MonthlySetupTests(Fixture):
         rows_by_name = {row["name"]: row for row in state.budget_rows}
         self.assertEqual(
             {n: rows_by_name[n]["value"] for n in ("Power", "Rent")},
-            {"Power": "300.00", "Rent": ""})
+            {"Power": "0.3", "Rent": ""})
         self.assertEqual(
             {n: rows_by_name[n]["clear"] for n in ("Power", "Rent")},
             {"Power": "", "Rent": "1"})
@@ -340,7 +340,7 @@ class MonthlySetupTests(Fixture):
         self.assertEqual(state.s_holidays, ["2026-10-05"])
         self.assertEqual(self.config(), before)
         self.assertEqual(self.app.get_expense_budgets(
-            self.admin, self.sid, "2026-10"), {power: rm(100), rent: rm(200)})
+            self.admin, self.sid, "2026-10"), {power: 0.001, rent: 0.002})
 
         self.save(state)
         saved = self.config()
@@ -357,7 +357,7 @@ class MonthlySetupTests(Fixture):
                 "overtime_cents", "support_team_cost_cents"):
             self.assertEqual(getattr(saved, field), Decimal(str(current[field])))
         self.assertEqual(self.app.get_expense_budgets(
-            self.admin, self.sid, "2026-10"), {power: rm(300), rent: None})
+            self.admin, self.sid, "2026-10"), {power: 0.003, rent: None})
         self.assertEqual(self.app.get_public_holidays(
             self.admin, self.sid, "2026-10"), [date(2026, 10, 5)])
 

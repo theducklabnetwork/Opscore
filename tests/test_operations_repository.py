@@ -169,10 +169,10 @@ class TestExpenses(RepoFixture):
         cfg = self.add_config(self.sid, "2026-09")
         self.conn.execute(
             "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
-            "category_id, budget_cents) VALUES (?,?,?,?)",
-            (self.sid, cfg, self.cat, 400000))
+            "category_id, budget_pct) VALUES (?,?,?,?)",
+            (self.sid, cfg, self.cat, 0.02))
         budgets = self.repo.get_expense_budgets(self.sid, "2026-09")
-        self.assertEqual(budgets, {self.cat: 400000})
+        self.assertEqual(budgets, {self.cat: 0.02})
         self.assertEqual(self.repo.get_expense_budgets(self.other, "2026-09"), {})
 
     def test_cross_month_transaction_retrieved_once(self):
@@ -302,8 +302,8 @@ class TestEndToEndIntegration(RepoFixture):
             (sid, "Electricity")).lastrowid
         self.conn.execute(
             "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
-            "category_id, budget_cents) VALUES (?,?,?,?)",
-            (sid, cfg, cat, rm(4000)))
+            "category_id, budget_pct) VALUES (?,?,?,?)",
+            (sid, cfg, cat, 0.02))
         for i, s in enumerate(sales_rm):
             rec = self.conn.execute(
                 "INSERT INTO daily_records (store_id, date, sales_cents, transactions, "

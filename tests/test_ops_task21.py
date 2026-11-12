@@ -306,6 +306,7 @@ class ClearBudgetTests(Fixture):
     def setUp(self):
         super().setUp()
         self.app.configure_month(self.admin, self.sid, "2026-10",
+                                 min_rtm_target_cents=rm(1000),
                                  level1_base_cents=rm(1000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.cat = self.app.add_expense_category(self.admin, self.sid,
                                                  "Elec", sort_order=1)
@@ -324,12 +325,12 @@ class ClearBudgetTests(Fixture):
     def test_parse_budget_rows(self):
         from ducklab.ops_setup_state import _parse_budget_rows
         rows = [
-            {"id": "7", "name": "Elec", "value": "500.00",
-             "original": "500.00", "clear": "1"},
+            {"id": "7", "name": "Elec", "value": "5",
+             "original": "5", "clear": "1"},
             {"id": "8", "name": "Water", "value": "", "original": "",
              "clear": ""},
-            {"id": "9", "name": "Gas", "value": "120.00",
-             "original": "120.00", "clear": ""},
+            {"id": "9", "name": "Gas", "value": "1.2",
+             "original": "1.2", "clear": ""},
         ]
         self.assertEqual(_parse_budget_rows(rows), ({7: None}, []))
         # nothing ticked, nothing changed -> nothing sent
@@ -338,35 +339,36 @@ class ClearBudgetTests(Fixture):
         # blanking a saved budget without ticking clear is rejected
         rows[0]["value"] = ""
         self.assertEqual(_parse_budget_rows(rows), ({}, [
-            "Budget for Elec: enter a budget amount, or use "
+            "Budget for Elec: enter a budget %, or use "
             "× to clear it (No budget)."]))
 
     def test_budget_save_value(self):
         from ducklab.ops_expenses_state import _budget_save_value
         self.assertIsNone(_budget_save_value("", True))
         with self.assertRaises(ValueError) as clash:
-            _budget_save_value("4000.00", True)
+            _budget_save_value("4.5", True)
         self.assertEqual(str(clash.exception),
-                         "Enter an amount, or use × to clear")
-        self.assertEqual(_budget_save_value("4000.00", False), 400000)
+                         "Enter a percentage, or use × to clear")
+        self.assertEqual(_budget_save_value("2.5", False), 0.025)
         with self.assertRaises(ValueError) as ctx:
             _budget_save_value("  ", False)
         self.assertEqual(
             str(ctx.exception),
-            "Enter a budget amount, or use × to clear it. A missing budget "
-            "is distinct from RM 0.")
+            "Enter a budget %, or use × to clear it. A missing budget "
+            "is distinct from 0%.")
 
     def test_monthly_setup_clear_reads_back_none(self):
         from ducklab.ops_setup_state import _parse_budget_rows
         self.app.configure_month_with_budgets(
-            self.admin, self.sid, "2026-10", {}, {self.cat: rm(50000)})
+            self.admin, self.sid, "2026-10", {}, {self.cat: 0.025})
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, "2026-10"),
-            {self.cat: 5000000})
+            {self.cat: 0.025})
+        # 2.5% of the active target (Level 1 base RM 1,000) = RM 25
         self.assertEqual(self._status(),
-                         ("Within budget", "Within budget", 5000000))
-        rows = [{"id": str(self.cat), "name": "Elec", "value": "50000.00",
-                 "original": "50000.00", "clear": "1"}]
+                         ("Within budget", "Within budget", 2500))
+        rows = [{"id": str(self.cat), "name": "Elec", "value": "2.5",
+                 "original": "2.5", "clear": "1"}]
         updates, errors = _parse_budget_rows(rows)
         self.assertEqual((updates, errors), ({self.cat: None}, []))
         self.app.configure_month_with_budgets(
@@ -379,11 +381,11 @@ class ClearBudgetTests(Fixture):
     def test_expenses_page_clear_reads_back_none(self):
         from ducklab.ops_expenses_state import _budget_save_value
         self.app.set_expense_budget(self.admin, self.sid, "2026-10",
-                                    self.cat, _budget_save_value("50000",
+                                    self.cat, _budget_save_value("2.5",
                                                                  False))
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, "2026-10"),
-            {self.cat: 5000000})
+            {self.cat: 0.025})
         self.app.set_expense_budget(self.admin, self.sid, "2026-10",
                                     self.cat, _budget_save_value("", True))
         self.assertEqual(
@@ -415,7 +417,7 @@ class DevCleanupTests(Fixture):
                              sales_cents=rm(100),
                              stock_losses={"DMO": rm(5)})
         cat = app.add_expense_category(admin, self.qa, "Elec", sort_order=1)
-        app.set_expense_budget(admin, self.qa, "2026-09", cat, rm(10))
+        app.set_expense_budget(admin, self.qa, "2026-09", cat, 0.01)
         app.record_expense(admin, self.qa, description="qa expense")
         app.raise_action(admin, self.qa, date(2026, 9, 2), "General Operations",
                          "qa issue", "High")

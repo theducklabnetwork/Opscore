@@ -74,14 +74,17 @@ def _check_month(month: str) -> None:
         raise InvalidMonthError(f"Invalid reporting month: {month!r}")
 
 
-def _check_budget_cents(category_id: int, cents) -> None:
-    """Budget rule shared by both budget writers: integer cents or None
-    (no budget entered); never negative."""
-    if cents is not None and not isinstance(cents, int):
-        raise ValidationError("budget_cents must be integer cents or None")
-    if cents is not None and cents < 0:
+def _check_budget_pct(category_id: int, pct) -> None:
+    """Budget rule shared by both budget writers: a fraction of the active
+    sales target (0.025 = 2.5%) or None (no budget entered). Non-negative,
+    at most 100% (1.0)."""
+    if pct is None:
+        return
+    if isinstance(pct, bool) or not isinstance(pct, (int, float)):
+        raise ValidationError("budget_pct must be a number or None")
+    if not (0 <= float(pct) <= 1):
         raise ValidationError(
-            f"Budget for category {category_id} cannot be negative")
+            f"Budget for category {category_id} must be between 0% and 100%")
 
 
 # Level 1 base target + the three uplifts that derive Levels 2-4.
@@ -178,7 +181,8 @@ class OperationsWriteRepository:
                 "INSERT INTO expense_categories (store_id, name, sort_order) "
                 "VALUES (?, ?, ?)",
                 [(store_id, cat_name, order)
-                 for order, cat_name in enumerate(DEFAULT_EXPENSE_CATEGORIES)],
+                 for order, (cat_name, _pct)
+                 in enumerate(DEFAULT_EXPENSE_CATEGORIES)],
             )
             conn.commit()
             return store_id
@@ -372,7 +376,7 @@ class OperationsWriteRepository:
 
     def save_month_config_with_budgets(self, store_id: int, month: str,
                                        fields: dict,
-                                       budgets: dict[int, Optional[int]],
+                                       budgets: dict[int, Optional[float]],
                                        holidays: Optional[list[date]] = None,
                                        ) -> dict:
         """Atomic: monthly config + per-category budgets (+ the month's
@@ -387,8 +391,8 @@ class OperationsWriteRepository:
         if bad:
             raise ValidationError(f"Unknown config fields: {sorted(bad)}")
         _check_config_values(fields)
-        for cat_id, cents in budgets.items():
-            _check_budget_cents(cat_id, cents)
+        for cat_id, pct in budgets.items():
+            _check_budget_pct(cat_id, pct)
         conn = self._connect()
         try:
             conn.execute("BEGIN")
@@ -413,7 +417,7 @@ class OperationsWriteRepository:
                         f"UPDATE monthly_configs SET {sets} WHERE id = ?",
                         (*fields.values(), config_id),
                     )
-            for cat_id, cents in budgets.items():
+            for cat_id, pct in budgets.items():
                 cat = conn.execute(
                     "SELECT 1 FROM expense_categories WHERE id = ? AND store_id = ?",
                     (cat_id, store_id),
@@ -425,11 +429,11 @@ class OperationsWriteRepository:
                 # (the Expenses page writer).
                 conn.execute(
                     "INSERT INTO monthly_expense_budgets (store_id, "
-                    "monthly_config_id, category_id, budget_cents) "
+                    "monthly_config_id, category_id, budget_pct) "
                     "VALUES (?,?,?,?) "
                     "ON CONFLICT (monthly_config_id, category_id) "
-                    "DO UPDATE SET budget_cents = excluded.budget_cents",
-                    (store_id, config_id, cat_id, cents),
+                    "DO UPDATE SET budget_pct = excluded.budget_pct",
+                    (store_id, config_id, cat_id, pct),
                 )
             if holidays is not None:
                 start, month_end, _ = kpi.month_bounds(month)
@@ -461,11 +465,11 @@ class OperationsWriteRepository:
             conn.close()
 
     def save_expense_budget(self, store_id: int, month: str, category_id: int,
-                            budget_cents: Optional[int]) -> int:
+                            budget_pct: Optional[float]) -> int:
         """Create/update one category budget for a store/month. Idempotent
         on UNIQUE(monthly_config_id, category_id); never duplicates."""
         _check_month(month)
-        _check_budget_cents(category_id, budget_cents)
+        _check_budget_pct(category_id, budget_pct)
         conn = self._connect()
         try:
             self._require_store(conn, store_id)
@@ -485,10 +489,10 @@ class OperationsWriteRepository:
                     f"Category {category_id} not found in store {store_id}")
             cur = conn.execute(
                 "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
-                "category_id, budget_cents) VALUES (?,?,?,?) "
+                "category_id, budget_pct) VALUES (?,?,?,?) "
                 "ON CONFLICT (monthly_config_id, category_id) "
-                "DO UPDATE SET budget_cents = excluded.budget_cents",
-                (store_id, cfg[0], category_id, budget_cents),
+                "DO UPDATE SET budget_pct = excluded.budget_pct",
+                (store_id, cfg[0], category_id, budget_pct),
             )
             conn.commit()
             return cur.lastrowid

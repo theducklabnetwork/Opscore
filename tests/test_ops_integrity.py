@@ -35,7 +35,8 @@ class Fixture(unittest.TestCase):
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         self.month = "2026-10"
         self.app.configure_month(
-            self.admin, self.sid, self.month, level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+            self.admin, self.sid, self.month, min_rtm_target_cents=rm(200000),
+            level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
             turnover_threshold=0.05)
@@ -82,9 +83,10 @@ class Fixture(unittest.TestCase):
             self.app.configure_month_with_budgets(
                 self.admin, self.sid, self.month,
                 {"level1_base_cents": 12345600, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3},
-                {cat: -500})
-        self.assertEqual(str(ctx.exception),
-                         f"Budget for category {cat} cannot be negative")
+                {cat: -0.05})
+        self.assertEqual(
+            str(ctx.exception),
+            f"Budget for category {cat} must be between 0% and 100%")
         cfg = self.app.get_month_config(self.admin, self.sid, self.month)
         self.assertEqual(cfg.level1_base_cents, 20000000)  # unchanged
         self.assertEqual(
@@ -101,34 +103,34 @@ class Fixture(unittest.TestCase):
             if c.name == "Water")
         self.app.configure_month_with_budgets(
             self.admin, self.sid, self.month,
-            {"level1_base_cents": 12345600, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3}, {c1: 50000, c2: 12345})
+            {"level1_base_cents": 12345600, "level2_pct": 0.1, "level3_pct": 0.2, "level4_pct": 0.3}, {c1: 0.005, c2: 0.0012345})
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, self.month),
-            {c1: 50000, c2: 12345})
+            {c1: 0.005, c2: 0.0012345})
         cfg = self.app.get_month_config(self.admin, self.sid, self.month)
         self.assertEqual(cfg.level1_base_cents, 12345600)
         rep = self.app.preview_month(self.admin, self.sid, self.month,
                                      as_of=TODAY)
-        self.assertEqual(rep.expenses.total_budget_cents, 62345)
         self.assertEqual(
             {c.name: c.budget_cents for c in rep.expenses.categories
              if c.budget_cents is not None},
-            {"Elec": 50000, "Water": 12345})
+            {"Elec": 100000, "Water": 24690})
         # second save updates in place (no duplicate rows)
         self.app.configure_month_with_budgets(
-            self.admin, self.sid, self.month, {}, {c1: 60000})
+            self.admin, self.sid, self.month, {}, {c1: 0.006})
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, self.month),
-            {c1: 60000, c2: 12345})
+            {c1: 0.006, c2: 0.0012345})
 
     def test_expense_page_budget_negative_rejected(self):
         cat = self.app.add_expense_category(self.admin, self.sid, "Elec",
                                             sort_order=1)
         with self.assertRaises(ValidationError) as ctx:
             self.app.set_expense_budget(self.admin, self.sid, self.month,
-                                        cat, -1)
-        self.assertEqual(str(ctx.exception),
-                         f"Budget for category {cat} cannot be negative")
+                                        cat, -0.01)
+        self.assertEqual(
+            str(ctx.exception),
+            f"Budget for category {cat} must be between 0% and 100%")
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, self.month),
             {})
@@ -141,13 +143,13 @@ class Fixture(unittest.TestCase):
         from ducklab.ops_setup_state import SetupState
         st = types.SimpleNamespace(budget_rows=[
             {"id": "7", "name": "Elec", "value": "", "original": ""},
-            {"id": "8", "name": "Water", "value": " ", "original": "500.00"},
-            {"id": "9", "name": "Gas", "value": "123.45", "original": ""},
+            {"id": "8", "name": "Water", "value": " ", "original": "5"},
+            {"id": "9", "name": "Gas", "value": "1.5", "original": ""},
         ])
         updates, errors = SetupState._parse_budgets(st)
-        self.assertEqual(updates, {9: 12345})
+        self.assertEqual(updates, {9: 0.015})
         self.assertEqual(errors, [
-            "Budget for Water: enter a budget amount, or use "
+            "Budget for Water: enter a budget %, or use "
             "× to clear it (No budget)."])
 
     # 3 ------------------------------------------------------------------
@@ -225,7 +227,7 @@ class Fixture(unittest.TestCase):
         cat = self.app.add_expense_category(self.admin, self.sid, "Elec",
                                             sort_order=1)
         self.app.set_expense_budget(self.admin, self.sid, self.month, cat,
-                                    50000)
+                                    0.005)
         self.app.finalize_month(self.admin, self.sid, self.month,
                                 as_of=TODAY)
         self.app.set_store_active(self.admin, self.sid, False)
@@ -238,7 +240,7 @@ class Fixture(unittest.TestCase):
                 lambda: self.app.rename_expense_category(
                     self.admin, self.sid, cat, "Power"),
             "set_expense_budget": lambda: self.app.set_expense_budget(
-                self.admin, self.sid, self.month, cat, 70000),
+                self.admin, self.sid, self.month, cat, 0.007),
             "finalize_month": lambda: self.app.finalize_month(
                 self.admin, self.sid, "2026-09", as_of=TODAY),
             "correct_month": lambda: self.app.correct_month(
@@ -254,12 +256,13 @@ class Fixture(unittest.TestCase):
         # exist (the failed "Brand New Category" add and rename did not persist)
         self.assertEqual(
             self.app.get_expense_budgets(self.admin, self.sid, self.month),
-            {cat: 50000})
+            {cat: 0.005})
         from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
         self.assertEqual(
             sorted(c.name for c in self.app.get_expense_categories(
                 self.admin, self.sid)),
-            sorted([*DEFAULT_EXPENSE_CATEGORIES, "Elec"]))
+            sorted([name for name, _pct in DEFAULT_EXPENSE_CATEGORIES]
+                   + ["Elec"]))
         cfg = self.app.get_month_config(self.admin, self.sid, self.month)
         self.assertIsNone(cfg.salary_basic_allowance_cents)
         self.assertEqual(

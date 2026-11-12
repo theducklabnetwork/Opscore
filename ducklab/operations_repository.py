@@ -347,16 +347,16 @@ class OperationsRepository:
         return [ExpenseCategory(r["id"], r["store_id"], r["name"], r["sort_order"])
                 for r in rows]
 
-    def get_expense_budgets(self, store_id: int, month: str) -> dict[int, Optional[int]]:
-        """category_id -> budget_cents (None = no budget entered)."""
+    def get_expense_budgets(self, store_id: int, month: str) -> dict[int, Optional[float]]:
+        """category_id -> budget_pct fraction (None = no budget entered)."""
         _validate_month(month)
         rows = self._query(
-            "SELECT b.category_id, b.budget_cents FROM monthly_expense_budgets b "
+            "SELECT b.category_id, b.budget_pct FROM monthly_expense_budgets b "
             "JOIN monthly_configs c ON c.id = b.monthly_config_id "
             "WHERE b.store_id = ? AND c.month = ?",
             (store_id, month),
         )
-        return {r["category_id"]: r["budget_cents"] for r in rows}
+        return {r["category_id"]: r["budget_pct"] for r in rows}
 
     def get_expense_transactions(self, store_id: int) -> list[ExpenseRecord]:
         """ALL transactions for the store, ordered by incurred date.

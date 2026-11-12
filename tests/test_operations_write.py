@@ -59,7 +59,7 @@ class TestStoreWrites(WriteFixture):
         sid = self.svc.register_store("S01", "Store A")
         cats = self.r.get_expense_categories(sid)
         self.assertEqual([c.name for c in cats],
-                         list(DEFAULT_EXPENSE_CATEGORIES))
+                         [name for name, _pct in DEFAULT_EXPENSE_CATEGORIES])
         self.assertEqual([c.sort_order for c in cats], list(range(10)))
 
     def test_create_store_is_atomic(self):
@@ -179,13 +179,13 @@ class TestCategoryBudgetWrites(WriteFixture):
         self.assertEqual(tx[0].input.category_id, self.cat1)
 
     def test_budget_upsert_and_isolation(self):
-        b1 = self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, rm(4000))
-        self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, rm(3100))
+        self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, 0.04)
+        self.svc.set_expense_budget(self.s1, "2026-09", self.cat1, 0.031)
         budgets = self.r.get_expense_budgets(self.s1, "2026-09")
-        self.assertEqual(budgets, {self.cat1: rm(3100)})  # updated, not duplicated
+        self.assertEqual(budgets, {self.cat1: 0.031})  # updated, not duplicated
         # Cross-store category rejected.
         with self.assertRaises(RecordNotFoundError):
-            self.svc.set_expense_budget(self.s2, "2026-09", self.cat1, rm(100))
+            self.svc.set_expense_budget(self.s2, "2026-09", self.cat1, 0.01)
         with self.assertRaises(RecordNotFoundError):
             self.svc.rename_expense_category(self.s2, self.cat1, "Hijack")
 

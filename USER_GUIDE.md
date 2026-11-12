@@ -127,11 +127,20 @@ Pick the store and month, then fill in:
 | Daily Sales | Target Transactions, Target BV, Target UPT, Public Holidays. If Target Transactions is blank, the form suggests Level 1 ÷ Target BV, rounded to a whole transaction. |
 | Manpower | Salary ratio target, budget headcount, opening headcount, turnover threshold, part-timer factor, payroll figures |
 | Stock | Stock loss target |
-| Expenses | Budget for each expense category |
+| Expenses | Budget % for each expense category — a share of the active sales target |
 
 Click **Save Setup**. Use **Copy From Last Month** to pre-fill the form and
 expense budgets from the previous month; review the values and click
 **Save Setup** to apply them.
+
+**Budget percentages.** Each category's budget is a percentage of the store's
+active sales target. The target starts at **Minimum RTM**; once cumulative
+recorded sales reach Level 1, the budget moves to that target, and keeps
+stepping up through Levels 2–4 as sales pass them. If Level 1 Base is not set,
+Minimum RTM is used. Correcting sales downward steps the budget back down.
+Ten default categories ship with suggested percentages (for example
+Electricity 2.5%, Water 0.3%); you can change each one here or on the
+Expenses page under **Set Budget**.
 
 **Tips:**
 
@@ -225,6 +234,14 @@ are allowed; the page flags them for you to finish later.
   recorder
 - Filters for period, category, status, verification and description/receipt
   search, and sorting by incurred date, paid date or amount
+
+### Set a budget
+
+Under **Budget vs Paid**, choose a category and enter its **Budget (%)** — a
+percentage of the active sales target (Minimum RTM, then the highest sales
+level reached). The page shows the current basis, for example "Budget = % ×
+Minimum RTM (RM 200,000.00)". Click the **×** beside a saved percentage to
+clear it back to **No budget**.
 
 Expense categories are set up in **Settings → Reference Data**. Stores without
 categories receive ten defaults automatically on startup; stores with existing

@@ -922,6 +922,50 @@ def budget_variance_cents(budget_cents: Optional[int],
     return budget_cents - paid_cents
 
 
+# --------------------------------------------------------------------------
+# Expense budgets as a % of the ACTIVE sales target
+# --------------------------------------------------------------------------
+
+def active_sales_target_cents(cfg: MonthConfig,
+                              sales_mtd_cents: int) -> tuple[str, Optional[int]]:
+    """The sales target a percentage budget is applied to, given cumulative
+    recorded sales (Sales MTD).
+
+    Progressive ladder, reach-or-exceed:
+      - below Minimum RTM (or no levels configured) -> ("Minimum RTM", floor)
+      - sales >= Level N target                     -> ("Level N", target)
+
+    The active target always reflects CURRENT cumulative sales: a downward
+    sales correction steps the budget back down the ladder. Level 4 keeps
+    its MAX(Minimum RTM, base x (1+L4%)) rule. ``cents`` is None when no
+    Minimum RTM and no Level 1 base are configured at all.
+    """
+    floor = cfg.min_rtm_target_cents
+    targets = sales_target_levels_cents(cfg)
+    if all(t is None for t in targets.values()):
+        return "Minimum RTM", floor
+    if floor is not None and sales_mtd_cents < floor:
+        return "Minimum RTM", floor
+    label, best = "Minimum RTM", floor
+    for name in ("level1", "level2", "level3", "level4"):
+        t = targets[name]
+        if t is None:
+            continue
+        cents = int(t)
+        if sales_mtd_cents >= cents and (best is None or cents >= best):
+            label, best = f"Level {name[-1]}", cents
+    return label, best
+
+
+def budget_from_pct(pct, target_cents: Optional[int]) -> Optional[int]:
+    """Percentage budget -> integer cents: pct (fraction) x target, rounded
+    half-up to the cent. None when either side is missing."""
+    if pct is None or target_cents is None:
+        return None
+    cents = Decimal(str(target_cents)) * Decimal(str(pct))
+    return int(cents.quantize(Decimal("1"), rounding="ROUND_HALF_UP"))
+
+
 def ratio_of_target(value, target) -> Optional[Decimal]:
     """value / target (share of a target used, e.g. salary ratio vs its
     target). None when either is missing or the target is zero."""

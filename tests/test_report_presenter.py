@@ -28,6 +28,7 @@ class PresentationParityTests(unittest.TestCase):
 
     def configure(self, days=(), payroll=True, expenses=False, actions=False):
         config = dict(
+            min_rtm_target_cents=10_000_000,
             level1_base_cents=10_000_000, level2_pct=0.1, level3_pct=0.2,
             level4_pct=0.3, opening_headcount_ft=8, stock_loss_target=0.015,
             salary_ratio_target=0.06818, part_timer_factor=0.5,
@@ -46,7 +47,7 @@ class PresentationParityTests(unittest.TestCase):
             category = self.app.add_expense_category(
                 self.admin, self.sid, "Utilities", sort_order=1)
             self.app.set_expense_budget(
-                self.admin, self.sid, "2026-10", category, 200_000)
+                self.admin, self.sid, "2026-10", category, 0.02)  # 2% x 100,000
             self.app.record_expense(
                 self.admin, self.sid, incurred_date=date(2026, 10, 2),
                 category_id=category, description="Electricity",

@@ -35,7 +35,7 @@ def make_workbook(path: Path, blank_sales: bool) -> None:
     setup["B17"], setup["B18"], setup["B19"] = 0.1, 0.2, 0.3
     setup["B47"] = 0.5
     setup["A33"] = "Electricity"
-    setup["B33"] = 1000
+    setup["B33"] = 0.025   # budget % of the active sales target
     daily = wb.create_sheet("Daily")
     daily["A7"] = date(2026, 10, 1)
     daily["C7"] = 0          # typed zero -> stored 0

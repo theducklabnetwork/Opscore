@@ -47,7 +47,7 @@ class ReportExportTest(unittest.TestCase):
             c.id for c in self.repo.get_expense_categories(self.store_id)
             if c.name == "Electricity")
         self.write.set_expense_budget(self.store_id, "2026-09", self.category,
-                                      rm(4000))
+                                      0.02)  # 2% x RM 200,000 = RM 4,000
         self.write.record_daily(
             self.store_id, date(2026, 9, 1), sales_cents=rm(10000),
             transactions=100, units=300, ft_working=7, pt_working=1,

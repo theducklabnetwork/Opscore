@@ -14,6 +14,8 @@ from typing import Optional
 import plotly.graph_objects as go
 import reflex as rx
 
+from decimal import Decimal
+
 from ducklab import authz
 from ducklab import design as ds
 from ducklab import kpi
@@ -22,7 +24,9 @@ from ducklab.auth_service import (
     AuthenticationError, AuthorizationError, User,
 )
 from ducklab.auth_pages import app_service
-from ducklab.input_validation import parse_client_id, parse_money_cents
+from ducklab.input_validation import (
+    parse_client_id, parse_decimal, parse_money_cents,
+)
 from ducklab.operations_repository import (
     ConfigNotFoundError, RepositoryError, StoreNotFoundError,
 )
@@ -47,9 +51,17 @@ MAX_ROWS = 100
 
 # All status colors: ds.status_color (design.py shared map)
 
-# cleared with × while an amount is typed (also used by Monthly Setup,
+# cleared with × while a percentage is typed (also used by Monthly Setup,
 # ops_setup_state._parse_budget_rows)
-BUDGET_CLEAR_CONFLICT = "Enter an amount, or use × to clear"
+BUDGET_CLEAR_CONFLICT = "Enter a percentage, or use × to clear"
+
+
+def _pct_str(fraction) -> str:
+    """0.025 -> '2.5'; trims trailing zeros; None -> ''."""
+    if fraction is None:
+        return ""
+    s = f"{float(fraction) * 100:g}"
+    return s
 
 
 class ExpensesState(SharedOpsState):
@@ -70,6 +82,10 @@ class ExpensesState(SharedOpsState):
     mix_fig_dark: go.Figure = go.Figure()
     mix_fig_light: go.Figure = go.Figure()
     validation_summary: str = ""
+    # active sales-target basis for % budgets (progressive ladder)
+    budget_basis_label: str = ""
+    budget_basis_cents: str = ""     # formatted RM or "" when unavailable
+    budget_pcts: dict[str, str] = {}  # category name -> saved pct (e.g. "2.5")
 
     # register
     all_expense_rows: list[dict[str, str]] = []
@@ -108,7 +124,7 @@ class ExpensesState(SharedOpsState):
 
     # --- budget form -------------------------------------------------------
     b_category: str = ""
-    b_amount: str = ""
+    b_amount: str = ""            # budget percentage text (e.g. "2.5")
     b_clear: bool = False     # cleared with ×: budget -> NULL
     b_error: str = ""
     b_notice: str = ""
@@ -128,8 +144,7 @@ class ExpensesState(SharedOpsState):
     @rx.var
     def b_has_saved(self) -> bool:
         """The selected category has a saved budget (the "×" shows)."""
-        return any(r["name"] == self.b_category and r["budget"] != "—"
-                   for r in self.budget_rows)
+        return bool(self.budget_pcts.get(self.b_category, ""))
 
     @rx.var
     def period_options(self) -> list[str]:
@@ -283,12 +298,16 @@ class ExpensesState(SharedOpsState):
         month = self._selected_month()
         if store_id is None or month is None or not self.has_stores:
             return
+        self.budget_basis_label = ""
+        self.budget_basis_cents = ""
+        self.budget_pcts = {}
         try:
             user = self._actor()
             finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
             cats = app_service.get_expense_categories(user, store_id)
             records = app_service.get_expense_transactions(user, store_id)
+            pcts = app_service.get_expense_budgets(user, store_id, month)
         except (AuthenticationError, AuthorizationError,
                 StoreNotFoundError) as exc:
             self.can_write_expenses = self.can_manage_budgets = False
@@ -304,6 +323,11 @@ class ExpensesState(SharedOpsState):
         self.exp_month_finalized = finalized
         self.has_categories = bool(cats)
         self.category_names = [c.name for c in cats]
+        self.budget_pcts = {
+            c.name: ("" if pcts.get(c.id) is None
+                     else _pct_str(pcts[c.id]))
+            for c in cats
+        }
         cat_names = {c.id: c.name for c in cats}
         known_ids = set(cat_names)
         self.all_expense_rows = [
@@ -314,6 +338,10 @@ class ExpensesState(SharedOpsState):
         try:
             rep = app_service.preview_month(user, store_id, month)
             e = rep.expenses
+            self.budget_basis_label = e.budget_basis_label
+            self.budget_basis_cents = (
+                "" if e.budget_basis_cents is None
+                else ds.fmt_rm(e.budget_basis_cents))
             util = kpi.budget_utilization(e.paid_cents, e.total_budget_cents)
             variance = kpi.budget_variance_cents(e.total_budget_cents,
                                                  e.paid_cents)
@@ -367,6 +395,7 @@ class ExpensesState(SharedOpsState):
                 self.budget_rows.append({
                     "category_id": str(c.category_id),
                     "name": c.name,
+                    "pct": self.budget_pcts.get(c.name, ""),
                     "budget": ds.fmt_rm(c.budget_cents),
                     "paid": ds.fmt_rm(paid),
                     "remaining": ds.fmt_rm(remaining),
@@ -579,7 +608,11 @@ class ExpensesState(SharedOpsState):
     def set_e_remarks(self, v: str): self.e_remarks = v
 
     @rx.event
-    def set_b_category(self, v: str): self.b_category = v
+    def set_b_category(self, v: str):
+        self.b_category = v
+        # prefill the saved percentage for the chosen category
+        self.b_amount = self.budget_pcts.get(v, "")
+        self.b_clear = False
     @rx.event
     def set_b_amount(self, v: str):
         self.b_amount = v
@@ -590,7 +623,7 @@ class ExpensesState(SharedOpsState):
 
     @rx.event
     def clear_budget(self):
-        """× in Budget (RM): the same as the old "Clear saved value"
+        """× in Budget (%): the same as the old "Clear saved value"
         checkbox with the amount blank (save -> NULL, "No budget")."""
         self.b_amount = ""
         self.b_clear = True
@@ -755,7 +788,7 @@ class ExpensesState(SharedOpsState):
             self.b_error = f"Unknown category: {self.b_category!r}"
             return
         try:
-            cents = _budget_save_value(self.b_amount, self.b_clear)
+            pct = _budget_save_value(self.b_amount, self.b_clear)
         except ValueError as exc:
             self.b_error = str(exc)
             return
@@ -763,7 +796,7 @@ class ExpensesState(SharedOpsState):
         yield
         try:
             app_service.set_expense_budget(user, store_id, month,
-                                           category_id, cents)
+                                           category_id, pct)
         except AuthenticationError:
             self.b_error = SESSION_EXPIRED
             return
@@ -781,9 +814,9 @@ class ExpensesState(SharedOpsState):
             self.b_saving = False
         self.b_clear = False
         self.b_notice = (f"Budget for {self.b_category} cleared "
-                         f"(No budget for {month})." if cents is None else
+                         f"(No budget for {month})." if pct is None else
                          f"Budget for {self.b_category} saved "
-                         f"({ds.fmt_rm(cents)} for {month}).")
+                         f"({_pct_str(pct)}% for {month}).")
         yield ExpensesState.load_expenses_data()
         yield ExpensesState.resync_selection()
 
@@ -796,16 +829,17 @@ def _paid_param(raw) -> str:
         return ""
 
 
-def _budget_save_value(amount: str, clear: bool) -> Optional[int]:
-    """Budget form -> cents to save. Cleared with × -> None (NULL = "No
-    budget", never 0); cleared while an amount is typed is rejected;
-    otherwise an amount is required."""
+def _budget_save_value(pct_raw: str, clear: bool) -> Optional[float]:
+    """Budget form -> fraction to save. Cleared with × -> None (NULL = "No
+    budget"); cleared while a percentage is typed is rejected; otherwise a
+    percentage is required. Returns a fraction (2.5 -> 0.025)."""
     if clear:
-        if amount.strip():
+        if pct_raw.strip():
             raise ValueError(BUDGET_CLEAR_CONFLICT)
         return None
-    if not amount.strip():
+    if not pct_raw.strip():
         raise ValueError(
-            "Enter a budget amount, or use × to clear it. A missing budget "
-            "is distinct from RM 0.")
-    return parse_money_cents(amount)
+            "Enter a budget %, or use × to clear it. A missing budget "
+            "is distinct from 0%.")
+    pct = parse_decimal(pct_raw, "Budget %", Decimal(0), Decimal(100))
+    return float(pct / 100)

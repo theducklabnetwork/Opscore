@@ -50,7 +50,8 @@ def main() -> int:
         app.assign_store(admin, admin.id, sid)
 
     app.configure_month(
-        admin, sid, "2026-10", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+        admin, sid, "2026-10", min_rtm_target_cents=rm(200000),
+        level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
         part_timer_factor=0.5, stock_loss_target=0.015)
     # one sale so "expenses % of sales" is defined
     app.record_daily(admin, sid, date(2026, 10, 1),
@@ -66,13 +67,14 @@ def main() -> int:
                               app.get_expense_categories(admin, sid)
                               if c.name == name)
 
-    # budgets: Electricity RM 4,000 (over), Water RM 500, Consumables
-    # RM 800 (watch at >=80%), Repairs blank (No budget)
+    # budgets (% of the RM 200,000 Minimum RTM floor): Electricity 2%
+    # (RM 4,000, over), Water 0.25% (RM 500), Consumables 0.4% (RM 800,
+    # watch at >=80%), Repairs blank (No budget)
     app.set_expense_budget(admin, sid, "2026-10", cats["Electricity"],
-                           rm(4000))
-    app.set_expense_budget(admin, sid, "2026-10", cats["Water"], rm(500))
+                           0.02)
+    app.set_expense_budget(admin, sid, "2026-10", cats["Water"], 0.0025)
     app.set_expense_budget(admin, sid, "2026-10", cats["Consumables"],
-                           rm(800))
+                           0.004)
 
     # wipe prior seeded lines for idempotency (dev-only table wipe by store)
     conn = sqlite3.connect(DEV_DB)
