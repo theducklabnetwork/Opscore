@@ -75,6 +75,9 @@ class ExpensesSection:
     pending_count: int   # valid Pending lines incurred by month end
     validation_counts: dict[str, int]
     categories: list[ExpenseCategoryRow] = field(default_factory=list)
+    # Active sales-target basis for % budgets (progressive ladder)
+    budget_basis_label: str = ""
+    budget_basis_cents: Optional[int] = None
 
 
 @dataclass
@@ -216,9 +219,19 @@ def assemble_month(
     known_ids = {c.id for c in categories}
     validation_counts = kpi.expense_review_counts(exp_inputs, month,
                                                   store_id, known_ids)
+    # Budgets are stored as a % of the ACTIVE sales target (progressive
+    # ladder: Minimum RTM floor, stepping up Levels 1-4 as recorded sales
+    # reach each target). Convert pct -> effective cents before the KPI
+    # checks; everything downstream stays in cents.
+    active_label, active_target = kpi.active_sales_target_cents(cfg, mtd)
+    budget_cents_by_cat = {
+        c.id: kpi.budget_from_pct(budgets.get(c.id), active_target)
+        for c in categories
+    }
     # Total budget: sum of non-NULL budgets; None when NONE is set
     # (workbook: blank -> "No budget", never 0 -> "Over budget").
-    budget_values = [b for b in budgets.values() if b is not None]
+    budget_values = [b for b in budget_cents_by_cat.values()
+                     if b is not None]
     total_budget = sum(budget_values) if budget_values else None
     category_paid = kpi.category_paid_totals_cents(
         exp_inputs, month, store_id)
@@ -226,10 +239,10 @@ def assemble_month(
         ExpenseCategoryRow(
             category_id=c.id,
             name=c.name,
-            budget_cents=budgets.get(c.id),
+            budget_cents=budget_cents_by_cat.get(c.id),
             paid_mtd_cents=category_paid.get(c.id, 0),
             budget_status=kpi.budget_status(
-                category_paid.get(c.id, 0), budgets.get(c.id)),
+                category_paid.get(c.id, 0), budget_cents_by_cat.get(c.id)),
         )
         for c in categories
     ]
@@ -249,6 +262,8 @@ def assemble_month(
             totals["paid"], total_budget),
         validation_counts=validation_counts,
         categories=cat_rows,
+        budget_basis_label=active_label,
+        budget_basis_cents=active_target,
     )
 
     # --- Manpower ---

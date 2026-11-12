@@ -35,7 +35,8 @@ class OverviewFixture(unittest.TestCase):
         self.month = "2026-10"
         for sid in (self.sa, self.sb):
             self.app.configure_month(
-                self.admin, sid, self.month, level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+                self.admin, sid, self.month, min_rtm_target_cents=rm(200000),
+                level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=9, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 turnover_threshold=0.05,
@@ -46,7 +47,7 @@ class OverviewFixture(unittest.TestCase):
             c.id for c in self.app.get_expense_categories(self.admin, self.sa)
             if c.name == "Electricity")
         self.app.set_expense_budget(self.admin, self.sa, self.month,
-                                    self.cat, rm(100))  # tiny -> over budget
+                                    self.cat, 0.0005)  # 0.05% x 200,000 = RM 100 -> over
         # sales below target + expenses over budget + review line + overdue
         # action + high turnover + stock over target = all flags on A01
         for d in range(1, TODAY.day):  # partial month (in progress)

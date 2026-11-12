@@ -260,8 +260,8 @@ class SetupState(SharedOpsState):
         # expense budgets (rows always shown when categories exist)
         self.budget_rows = [
             {"id": str(c.id), "name": c.name,
-             "value": _money_str(budgets.get(c.id)),
-             "original": _money_str(budgets.get(c.id)),
+             "value": _pct_str(budgets.get(c.id)),
+             "original": _pct_str(budgets.get(c.id)),
              "clear": ""}
             for c in cats
         ]
@@ -522,7 +522,7 @@ class SetupState(SharedOpsState):
             field = next(spec[1] for spec in SETUP_ALL if spec[0] == attr)
             setattr(self, attr, fmt(getattr(cfg, field)))
         self.budget_rows = [
-            {**row, "value": _money_str(budgets.get(int(row["id"]))),
+            {**row, "value": _pct_str(budgets.get(int(row["id"]))),
              "clear": "1" if row["original"] and int(row["id"]) not in budgets
              else ""}
             for row in self.budget_rows
@@ -556,15 +556,15 @@ class SetupState(SharedOpsState):
         ]
 
 
-def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
+def _parse_budget_rows(rows) -> tuple[dict[int, Optional[float]], list[str]]:
     """Budget rows -> (updates, errors); pure, so it is testable.
 
-    updates = {category_id: cents | None} only for rows the user changed.
+    updates = {category_id: fraction | None} only for rows the user changed.
     Cleared with × writes NULL ("No budget"), never 0. Cleared AND a
-    different amount typed is rejected (nothing saved for that row).
+    different percentage typed is rejected (nothing saved for that row).
     Untouched rows send nothing. Blanking a saved budget WITHOUT the × is
-    rejected (a missing budget is distinct from RM 0)."""
-    updates: dict[int, Optional[int]] = {}
+    rejected (a missing budget is distinct from 0%)."""
+    updates: dict[int, Optional[float]] = {}
     errors: list[str] = []
     for row in rows:
         raw = row["value"].strip()
@@ -580,16 +580,14 @@ def _parse_budget_rows(rows) -> tuple[dict[int, Optional[int]], list[str]]:
             continue
         if raw == "":
             errors.append(
-                f"Budget for {row['name']}: enter a budget amount, or use "
+                f"Budget for {row['name']}: enter a budget %, or use "
                 "× to clear it (No budget).")
             continue
         try:
-            cents = parse_money_cents(raw)
-            if cents < 0:
-                raise ValueError("negative")
+            pct = parse_decimal(raw, "Budget %", Decimal(0), Decimal(100))
         except ValueError:
             errors.append(
-                f"Budget for {row['name']}: non-negative number")
+                f"Budget for {row['name']}: percentage between 0 and 100")
             continue
-        updates[int(row["id"])] = cents
+        updates[int(row["id"])] = float(pct / 100)
     return updates, errors

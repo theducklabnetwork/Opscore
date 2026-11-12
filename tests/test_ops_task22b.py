@@ -341,7 +341,7 @@ class NegativePayrollTests(Fixture):
         with self.assertRaises(ValidationError) as ctx:
             self.app.configure_month_with_budgets(
                 self.admin, self.sid, "2026-10",
-                {"overtime_cents": -500}, {self.cat: rm(10)})
+                {"overtime_cents": -500}, {self.cat: 0.01})
         self.assertEqual(str(ctx.exception),
                          "overtime_cents cannot be negative")
         cfg = self.config()

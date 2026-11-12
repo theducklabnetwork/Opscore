@@ -38,7 +38,7 @@ data. There is no separate auth database.
 
 ## 3. Current schema version
 
-**Schema version: 10** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
+**Schema version: 11** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
 
 You can see the schema version of a running installation in **Settings →
 About**.
@@ -63,7 +63,7 @@ cannot drift under normal operation.
 `init_db(db_path)`:
 
 1. Reads `PRAGMA user_version`.
-2. Iterates a static, ordered list `(1, _apply_v1) … (10, _apply_v10)`.
+2. Iterates a static, ordered list `(1, _apply_v1) … (11, _apply_v11)`.
 3. Skips versions `<= current`.
 4. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
    COMMIT`, rolling back the whole step on any error.
@@ -109,7 +109,7 @@ ensures both base and auth schema exist.
 
 ## 6. Schema history
 
-The complete v1–v10 history, from the migration functions in
+The complete v1–v11 history, from the migration functions in
 `ducklab/store_ops_db.py`:
 
 | Version | Change | Type |
@@ -124,6 +124,7 @@ The complete v1–v10 history, from the migration functions in
 | **v8** | `staff` gains `employment_type` (`Full-Time` / `Part-Time` / `Not Set`, default `Not Set`). | Additive |
 | **v9** | Index `idx_actions_store_raised_date` on `actions (store_id, raised_date)` for month-range queries. | Additive |
 | **v10** | `reference_data_info.bundled` records whether the current reference tables came from the bundled workbook. DSC import stays compatible with v5–v9 by feature-detecting the column. | Additive |
+| **v11** | `monthly_expense_budgets.budget_cents` (fixed RM) is replaced by `budget_pct` (a fraction of the active sales target, e.g. 0.025 = 2.5%). Existing fixed-RM budgets are cleared; the bundled default percentages are then seeded by the startup lifespan task. Finalized snapshots keep their historical RM figures. | Rebuild (sanctioned exception) |
 
 ## 7. Migration execution process
 
@@ -202,8 +203,8 @@ current session is signed out.
 
 ## 10. Data preservation and downgrade limits
 
-- **Upgrades preserve data.** Migrations are additive (with the single
-  documented v4 exception) and preserve existing records.
+- **Upgrades preserve data.** Migrations are additive (with the documented
+  v4 and v11 exceptions) and preserve existing records.
 - **No down migrations exist.** Reinstalling an older application version
   restores only the code; it does not reverse the database schema.
 - **Downgrading requires a backup.** The only way back to an older schema is
@@ -243,8 +244,9 @@ work.
   counter; `auth_login_failures` is created lazily outside any migration.
 - **Dual version bookkeeping is not cross-checked.** `user_version` drives
   decisions; `schema_migrations` is audit metadata only.
-- **v4 is destructive** by design (reference-data rebuild) and is the one
-  sanctioned exception to the additive-only rule.
+- **v4 and v11 are destructive** by design (reference-data rebuild; fixed-RM
+  budgets cleared in favour of percentages) and are the sanctioned
+  exceptions to the additive-only rule.
 - **No WAL or explicit busy-timeout tuning.** SQLite defaults are used, which
   suits the single-user desktop model.
 

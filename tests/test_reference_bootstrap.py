@@ -197,8 +197,10 @@ class DefaultExpenseCategoryTests(unittest.TestCase):
         self.assertTrue(reference_bootstrap.seed_default_expense_categories(
             self.db))
         rows = self.category_rows(store_id)
-        self.assertEqual([row[1] for row in rows],
-                         list(reference_bootstrap.DEFAULT_EXPENSE_CATEGORIES))
+        self.assertEqual(
+            [row[1] for row in rows],
+            [name for name, _pct
+             in reference_bootstrap.DEFAULT_EXPENSE_CATEGORIES])
         self.assertEqual([row[2] for row in rows], list(range(10)))
 
     def test_existing_categories_are_untouched(self):

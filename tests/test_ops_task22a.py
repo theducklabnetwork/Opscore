@@ -25,7 +25,7 @@ from ducklab.app_service import AppService
 
 TODAY = date(2026, 10, 21)
 ROOT = Path(__file__).resolve().parent.parent
-CLEAR_CONFLICT = "Enter an amount, or use × to clear"
+CLEAR_CONFLICT = "Enter a percentage, or use × to clear"
 
 
 def rm(v):
@@ -521,25 +521,26 @@ class BudgetClearConflictTests(Fixture):
     def setUp(self):
         super().setUp()
         self.app.configure_month(self.admin, self.sid, "2026-10",
+                                 min_rtm_target_cents=rm(1000),
                                  level1_base_cents=rm(1000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
         self.cat = self.app.add_expense_category(self.admin, self.sid,
                                                  "Elec", sort_order=1)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10",
-                                    self.cat, rm(500))
+                                    self.cat, 0.05)
 
     def budgets(self):
         return self.app.get_expense_budgets(self.admin, self.sid, "2026-10")
 
     def test_monthly_setup_rows(self):
         from ducklab.ops_setup_state import _parse_budget_rows
-        row = {"id": str(self.cat), "name": "Elec", "value": "600.00",
-               "original": "500.00", "clear": "1"}
+        row = {"id": str(self.cat), "name": "Elec", "value": "6",
+               "original": "5", "clear": "1"}
         self.assertEqual(_parse_budget_rows([row]), ({}, [
-            "Budget for Elec: Enter an amount, or use × to clear"]))
-        # ticked, amount left as saved -> clear (NULL)
-        row["value"] = "500.00"
+            "Budget for Elec: Enter a percentage, or use × to clear"]))
+        # ticked, percentage left as saved -> clear (NULL)
+        row["value"] = "5"
         self.assertEqual(_parse_budget_rows([row]), ({self.cat: None}, []))
-        # ticked, amount blanked -> clear (NULL)
+        # ticked, percentage blanked -> clear (NULL)
         row["value"] = ""
         self.assertEqual(_parse_budget_rows([row]), ({self.cat: None}, []))
 
@@ -548,25 +549,25 @@ class BudgetClearConflictTests(Fixture):
         from ducklab.ops_setup_state import SetupState
         st = SetupState()
         st.budget_rows = [{"id": str(self.cat), "name": "Elec",
-                           "value": "600.00", "original": "500.00",
+                           "value": "6", "original": "5",
                            "clear": "1"}]
         st.setup_original = {}
         self.run_bound(self.bind(mod, SetupState),
                        lambda: list(st.save_setup()))
         self.assertEqual(
             st.setup_error,
-            "Budget for Elec: Enter an amount, or use × to clear")
-        self.assertEqual(self.budgets(), {self.cat: 50000})   # unchanged
+            "Budget for Elec: Enter a percentage, or use × to clear")
+        self.assertEqual(self.budgets(), {self.cat: 0.05})   # unchanged
 
     def test_expenses_page_save_writes_nothing(self):
         import ducklab.ops_expenses_state as mod
         from ducklab.ops_expenses_state import ExpensesState
         st = ExpensesState()
-        st.b_category, st.b_amount, st.b_clear = "Elec", "4000.00", True
+        st.b_category, st.b_amount, st.b_clear = "Elec", "4.5", True
         self.run_bound(self.bind(mod, ExpensesState),
                        lambda: list(st.save_budget()))
         self.assertEqual(st.b_error, CLEAR_CONFLICT)
-        self.assertEqual(self.budgets(), {self.cat: 50000})   # unchanged
+        self.assertEqual(self.budgets(), {self.cat: 0.05})   # unchanged
 
 
 # 9 ---------------------------------------------------------------------------

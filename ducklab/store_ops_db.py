@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -102,7 +102,9 @@ CREATE TABLE monthly_expense_budgets (
     store_id INTEGER NOT NULL REFERENCES stores(id),
     monthly_config_id INTEGER NOT NULL,
     category_id INTEGER NOT NULL,
-    budget_cents INTEGER,
+    -- Budget as a FRACTION of the store's active sales target
+    -- (0.025 = 2.5%); NULL = no budget entered.
+    budget_pct REAL,
     UNIQUE (monthly_config_id, category_id),
     FOREIGN KEY (store_id, monthly_config_id)
         REFERENCES monthly_configs (store_id, id),
@@ -277,6 +279,7 @@ def init_db(db_path: Path | str = DB_PATH) -> None:
             (8, _apply_v8),
             (9, _apply_v9),
             (10, _apply_v10),
+            (11, _apply_v11),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -507,3 +510,55 @@ def _apply_v10(conn: sqlite3.Connection) -> None:
         "INTEGER NOT NULL DEFAULT 0 CHECK (bundled IN (0, 1))"
     )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (10)")
+
+
+def _apply_v11(conn: sqlite3.Connection) -> None:
+    """Expense budgets become a percentage of the active sales target.
+
+    ``budget_cents`` (a fixed RM amount) is replaced by ``budget_pct``
+    (a fraction, e.g. 0.025 = 2.5%). Fixed-RM budgets are cleared; the
+    bundled default percentages are seeded afterward by the startup
+    lifespan task (reference_bootstrap). Finalized monthly snapshots keep
+    their historical RM figures — only the live budget input changes.
+    """
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'monthly_expense_budgets'").fetchone()
+    if not exists:
+        # Minimal/legacy test fixtures may not carry the table.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS monthly_expense_budgets ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "store_id INTEGER NOT NULL REFERENCES stores(id),"
+            "monthly_config_id INTEGER NOT NULL,"
+            "category_id INTEGER NOT NULL,"
+            "budget_pct REAL,"
+            "UNIQUE (monthly_config_id, category_id))"
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version) VALUES (11)")
+        return
+    conn.execute("ALTER TABLE monthly_expense_budgets RENAME TO "
+                 "monthly_expense_budgets_v10")
+    conn.execute(
+        "CREATE TABLE monthly_expense_budgets ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "store_id INTEGER NOT NULL REFERENCES stores(id),"
+        "monthly_config_id INTEGER NOT NULL,"
+        "category_id INTEGER NOT NULL,"
+        "budget_pct REAL,"
+        "UNIQUE (monthly_config_id, category_id),"
+        "FOREIGN KEY (store_id, monthly_config_id)"
+        "    REFERENCES monthly_configs (store_id, id),"
+        "FOREIGN KEY (store_id, category_id)"
+        "    REFERENCES expense_categories (store_id, id))"
+    )
+    # Carry rows across as "no budget set"; the old RM value is dropped.
+    conn.execute(
+        "INSERT INTO monthly_expense_budgets "
+        "(id, store_id, monthly_config_id, category_id, budget_pct) "
+        "SELECT id, store_id, monthly_config_id, category_id, NULL "
+        "FROM monthly_expense_budgets_v10"
+    )
+    conn.execute("DROP TABLE monthly_expense_budgets_v10")
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (11)")

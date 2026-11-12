@@ -293,7 +293,7 @@ def main() -> int:
                "#expense-kpis >> text=RM 3,700.00", timeout=8000)
         ap.wait_for_timeout(1500)
         select_option(ap, "#b-category", "Consumables")
-        ap.fill("#b-amount", "1000")
+        ap.fill("#b-amount", "0.5")  # 0.5% x RM 200,000 floor = RM 1,000
         ap.click("#b-save")
         ap.wait_for_selector("#b-notice", timeout=20000)
         check("budget save notice", True)

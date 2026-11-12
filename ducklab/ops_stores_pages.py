@@ -305,7 +305,7 @@ def _setup_section() -> rx.Component:
             ui.form_section("Manpower", _setup_grid(SETUP_MANPOWER)),
             ui.form_section("Stock", _setup_grid(SETUP_STOCK)),
             ui.form_section(
-                "Expense Budgets (RM)",
+                "Expense Budgets (%)",
                 rx.cond(
                     Setup.budget_rows.length() > 0,
                     rx.grid(rx.foreach(Setup.budget_rows, _budget_row),
@@ -313,6 +313,9 @@ def _setup_section() -> rx.Component:
                             spacing="4", width="100%"),
                     ui.note("No expense categories configured for this "
                             "store.")),
+                hint="Each budget is a % of the active sales target: "
+                     "Minimum RTM until recorded sales reach Level 1, then "
+                     "the highest level reached (up to Level 4).",
             ),
             ui.form_section("Month-End Inputs", _setup_grid(SETUP_PAYROLL),
                             hint="Leave blank until payroll closes to show "

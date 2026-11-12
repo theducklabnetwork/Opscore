@@ -166,8 +166,8 @@ class TestBudgetsAndCrossStore(StoreOpsDbTestCase):
         cat = self.add_category(sid)
         self.conn.execute(
             "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
-            "category_id, budget_cents) VALUES (?,?,?,?)",
-            (sid, cfg, cat, 400000),
+            "category_id, budget_pct) VALUES (?,?,?,?)",
+            (sid, cfg, cat, 0.025),
         )
 
     def test_cross_store_config_rejected(self):
@@ -179,8 +179,8 @@ class TestBudgetsAndCrossStore(StoreOpsDbTestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.conn.execute(
                 "INSERT INTO monthly_expense_budgets (store_id, monthly_config_id, "
-                "category_id, budget_cents) VALUES (?,?,?,?)",
-                (s1, cfg_s1, cat_s2, 100),
+                "category_id, budget_pct) VALUES (?,?,?,?)",
+                (s1, cfg_s1, cat_s2, 0.01),
             )
 
     def test_cross_store_expense_category_rejected(self):

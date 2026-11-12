@@ -241,11 +241,11 @@ class AppService:
                     store_id, cat.id, sort_order=pos)
 
     def set_expense_budget(self, user: User, store_id: int, month: str,
-                           category_id: int, budget_cents) -> None:
+                           category_id: int, budget_pct) -> None:
         authz.require_config_manager(user)
         self._store_write(user, store_id)
         self.write.set_expense_budget(store_id, month, category_id,
-                                      budget_cents)
+                                      budget_pct)
 
     def raise_action(self, user: User, store_id: int, raised_date: date,
                      pillar: str, description: str, priority: str,

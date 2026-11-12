@@ -32,7 +32,8 @@ class Fixture(unittest.TestCase):
             "admin@ducklab.com", "Root", "Sup3rSecure!x")
         self.sid = self.app.register_store(self.admin, "A01", "Alpha")
         self.app.configure_month(
-            self.admin, self.sid, "2026-10", level1_base_cents=rm(250000),
+            self.admin, self.sid, "2026-10", min_rtm_target_cents=rm(200000),
+            level1_base_cents=rm(250000),
             level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
             opening_headcount_ft=9, budget_headcount=9,
             part_timer_factor=0.5, salary_ratio_target=0.06818,
@@ -123,7 +124,7 @@ class ExpensesTests(Fixture):
                                                  "Repairs & Maintenance",
                                                  sort_order=1)
         self.app.set_expense_budget(self.admin, self.sid, "2026-10",
-                                    self.cat, rm(1000))
+                                    self.cat, 0.005)  # 0.5% x RM 200,000 = RM 1,000
         common = dict(category_id=self.cat, recorded_by="Staff A")
         # OK, Unverified (needs review), Missing paid date (needs review)
         self.app.record_expense(
@@ -193,7 +194,8 @@ class ExpensesTests(Fixture):
         from ducklab.expense_category_defaults import DEFAULT_EXPENSE_CATEGORIES
         self.assertEqual(
             sorted(paid.y),
-            sorted([*DEFAULT_EXPENSE_CATEGORIES, "Repairs & Maintenance"]))
+            sorted([name for name, _pct in DEFAULT_EXPENSE_CATEGORIES]
+                   + ["Repairs & Maintenance"]))
 
 
 # Stock ------------------------------------------------------------------------
@@ -273,7 +275,7 @@ class PageWordingTests(unittest.TestCase):
         self.check(str(expenses_page()),
                    ("Paid", "Incurred", "Pending", "Budget", "Utilization",
                     "Variance", "Budget vs Paid", "Remaining", "Set Budget",
-                    "Category", "Budget (RM)", "Save", "Transactions",
+                    "Category", "Budget (%)", "Save", "Transactions",
                     "Add Expense", "Paid By", "Receipt Ref",
                     "All Statuses", "All Verifications"),
                    ("Pending / outstanding", "Total budget",
@@ -282,7 +284,7 @@ class PageWordingTests(unittest.TestCase):
                     "Save budget", "Transaction register", "Add expense",
                     "Data check", "Category budget monitor",
                     "Budgets belong to", "Record expenses, track",
-                    "RadixThemesCheckbox"))
+                    "RadixThemesCheckbox", "Budget (RM)"))
 
     def test_stock(self):
         from ducklab.ops_stock_pages import stock_page

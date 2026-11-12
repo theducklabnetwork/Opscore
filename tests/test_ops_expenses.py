@@ -34,13 +34,15 @@ class ExpenseFixture(unittest.TestCase):
         self.sb = self.app.register_store(self.admin, "B02", "Beta")
         for sid in (self.sa, self.sb):
             self.app.configure_month(
-                self.admin, sid, "2026-09", level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+                self.admin, sid, "2026-09", min_rtm_target_cents=rm(200000),
+                level1_base_cents=rm(200000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=9, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 salary_basic_allowance_cents=rm(10000),
                 overtime_cents=rm(1000))
             self.app.configure_month(
-                self.admin, sid, "2026-10", level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+                self.admin, sid, "2026-10", min_rtm_target_cents=rm(200000),
+                level1_base_cents=rm(210000), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=10, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 salary_basic_allowance_cents=rm(10500),
@@ -229,14 +231,14 @@ class TestValidationLadder(ExpenseFixture):
 class TestBudgets(ExpenseFixture):
     def test_budget_create_update_and_status(self):
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, rm(4000))
+                                    self.cat_a, 0.02)
         budgets = self.app.get_expense_budgets(self.admin, self.sa, "2026-10")
-        self.assertEqual(budgets[self.cat_a], rm(4000))
+        self.assertEqual(budgets[self.cat_a], 0.02)
         # update (idempotent, no duplicates)
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, rm(3000))
+                                    self.cat_a, 0.015)
         budgets = self.app.get_expense_budgets(self.admin, self.sa, "2026-10")
-        self.assertEqual(budgets[self.cat_a], rm(3000))
+        self.assertEqual(budgets[self.cat_a], 0.015)
 
     def test_missing_budget_distinct_from_zero(self):
         budgets = self.app.get_expense_budgets(self.admin, self.sa, "2026-10")
@@ -244,7 +246,7 @@ class TestBudgets(ExpenseFixture):
         self.assertEqual(kpi.budget_status(0, None), "No budget")
         self.assertEqual(kpi.budget_status(1, None), "No budget")
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, 0)        # explicit zero
+                                    self.cat_a, 0)        # explicit 0%
         budgets = self.app.get_expense_budgets(self.admin, self.sa, "2026-10")
         self.assertEqual(budgets[self.cat_a], 0)
         self.assertEqual(kpi.budget_status(0, 0), "Within budget")
@@ -257,20 +259,30 @@ class TestBudgets(ExpenseFixture):
         self.assertEqual(kpi.budget_status(rm(4000.01), rm(4000)),
                          "OVER BUDGET")
 
+    def test_pct_budget_computes_rm_against_active_target(self):
+        """2.5% of the Minimum RTM floor (RM 200,000) -> RM 5,000 budget."""
+        self.app.set_expense_budget(self.admin, self.sa, "2026-10",
+                                    self.cat_a, 0.025)
+        rep = self.app.preview_month(self.admin, self.sa, "2026-10",
+                                     as_of=date(2026, 10, 31))
+        self.assertEqual(rep.expenses.budget_basis_label, "Minimum RTM")
+        self.assertEqual(rep.expenses.budget_basis_cents, rm(200000))
+        self.assertEqual(rep.expenses.total_budget_cents, rm(5000))
+
     def test_cross_store_budget_rejected(self):
         with self.assertRaises(RecordNotFoundError):
             self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                        self.cat_b, rm(1))
+                                        self.cat_b, 0.01)
         # zone manager (not config manager) rejected
         zm = self.user("z@ducklab.com", ["zone_manager"], [self.sa])
         with self.assertRaises(AuthorizationError):
             self.app.set_expense_budget(zm, self.sa, "2026-10",
-                                        self.cat_a, rm(1))
+                                        self.cat_a, 0.01)
 
     def test_unconfigured_month_budget_rejected(self):
         with self.assertRaises(RecordNotFoundError):
             self.app.set_expense_budget(self.admin, self.sa, "2027-01",
-                                        self.cat_a, rm(1))
+                                        self.cat_a, 0.01)
 
 
 class TestCrossMonthAccounting(ExpenseFixture):
@@ -328,9 +340,10 @@ class TestCrossMonthAccounting(ExpenseFixture):
                                     as_of=date(2026, 10, 31))
         self.assertEqual(r1.expenses.paid_cents, 0)
         self.assertEqual(r2.expenses.paid_cents, rm(250))
-        # budget monitor row reflects it
+        # budget monitor row reflects it: 0.15% of Minimum RTM RM 200,000
+        # = RM 300 budget; RM 250 paid -> 83% -> Watch
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, rm(300))
+                                    self.cat_a, 0.0015)
         r3 = self.app.preview_month(self.admin, self.sa, "2026-10",
                                     as_of=date(2026, 10, 31))
         row = r3.expenses.categories[0]
@@ -393,10 +406,11 @@ class TestExpenseSecurity(ExpenseFixture):
         self.assertEqual(snap["report"]["expenses"]["paid_cents"], 0)
 
     def test_store_isolation_kpis(self):
+        # A: 1.75% of RM 200,000 = RM 3,500; B: 0.75% = RM 1,500
         self.app.set_expense_budget(self.admin, self.sa, "2026-10",
-                                    self.cat_a, rm(3500))
+                                    self.cat_a, 0.0175)
         self.app.set_expense_budget(self.admin, self.sb, "2026-10",
-                                    self.cat_b, rm(1500))
+                                    self.cat_b, 0.0075)
         for sid, cat, amt in ((self.sa, self.cat_a, 3000),
                               (self.sb, self.cat_b, 500)):
             self.app.record_expense(

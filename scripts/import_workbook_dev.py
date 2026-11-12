@@ -141,7 +141,8 @@ def read_workbook(path: Path) -> dict:
     for r in EXPENSE_BUDGET_ROWS:
         name = _text(_cell(setup, f"A{r}"))
         if name:
-            budgets.append((name, _rm(_cell(setup, f"B{r}")), r - 32))
+            # budget cells hold a PERCENTAGE of the active sales target
+            budgets.append((name, _ratio(_cell(setup, f"B{r}")), r - 32))
 
     daily = wb["Daily"]
     days = []

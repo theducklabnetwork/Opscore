@@ -32,7 +32,8 @@ def main() -> None:
     for sid in (a, b):
         for month, l1 in (("2026-10", 210000), ("2026-09", 200000)):
             app.configure_month(
-                admin, sid, month, level1_base_cents=rm(l1), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
+                admin, sid, month, min_rtm_target_cents=rm(200000),
+                level1_base_cents=rm(l1), level2_pct=0.1, level3_pct=0.2, level4_pct=0.3,
                 opening_headcount_ft=10, stock_loss_target=0.015,
                 salary_ratio_target=0.06818, part_timer_factor=0.5,
                 salary_basic_allowance_cents=rm(10500),
@@ -42,11 +43,12 @@ def main() -> None:
     water_a = app.add_expense_category(admin, a, "Water", sort_order=2)
     cons_a = app.add_expense_category(admin, a, "Consumables", sort_order=3)
     elec_b = app.add_expense_category(admin, b, "Electricity", sort_order=1)
-    # budgets: A electricity RM3,500 (paid 3,000 -> Watch), A water RM500
-    # (paid 600 -> OVER), B electricity RM1,500
-    app.set_expense_budget(admin, a, "2026-10", elec_a, rm(3500))
-    app.set_expense_budget(admin, a, "2026-10", water_a, rm(500))
-    app.set_expense_budget(admin, b, "2026-10", elec_b, rm(1500))
+    # budgets (% of the RM 200,000 Minimum RTM floor): A electricity 1.75%
+    # (RM 3,500; paid 3,000 -> Watch), A water 0.25% (RM 500; paid 600 ->
+    # OVER), B electricity 0.75% (RM 1,500)
+    app.set_expense_budget(admin, a, "2026-10", elec_a, 0.0175)
+    app.set_expense_budget(admin, a, "2026-10", water_a, 0.0025)
+    app.set_expense_budget(admin, b, "2026-10", elec_b, 0.0075)
     # transactions (store A, October)
     app.record_expense(
         admin, a, incurred_date=date(2026, 10, 2),

@@ -80,7 +80,7 @@ class TestPreview(SnapFixture):
 class TestFinalization(SnapFixture):
     def test_finalize_v1_roundtrip(self):
         sid, cat = self.seed_store()
-        self.svc.set_expense_budget(sid, "2026-09", cat, rm(4000))
+        self.svc.set_expense_budget(sid, "2026-09", cat, 0.02)  # 2% x 200,000
         self.svc.record_daily(sid, date(2026, 9, 1), sales_cents=rm(10000),
                               transactions=321, units=1298, ft_working=7,
                               pt_working=1,

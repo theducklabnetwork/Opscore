@@ -142,7 +142,7 @@ class TestPageTourAssets(unittest.TestCase):
         stores = (root / "ducklab" / "ops_stores_pages.py").read_text()
         for title in ("Stores", "User Assignment", "Area & People",
                       "Monthly Setup", "Sales Targets", "Daily Sales",
-                      "Manpower", "Stock", "Expense Budgets (RM)",
+                      "Manpower", "Stock", "Expense Budgets (%)",
                       "Month-End Inputs"):
             self.assertIn(title, stores)
         self.assertIn('id="setup-holidays-field"', stores)
