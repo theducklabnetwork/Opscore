@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 import shutil
@@ -115,15 +116,68 @@ def start_backend(command: list[str], *, cwd: Path, env: dict[str, str], log) ->
     )
 
 
+def start_windows_shutdown(run_backend) -> None:
+    """Run a Windows backend with a local request for its normal shutdown."""
+    granian_server = importlib.import_module("granian.server")
+
+    original_server = granian_server.Server
+
+    class DesktopGranian(original_server):
+        def serve(self, *args, **kwargs):
+            start_shutdown_pipe(self)
+            return super().serve(*args, **kwargs)
+
+    granian_server.Server = DesktopGranian
+    try:
+        run_backend()
+    finally:
+        granian_server.Server = original_server
+
+
+def start_shutdown_pipe(server) -> None:
+    """Give the Windows launcher a way to request Granian's normal shutdown."""
+    from multiprocessing.connection import Listener
+    import threading
+
+    listener = Listener(
+        rf"\\.\pipe\opscore-backend-{os.getpid()}", family="AF_PIPE", backlog=1
+    )
+
+    def listen() -> None:
+        try:
+            with listener:
+                with listener.accept() as connection:
+                    if connection.recv_bytes() == b"stop":
+                        server.signal_handler_interrupt()
+                        connection.send_bytes(b"stopping")
+        except OSError:
+            # Process teardown also closes the listener and accepted pipe.
+            pass
+
+    threading.Thread(target=listen, name="opscore-shutdown", daemon=True).start()
+
+
+def request_windows_shutdown(pid: int) -> None:
+    """Ask the backend identified by pid to stop through its private pipe."""
+    from multiprocessing.connection import Client
+
+    with Client(rf"\\.\pipe\opscore-backend-{pid}", family="AF_PIPE") as connection:
+        connection.send_bytes(b"stop")
+        connection.recv_bytes()
+
+
 def stop_process_tree(process: subprocess.Popen | None) -> None:
     """Gracefully stop a backend and its children, then force termination."""
     if process is None or process.poll() is not None:
         return
     if sys.platform == "win32":
         try:
-            process.send_signal(getattr(signal, "CTRL_BREAK_EVENT", 1))
-        except ProcessLookupError:
-            return
+            request_windows_shutdown(process.pid)
+        except OSError:
+            # The backend may have exited between poll() and the pipe request.
+            if process.poll() is not None:
+                return
+            raise
         try:
             process.wait(timeout=20)
         except subprocess.TimeoutExpired:

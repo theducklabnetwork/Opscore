@@ -246,6 +246,68 @@ class ScheduleTests(unittest.TestCase):
             "Invalid schedule week. Select a valid week and try again.")
         self.assertEqual(state.schedule_notice, "")
 
+    def test_csv_export_writes_per_staff_files(self):
+        """One CSV per staff member who has shifts that week, under
+        Documents/Opscore Schedules/<store-code>/<week-start>/, with
+        date,shift_code rows; staff with no shifts are skipped."""
+        import csv
+        import ducklab.ops_schedule_state as mod
+        from ducklab import platform_utils
+
+        first = self.app.save_staff(self.admin, self.store, None,
+            name="Zed One", staff_code="Z001", position="RA")
+        second = self.app.save_staff(self.admin, self.store, None,
+            name="Amy Two", staff_code="A002", position="SV")
+        empty = self.app.save_staff(self.admin, self.store, None,
+            name="No Shifts", staff_code="N001", position="RA")
+        week = date(2026, 11, 2)
+        self.app.set_schedule_entry(self.admin, self.store, first, week, "M900")
+        self.app.set_schedule_entry(self.admin, self.store, first,
+                                    date(2026, 11, 4), "AL")
+        self.app.set_schedule_entry(self.admin, self.store, second,
+                                    date(2026, 11, 8), "ORD")
+
+        export_root = Path(self.tmp.name) / "Documents"
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_week = "2026-11-02"
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store), \
+                mock.patch.object(platform_utils, "documents_dir",
+                                  lambda: export_root):
+            state.export_schedule_csv()
+
+        self.assertEqual(state.schedule_error, "")
+        folder = export_root / "Opscore Schedules" / "A01" / "2026-11-02"
+        self.assertEqual(
+            state.schedule_notice, f"2 files saved: {folder.resolve()}")
+        zed = folder / "Z001_2026-11-02.csv"
+        amy = folder / "A002_2026-11-02.csv"
+        self.assertTrue(zed.is_file())
+        self.assertTrue(amy.is_file())
+        # Staff with no shifts that week produce no file.
+        self.assertFalse((folder / "N001_2026-11-02.csv").exists())
+        with zed.open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(list(csv.reader(handle)),
+                             [["date", "shift_code"],
+                              ["2026-11-02", "M900"],
+                              ["2026-11-04", "AL"]])
+        with amy.open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(list(csv.reader(handle)),
+                             [["date", "shift_code"],
+                              ["2026-11-08", "ORD"]])
+
+    def test_csv_export_read_only_user_denied(self):
+        state = ScheduleState()
+        state.can_write_schedule = False
+        state.schedule_week = "2026-11-02"
+        spec = state.export_schedule_csv()
+        self.assertIsNone(spec)
+        self.assertEqual(state.schedule_error, "You have read-only access.")
+
 
 if __name__ == "__main__":
     unittest.main()
