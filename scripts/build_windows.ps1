@@ -143,6 +143,11 @@ $DependenciesInstalled = (Test-Path -LiteralPath $DependenciesStamp) -and
     ((Get-Content -LiteralPath $DependenciesStamp -Raw) -eq $RequirementsHash)
 if (-not $DependenciesInstalled) {
     Write-Host "==> Installing locked Windows dependencies"
+    Write-Host "    Upgrading the bundled pip before installing dependencies"
+    & $Python -I -m pip install --no-cache-dir --upgrade pip
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bundled pip upgrade failed."
+    }
     & $Python -I -m pip install --no-cache-dir -r (Join-Path $Root "requirements.lock") -r (Join-Path $Root "requirements-windows.txt")
     if ($LASTEXITCODE -ne 0) {
         throw "Dependency installation failed."
@@ -163,7 +168,7 @@ New-Item -ItemType Directory -Path (Join-Path $App "ducklab\data") -Force | Out-
 Copy-Item -LiteralPath (Join-Path $Root "ducklab\data\DSCSPR_alias_2027.xlsx") -Destination (Join-Path $App "ducklab\data")
 Get-ChildItem -LiteralPath (Join-Path $Root "assets") -File | Copy-Item -Destination (Join-Path $App "assets")
 Copy-Item -LiteralPath (Join-Path $Root "rxconfig.py") -Destination $App
-Copy-Item -LiteralPath (Join-Path $Root "packaging\opscore_desktop.py"), (Join-Path $Root "packaging\opscore_backend.py") -Destination (Join-Path $App "packaging")
+Copy-Item -LiteralPath (Join-Path $Root "packaging\opscore_desktop.py"), (Join-Path $Root "packaging\opscore_backend.py"), (Join-Path $Root "packaging\opscore_tray.py") -Destination (Join-Path $App "packaging")
 Set-Content -LiteralPath (Join-Path $App "RELEASE") -Value $Version -Encoding Ascii -NoNewline
 Assert-Build (Test-Path -LiteralPath (Join-Path $App "assets\opscore.ico")) "The Opscore icon was not copied."
 Assert-Build (Test-Path -LiteralPath (Join-Path $App "python\pythonw.exe")) "The windowed Python launcher is missing."
@@ -274,7 +279,7 @@ $ValidateRuntime = @'
 import sys
 
 assert sys.version_info[:2] == (3, 14)
-import reflex, granian, argon2, openpyxl, webview
+import reflex, granian, argon2, openpyxl, webview, pystray, PIL
 '@
 $ValidateRuntimeScript = Join-Path $Work "validate_runtime.py"
 Set-Content -LiteralPath $ValidateRuntimeScript -Value $ValidateRuntime -Encoding Ascii

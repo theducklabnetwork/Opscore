@@ -13,6 +13,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -390,29 +391,91 @@ def edge_window(url: str) -> bool:
 
 
 def windows_window(url: str) -> None:
-    """Use WebView2, then Edge app mode, then the default browser."""
+    """Use WebView2, then Edge app mode, then the default browser.
+
+    The optional Windows tray is status-only: it never keeps the backend alive
+    after the window closes, and a missing/failed tray must not affect launch.
+    """
+    tray = None
+    tray_stop = threading.Event()
+
+    def stop_tray():
+        tray_stop.set()
+
+    def quit_from_tray():
+        """Close the native window through the launcher's existing shutdown path."""
+        try:
+            import webview
+
+            window = webview.windows[0] if webview.windows else None
+        except Exception:
+            window = None
+        if window is not None:
+            window.destroy()
+        else:
+            # Edge/browser fallback has no webview window to close. The
+            # backend-only and windowed paths share the same process lifetime.
+            stop_backend()
+            os._exit(0)
+
+    health_thread = None
+    if sys.platform == "win32":
+        tray_module = None
+        try:
+            tray_spec = importlib.util.spec_from_file_location(
+                "opscore_tray", APP_ROOT / "packaging" / "opscore_tray.py"
+            )
+            tray_module = importlib.util.module_from_spec(tray_spec)
+            tray_spec.loader.exec_module(tray_module)
+            tray = tray_module.start_tray(
+                APP_ROOT / "assets" / "icon-512.png", on_quit=quit_from_tray
+            )
+        except Exception:
+            tray = None
+            tray_module = None
+
+        def poll_tray_health():
+            while not tray_stop.wait(2.0):
+                if tray is not None and tray_module is not None:
+                    try:
+                        tray.update_health(tray_module.backend_is_healthy())
+                    except Exception:
+                        pass
+
+        health_thread = threading.Thread(
+            target=poll_tray_health,
+            name="opscore-tray-health",
+            daemon=True,
+        )
+        health_thread.start()
     try:
-        windows_native_window(url)
-        return
-    except Exception as error:
-        print(f"WebView2 window unavailable ({error}); trying Microsoft Edge.", file=sys.stderr)
-    try:
-        if edge_window(url):
+        try:
+            windows_native_window(url)
             return
-    except Exception as error:
-        print(f"Edge app window unavailable ({error}); trying the default browser.", file=sys.stderr)
-    try:
-        platform_utils.open_in_browser(url)
-    except Exception as error:
-        print(f"Could not open a browser automatically ({error}); open {url}", file=sys.stderr)
-    else:
-        print(f"Opening Opscore in the default browser: {url}", file=sys.stderr)
-    print("Leave this window open; close it or press Ctrl+C to stop Opscore.", file=sys.stderr)
-    BACKEND.wait()
+        except Exception as error:
+            print(f"WebView2 window unavailable ({error}); trying Microsoft Edge.", file=sys.stderr)
+        try:
+            if edge_window(url):
+                return
+        except Exception as error:
+            print(f"Edge app window unavailable ({error}); trying the default browser.", file=sys.stderr)
+        try:
+            platform_utils.open_in_browser(url)
+        except Exception as error:
+            print(f"Could not open a browser automatically ({error}); open {url}", file=sys.stderr)
+        else:
+            print(f"Opening Opscore in the default browser: {url}", file=sys.stderr)
+        print("Leave this window open; close it or press Ctrl+C to stop Opscore.", file=sys.stderr)
+        BACKEND.wait()
+    finally:
+        stop_tray()
+        if tray is not None:
+            tray.stop()
+        if health_thread is not None:
+            health_thread.join(timeout=1)
 
 
 def native_window(url: str) -> int:
-    import threading
     from wsgiref.simple_server import WSGIRequestHandler, make_server
 
     import webview

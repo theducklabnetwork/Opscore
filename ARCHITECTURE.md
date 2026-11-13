@@ -372,6 +372,7 @@ See [Migrations](MIGRATIONS.md) for procedures.
 | `ducklab/ducklab.py` | Reflex app object, routes, ASGI transformer, lifespan tasks |
 | `packaging/opscore_desktop.py` | Single-instance native-window launcher |
 | `packaging/opscore_backend.py` | Starts the prebuilt app on `127.0.0.1:47811` |
+| `packaging/opscore_tray.py` | Optional Windows status-only notification-area icon (circular color/gray states) |
 | `packaging/opscore-launcher`, `packaging/opscore-backend` | Linux shell wrappers using the bundled Python at `/opt/opscore` |
 | `Opscore.cmd` (generated) | Windows folder launcher |
 
@@ -406,6 +407,18 @@ The single-instance lock is a POSIX `flock` on `launcher.lock` on Linux and a
 named mutex `Local\Opscore` on Windows. The fixed port means another
 application squatting on 47811 blocks startup rather than silently moving to
 another port.
+
+### Windows status tray
+
+On Windows, the launcher optionally starts `packaging/opscore_tray.py` while
+the application window is open. The notification-area icon polls
+`127.0.0.1:47811/api/health`: a full-color circular icon means the backend is
+healthy, and a dimmed gray circular icon means it is not responding. The
+**Open Opscore** action raises the existing window; **Quit** follows the
+existing window-close shutdown path. Closing the window still stops the
+backend and removes the icon—the tray is an indicator, not close-to-tray
+behavior. If pystray/Pillow or the notification area is unavailable, startup
+continues without a tray icon.
 
 ### User data and logs
 
@@ -460,10 +473,12 @@ flowchart LR
 ```
 
 `scripts/build_windows.ps1` builds the folder. Candidate output is the
-default; `-AllowReleaseOutput` is required for the release folder. The Inno
-Setup script (`packaging/windows/opscore.iss`) compiles a per-user installer
-that preserves user data and offers the keep/fresh database choice when an
-existing database is detected.
+default; `-AllowReleaseOutput` is required for the release folder. When the
+locked dependency set changes, the bundled runtime's pip is upgraded first
+and then `requirements.lock` plus `requirements-windows.txt` are installed.
+The Inno Setup script (`packaging/windows/opscore.iss`) compiles a per-user
+installer that preserves user data and offers the keep/fresh database choice
+when an existing database is detected.
 
 ### Alternative frozen build
 
@@ -526,7 +541,7 @@ Run the source checkout directly; this does not create a package or installer.
 ```powershell
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock
-# Optional: native WebView2 window instead of a browser fallback
+# Optional: native WebView2 window and status-only tray icon
 .\.venv\Scripts\python.exe -m pip install -r requirements-windows.txt
 ```
 
