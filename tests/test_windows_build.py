@@ -27,6 +27,7 @@ REQUIRED_PACKAGE_FILES = (
     r"ducklab\data\DSCSPR_alias_2027.xlsx",
     r"packaging\opscore_desktop.py",
     r"packaging\opscore_backend.py",
+    r"packaging\opscore_tray.py",
     r"assets\opscore.ico",
     r".web\build\client\index.html",
     r".web\build\client\404.html",
@@ -373,6 +374,17 @@ class TestBuildScriptStructure(unittest.TestCase):
         self.assertIn("Assert-PackageContents $App $Version", self.build)
         self.assertLess(self.build.index("Assert-PackageContents $App $Version"),
                         self.build.index("Move-Item -LiteralPath $App -Destination $Output"))
+
+    def test_pip_is_upgraded_before_locked_dependency_install(self):
+        upgrade = self.build.index('pip install --no-cache-dir --upgrade pip')
+        locked_install = self.build.index('-r (Join-Path $Root "requirements.lock")')
+        self.assertLess(upgrade, locked_install,
+                        "the bundled pip must be upgraded before locked deps")
+
+    def test_tray_module_and_dependencies_are_packaged(self):
+        self.assertIn('packaging\\opscore_tray.py', self.build)
+        self.assertIn('"packaging\\opscore_tray.py"', self.lib)
+        self.assertIn('import reflex, granian, argon2, openpyxl, webview, pystray, PIL', self.build)
 
     def test_default_output_is_a_candidate_folder(self):
         self.assertIn('$OutputName = if ($AllowReleaseOutput) { "Opscore" } else { "Opscore-candidate" }',

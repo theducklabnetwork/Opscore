@@ -80,6 +80,7 @@ function Get-RequiredPackageFiles {
         "ducklab\data\DSCSPR_alias_2027.xlsx",
         "packaging\opscore_desktop.py",
         "packaging\opscore_backend.py",
+        "packaging\opscore_tray.py",
         "assets\opscore.ico",
         ".web\build\client\index.html",
         ".web\build\client\404.html",

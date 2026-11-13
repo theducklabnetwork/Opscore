@@ -1,6 +1,11 @@
 # Development / QA dependencies — installed in the developer venv only.
 # NEVER installed in production. Install with:
 #   pip install -r requirements.txt -r requirements-dev.txt
+#
+# packaging/opscore_tray.py keeps its imports local so CI can exercise the
+# pure image/state logic only when these optional dependencies are installed.
+pillow==13.0.0
+pystray==0.19.5
 pytest==9.1.1
 playwright==1.64.0
 openpyxl==3.1.5

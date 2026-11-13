@@ -1,3 +1,5 @@
-# Optional native WebView2 window for Windows source runs.
+# Optional native WebView2 window and status-only tray icon for Windows source runs.
 # Install with: python -m pip install -r requirements-windows.txt
 pywebview==6.2.1
+pystray==0.19.5
+pillow==13.0.0

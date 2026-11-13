@@ -397,6 +397,26 @@ class TestWindowsWindow(unittest.TestCase):
             self.desktop.windows_window(self.url)
         self.desktop.BACKEND.wait.assert_called_once_with()
 
+    def test_tray_import_failure_does_not_change_window_fallback(self):
+        with mock.patch.object(self.desktop.sys, "platform", "win32"), \
+                mock.patch.object(self.desktop.importlib.util, "spec_from_file_location", side_effect=ImportError), \
+                mock.patch.object(self.desktop, "windows_native_window", side_effect=RuntimeError), \
+                mock.patch.object(self.desktop, "edge_window", return_value=True) as edge, \
+                mock.patch.object(self.desktop.threading, "Thread", wraps=self.desktop.threading.Thread) as thread_class, \
+                mock.patch.object(self.desktop.platform_utils, "open_in_browser") as browser:
+            self.desktop.windows_window(self.url)
+        edge.assert_called_once_with(self.url)
+        browser.assert_not_called()
+        thread_class.assert_called_once()
+
+    def test_non_windows_direct_call_does_not_start_tray_thread(self):
+        with mock.patch.object(self.desktop.sys, "platform", "linux"), \
+                mock.patch.object(self.desktop, "windows_native_window", side_effect=RuntimeError), \
+                mock.patch.object(self.desktop, "edge_window", return_value=True), \
+                mock.patch.object(self.desktop.threading, "Thread") as thread_class:
+            self.desktop.windows_window(self.url)
+        thread_class.assert_not_called()
+
     def test_edge_app_mode_uses_opscore_profile_and_waits(self):
         process = mock.Mock()
         with mock.patch.object(self.desktop.Path, "is_file", return_value=True), \
