@@ -129,7 +129,7 @@ Latest-version lookups and the Finalized version list include only rows with
 ## 4. Data model
 
 One SQLite file holds both operations data and accounts. Schema version is
-tracked in `schema_migrations` and `PRAGMA user_version` (currently **10**).
+tracked in `schema_migrations` and `PRAGMA user_version` (currently **11**).
 Initialization is idempotent and migrations are additive. Each migration runs
 in its own transaction, and its `PRAGMA user_version` update commits in that
 same transaction; a failure rolls back the whole step so it can be retried.
@@ -355,8 +355,11 @@ seeded per store only when a store has no categories.
   required tables and columns, and not be from a newer schema. Older schemas
   are migrated on the temporary copy, which atomically replaces the live
   database only after all checks pass.
-- Before every restore, the current database is copied into `backups/` next
-  to it; the newest five are listed in the UI.
+- Before pending migrations and every restore, the current database is copied
+  into `backups/` next to it. The newest 10 automatic copies are listed in
+  Settings and retained; manual and recovery artifacts are never pruned.
+- Migration backup failure prevents migration. Newer schemas are rejected by
+  ordinary startup as well as restore validation.
 - Restore uploads are capped at 512 MiB.
 
 Super Admin only. Because authentication tables live in the same database,
@@ -391,9 +394,11 @@ sequenceDiagram
         L->>L: Focus existing window, exit
     end
     L->>L: Probe 127.0.0.1:47811 /api/health<br/>fail if port is owned by another app
+    L->>L: Rotate log at 5 MiB (three archives)
     L->>L: Keep/fresh database choice (first launch of a version)
+    L->>L: Reject a database schema newer than this app
     L->>B: Spawn backend process group<br/>env: DUCKLAB_DB_PATH, RELEASE_ID, prod flags
-    B->>B: init_db / init_auth (migrations), lifespan seeding
+    B->>B: Backup if migration pending; init_db / init_auth, lifespan seeding
     L->>B: Wait up to 90 s for /api/health
     L->>W: Open GTK/WebKit (Linux) or WebView2 (Windows)<br/>fallback: Edge app mode / Chromium / default browser
     U->>W: Use the app
@@ -426,14 +431,16 @@ continues without a tray icon.
 |---|---|---|
 | Data directory | `~/.local/share/opscore` | `%LOCALAPPDATA%\Opscore` |
 | Database | `store_ops.db` in the data directory | same |
-| Log | `opscore.log` (append, line-buffered, **no rotation**) | same |
-| Pre-restore backups | `backups/` next to the database | same |
+| Log | `opscore.log`; rotate at startup at 5 MiB, keep 3 archives | same |
+| Automatic backups | `backups/`; pre-migration/pre-restore, newest 10 | same |
 | Reflex state / uploads | `states/`, `uploaded_files/` | same |
 | Version/profile markers | `app_version.txt`, `webview`, `db-choice.json` | same |
 | Schedule CSV exports | `~/Documents/Opscore Schedules/` | `%USERPROFILE%\Documents\Opscore Schedules\` |
 
 Backend stdout/stderr and launcher diagnostics are appended to `opscore.log`.
-Fatal startup errors also surface via a GTK dialog or zenity.
+Rotation occurs only while the launcher owns startup, before backend/worker
+processes open the file; a long-running active log can exceed 5 MiB until the
+next restart. Fatal startup errors also surface via a GTK dialog or zenity.
 
 ## 10. Build and packaging architecture
 
@@ -592,13 +599,11 @@ there to stop Opscore.
 |---|---|
 | Zenity database-choice fallback references an undefined `opener` variable and can raise `NameError`, aborting startup when GTK is unavailable and zenity is present | `packaging/opscore_desktop.py:187` |
 | `-AllowOverwrite` is declared but unused by the Windows folder-build script (the installer-overwrite guard lives in the `.iss` `/DOPSCORE_ALLOW_OVERWRITE`) | `scripts/build_windows.ps1:17` |
-| `opscore.log` has no rotation | `packaging/opscore_desktop.py` |
-| Routine startup migrations do not create an automatic pre-migration backup | `store_ops_db.py`, `backup.py` |
-| Older application code does not refuse to open a newer database during ordinary startup (`init_db` no-ops when `user_version > SCHEMA_VERSION`) | `store_ops_db.py:281-283` |
+| Log rotation occurs only at startup; a continuously running active log can exceed 5 MiB until restart | `packaging/opscore_desktop.py` |
 | Authentication schema initialization is additive but unversioned; `auth_login_failures` is created lazily outside any migration | `auth_db.py`, `auth_service.py` |
 | `PRAGMA user_version` drives migration decisions; `schema_migrations` is audit metadata and is not cross-checked against it | `store_ops_db.py` |
 | No WAL or explicit busy-timeout tuning is configured | `store_ops_db.py` |
-| Numbered `store_ops.db.backup-N` copies, old WebView profiles and pre-restore backups are not cleaned up automatically | Desktop launcher and `backup.py` |
+| Numbered `store_ops.db.backup-N` copies, downloaded backups and old WebView profiles are not cleaned up automatically | Desktop launcher and `backup.py` |
 
 ## 14. Repository layout
 

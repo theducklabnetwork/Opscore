@@ -6,8 +6,8 @@ public interface is unchanged — pages and tests keep referencing every
 state var and event handler on ManpowerState.
 
 All reads/writes go through AppService with the session token revalidated
-on every event; store access is enforced by authz. CSV export writes
-per-staff files below Documents/Opscore Schedules/<store-code>/<week-start>/.
+on every event; store access is enforced by authz. CSV export writes legacy
+per-staff or combined MyESS files below Documents/Opscore Schedules/.
 """
 
 from __future__ import annotations
@@ -224,6 +224,55 @@ class ScheduleState(SharedOpsState):
                 "Invalid schedule week. Select a valid week and try again.")
         except (OSError, RepositoryError):
             self.schedule_error = "Could not export schedule CSV files."
+
+    @rx.event
+    def export_myess_batch_csv(self):
+        self.schedule_error = self.schedule_notice = ""
+        if not self.can_write_schedule:
+            self.schedule_error = "You have read-only access."
+            return
+        store_id = self._selected_store_id()
+        if store_id is None or not self.schedule_week:
+            self.schedule_error = "Select a store and week first."
+            return
+        try:
+            # Revalidate the actor and store access; never trust client rows alone.
+            user = self._actor()
+            week_start = date.fromisoformat(self.schedule_week)
+            week_end = week_start + timedelta(days=6)
+            data = app_service.get_schedule(user, store_id, week_start, week_end)
+            store = app_service.get_store(user, store_id)
+            entries = {(row["staff_id"], row["work_date"]): row["code"]
+                       for row in data["entries"] if row["code"]}
+            rows = []
+            for staff in data["staff"]:
+                for i in range(7):
+                    day = (week_start + timedelta(days=i)).isoformat()
+                    code = entries.get((staff["id"], day))
+                    if code:
+                        rows.append((staff["staff_code"], day, code))
+            if not rows:
+                self.schedule_error = "No scheduled shifts to export for this week."
+                return
+            store_part = "".join(c if c.isalnum() or c in "-_" else "_" for c in store.code)
+            folder = (platform_utils.documents_dir() / "Opscore Schedules"
+                      / store_part / self.schedule_week)
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"MyESS_{store_part}_{self.schedule_week}.csv"
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(("employee_no", "date", "shift_code"))
+                writer.writerows(rows)
+            self.schedule_notice = f"MyESS batch schedule saved: {path.resolve()}"
+        except AuthenticationError:
+            self.schedule_error = SESSION_EXPIRED
+        except (AuthorizationError, StoreNotFoundError):
+            self.schedule_error = ACCESS_DENIED
+        except ValueError:
+            self.schedule_error = (
+                "Invalid schedule week. Select a valid week and try again.")
+        except (OSError, RepositoryError):
+            self.schedule_error = "Could not export MyESS batch schedule CSV."
 
     @rx.event
     def set_schedule_subtab(self, value: str):

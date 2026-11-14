@@ -10,14 +10,15 @@ before anything is replaced. It must be a real SQLite database, pass
 PRAGMA integrity_check and PRAGMA foreign_key_check, contain the tables
 and columns this application needs, and not carry a newer schema version.
 
-Before any restore, the current database is copied (backup API again)
-into a ``backups/`` folder next to the database file; those automatic
-pre-restore copies are listed for the UI. Only a fully validated and
-migrated temporary copy atomically replaces the live database.
+Before migrations and restores, the current database is copied (backup API
+again) into a ``backups/`` folder next to the database file. The newest ten
+automatic copies are listed for the UI and retained. Only a fully validated
+and migrated temporary copy atomically replaces the live database.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -30,6 +31,8 @@ from pathlib import Path
 from ducklab import store_ops_db
 
 BACKUP_DIRNAME = "backups"
+AUTOMATIC_BACKUP_RETENTION = 10
+log = logging.getLogger(__name__)
 
 # Minimum set of tables a valid Opscore database must carry. The auth
 # tables (logins/passwords) live in the same database file, so a restore
@@ -232,14 +235,53 @@ def _backups_dir(db_path: Path | str) -> Path:
     return Path(db_path).parent / BACKUP_DIRNAME
 
 
+def _unique_backup_path(dest_dir: Path, stem: str) -> Path:
+    """Reserve a new backup name without overwriting a same-second copy."""
+    for number in range(1000):
+        suffix = f"-{number}" if number else ""
+        dest = dest_dir / f"{stem}{suffix}.db"
+        try:
+            fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            continue
+        os.close(fd)
+        return dest
+    raise BackupError("Could not allocate a unique automatic backup filename.")
+
+
+def _save_automatic_backup(db_path: Path | str, stem: str) -> Path:
+    dest_dir = _backups_dir(db_path)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = _unique_backup_path(dest_dir, stem)
+    try:
+        create_backup(db_path, dest)
+    except (OSError, sqlite3.Error, BackupError) as exc:
+        try:
+            dest.unlink()
+        except OSError:
+            pass
+        raise BackupError(f"Could not create automatic backup: {exc}") from exc
+    prune_automatic_backups(db_path)
+    return dest
+
+
 def save_pre_restore_backup(db_path: Path | str,
                             now: datetime | None = None) -> Path:
     """Copy the current database into backups/ before a restore."""
     now = now or datetime.now(timezone.utc)
-    dest_dir = _backups_dir(db_path)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / f"pre-restore-{now.strftime('%Y%m%d-%H%M%S')}.db"
-    return create_backup(db_path, dest)
+    return _save_automatic_backup(
+        db_path, f"pre-restore-{now.strftime('%Y%m%d-%H%M%S')}")
+
+
+def save_pre_migration_backup(db_path: Path | str, from_version: int,
+                              to_version: int,
+                              now: datetime | None = None) -> Path:
+    """Save the original database before any pending migration begins."""
+    now = now or datetime.now(timezone.utc)
+    return _save_automatic_backup(
+        db_path,
+        f"pre-migration-v{from_version}-to-v{to_version}-"
+        f"{now.strftime('%Y%m%d-%H%M%S')}")
 
 
 def restore(db_path: Path | str, upload_path: Path | str) -> int:
@@ -266,9 +308,9 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
 
         version = validate_restore(temp_path)
         try:
-            store_ops_db.init_db(temp_path)
+            store_ops_db.init_db(temp_path, backup_before_migration=False)
             validate_restore(temp_path)
-        except sqlite3.Error as exc:
+        except (sqlite3.Error, store_ops_db.SchemaVersionError) as exc:
             raise BackupError(f"Database migration failed: {exc}")
         os.replace(temp_path, db_path)
         temp_path = None
@@ -281,18 +323,24 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
                 pass
 
 
-_SAFE_NAME = re.compile(r"^pre-restore-\d{8}-\d{6}\.db$")
+_SAFE_NAME = re.compile(
+    r"^(?:pre-restore-\d{8}-\d{6}|"
+    r"pre-migration-v\d+-to-v\d+-\d{8}-\d{6})(?:-\d+)?\.db$")
 
 
-def list_pre_restore_backups(db_path: Path | str, limit: int = 5
-                             ) -> list[BackupFile]:
-    """Newest first; only files written by save_pre_restore_backup."""
+def list_automatic_backups(db_path: Path | str, limit: int | None = None
+                           ) -> list[BackupFile]:
+    """Newest first; only recognized automatic backup files, never links."""
     dest_dir = _backups_dir(db_path)
     out: list[BackupFile] = []
-    if not dest_dir.is_dir():
+    if dest_dir.is_symlink() or not dest_dir.is_dir():
         return out
-    for p in dest_dir.iterdir():
-        if not p.is_file() or not _SAFE_NAME.match(p.name):
+    try:
+        candidates = list(dest_dir.iterdir())
+    except OSError:
+        return out
+    for p in candidates:
+        if p.is_symlink() or not p.is_file() or not _SAFE_NAME.fullmatch(p.name):
             continue
         try:
             stat = p.stat()
@@ -301,4 +349,15 @@ def list_pre_restore_backups(db_path: Path | str, limit: int = 5
         except OSError:
             continue
     out.sort(key=lambda b: b.name, reverse=True)
-    return out[:limit]
+    return out if limit is None else out[:limit]
+
+
+def prune_automatic_backups(db_path: Path | str,
+                            keep: int = AUTOMATIC_BACKUP_RETENTION) -> None:
+    """Best-effort deletion of old automatic copies after a new copy exists."""
+    for item in list_automatic_backups(db_path)[keep:]:
+        try:
+            item.path.unlink()
+        except OSError as exc:
+            log.warning("Could not remove old automatic backup %s: %s",
+                        item.path, exc)

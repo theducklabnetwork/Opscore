@@ -25,7 +25,7 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 
-from ducklab import platform_utils
+from ducklab import platform_utils, store_ops_db
 
 DATA_DIR = platform_utils.data_dir()
 DB_PATH = DATA_DIR / "store_ops.db"
@@ -35,6 +35,8 @@ LOG_PATH = DATA_DIR / "opscore.log"
 DB_CHOICE_PATH = DATA_DIR / "db-choice.json"
 VERSION_PATH = DATA_DIR / "app_version.txt"
 STARTUP_TIMEOUT = 90
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 3
 APP_URL = "http://127.0.0.1:47811/"
 HEALTH_URL = APP_URL + "api/health"
 BACKEND: subprocess.Popen | None = None
@@ -546,6 +548,36 @@ def focus_existing() -> None:
     focus_chromium()
 
 
+def rotate_log_at_startup() -> None:
+    """Bound startup logs without renaming a live backend's open file."""
+    try:
+        if LOG_PATH.stat().st_size < LOG_MAX_BYTES:
+            return
+        oldest = LOG_PATH.with_name(f"{LOG_PATH.name}.{LOG_BACKUP_COUNT}")
+        oldest.unlink(missing_ok=True)
+        for number in range(LOG_BACKUP_COUNT - 1, 0, -1):
+            source = LOG_PATH.with_name(f"{LOG_PATH.name}.{number}")
+            destination = LOG_PATH.with_name(f"{LOG_PATH.name}.{number + 1}")
+            if source.exists():
+                os.replace(source, destination)
+        os.replace(LOG_PATH, LOG_PATH.with_name(f"{LOG_PATH.name}.1"))
+        LOG_PATH.touch()
+    except OSError as error:
+        print(f"Could not rotate {LOG_PATH}: {error}", file=sys.stderr)
+
+
+def require_compatible_database() -> None:
+    """Show an actionable incompatibility error before the backend starts."""
+    if not DB_PATH.exists():
+        return
+    conn = store_ops_db.connect(DB_PATH)
+    try:
+        current = conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()
+    store_ops_db.require_compatible_schema(current)
+
+
 def redirect_output_to_log() -> None:
     """Send stdout and stderr to opscore.log (append mode, line-buffered)."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -733,7 +765,10 @@ def main() -> int:
                 raise port_in_use_error()
         # Resolve keep/fresh before the backend opens the database, then stamp
         # app_version.txt so the choice is offered once per installed version.
+        rotate_log_at_startup()
+        redirect_output_to_log()
         prepare_database_choice()
+        require_compatible_database()
         prepare_webview_profile()
         process, url = start_backend()
         if args.backend_only:

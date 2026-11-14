@@ -286,10 +286,15 @@ existing manpower figures remain under **Overview**.
 5. Click **Generate** to open the formatted schedule in **View**, then
    **Print** to print it or save it as a PDF.
 6. Click **Export CSV** in Planner to save one CSV per staff member who has
-   shifts that week. Each file contains `date,shift_code` and is saved at
-   `Documents/Opscore Schedules/<store-code>/<week-start>/`. Select a valid
-   week before exporting; a malformed week produces an error instead of an
-   export.
+   shifts that week. Each file contains `date,shift_code` for import into the
+   single-employee detail view in the MyESS HRMS Android app. Files are saved
+   at `Documents/Opscore Schedules/<store-code>/<week-start>/`.
+7. Click **MyESS** to save one combined batch file for every employee with
+   shifts that week. Its columns are `employee_no,date,shift_code`;
+   `employee_no` is the employee's Opscore **Staff ID**. Upload
+   `MyESS_<store-code>_<week-start>.csv` through the MyESS batch schedule
+   workflow. Staff without shifts are omitted. Both exports require a valid
+   week; a malformed week produces an error instead of an export.
 
 Deleting a staff member also deletes that person's schedule entries. Viewers
 can read schedules but cannot edit them or export CSV files.
@@ -410,6 +415,10 @@ replaces the previous key immediately.
   integrity, foreign keys, required tables and columns, and schema
   compatibility. Only a valid temporary copy replaces the live database; the
   pre-restore backup is kept so a restore can be undone.
+- **Automatic backups** are also created before pending startup migrations.
+  **Settings → Data** lists pre-migration and pre-restore copies together.
+  Only the newest 10 recognized automatic copies are retained. Downloaded
+  backups, fresh-start copies and recovery-script copies are never pruned.
 - **Restore replaces everything, including logins and passwords** — they come
   from the restored file — and you are signed out afterwards.
 
@@ -480,6 +489,13 @@ month and the previous 11 months.
 
 **Where is the log?** `opscore.log` in your data directory
 (`~/.local/share/opscore` on Linux, `%LOCALAPPDATA%\Opscore` on Windows).
+At startup, a log of 5 MiB or more rotates to `opscore.log.1`; three rotated
+archives are retained. A continuously running app's active log can exceed
+5 MiB until the next restart.
+
+**The app says my database schema is newer.** Install a current Opscore
+release, or restore a compatible backup. Older versions refuse to modify a
+newer database.
 
 ## 17. Safe shutdown
 
@@ -498,7 +514,9 @@ pressing Ctrl+C) stops the app.
    asked.
 
 The database is upgraded automatically on first launch; existing records and
-accounts are preserved. See [Migrations](MIGRATIONS.md) for details.
+accounts are preserved. Before a pending migration, Opscore saves a consistent
+copy in `backups/pre-migration-*.db`. Startup stops without migrating if this
+backup cannot be created. See [Migrations](MIGRATIONS.md) for details.
 
 ## 19. Load demo data
 

@@ -21,6 +21,18 @@ DB_PATH = Path(__file__).parent / "store_ops.db"
 
 SCHEMA_VERSION = 11
 
+
+class SchemaVersionError(RuntimeError):
+    """The database belongs to a newer, incompatible application version."""
+
+
+def require_compatible_schema(current: int) -> None:
+    if current > SCHEMA_VERSION:
+        raise SchemaVersionError(
+            f"Database schema v{current} is newer than this app "
+            f"(v{SCHEMA_VERSION}). Upgrade Opscore or restore a compatible "
+            "backup; no changes were made.")
+
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
 #   +1  adds to Total Loss, -1 reduces Total Loss, 0 informational only.
@@ -263,11 +275,19 @@ def _apply_v1(conn: sqlite3.Connection) -> None:
     )
 
 
-def init_db(db_path: Path | str = DB_PATH) -> None:
-    """Create/migrate the database. Idempotent and non-destructive."""
+def init_db(db_path: Path | str = DB_PATH, *,
+            backup_before_migration: bool = True) -> None:
+    """Create/migrate the database, preserving an existing pre-migration copy."""
+    existed = Path(db_path).exists()
     conn = connect(db_path)
     try:
         current = conn.execute("PRAGMA user_version").fetchone()[0]
+        require_compatible_schema(current)
+        if existed and current < SCHEMA_VERSION and backup_before_migration:
+            # Local import avoids backup.py's module-level store_ops_db import.
+            from ducklab import backup
+            backup.save_pre_migration_backup(
+                db_path, current, SCHEMA_VERSION)
         migrations = (
             (1, _apply_v1),
             (2, _apply_v2),

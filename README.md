@@ -81,7 +81,7 @@ is in the [User Guide](USER_GUIDE.md).
 |---|---|---|
 | Database | `~/.local/share/opscore/store_ops.db` | `%LOCALAPPDATA%\Opscore\store_ops.db` |
 | Log | `~/.local/share/opscore/opscore.log` | `%LOCALAPPDATA%\Opscore\opscore.log` |
-| Automatic pre-restore backups | `~/.local/share/opscore/backups/` | `%LOCALAPPDATA%\Opscore\backups\` |
+| Automatic migration/restore backups (newest 10) | `~/.local/share/opscore/backups/` | `%LOCALAPPDATA%\Opscore\backups\` |
 | Schedule CSV exports | `~/Documents/Opscore Schedules/` | `%USERPROFILE%\Documents\Opscore Schedules\` |
 
 Uninstalling the package preserves all of the above.
@@ -112,8 +112,8 @@ Architecture document.
 
 ## Project status
 
-Current release line: **v1.2** (see the [Changelog](CHANGELOG.md)).
-Database schema version: **10**.
+Current development release line: **v1.3** (see the [Changelog](CHANGELOG.md)).
+Database schema version: **11**.
 
 - Ubuntu/Debian desktop package: released and in use.
 - Windows desktop package and installer: released from v1.1 onward; see the

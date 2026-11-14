@@ -139,8 +139,10 @@ work-in-progress:
   assigns existing users to stores.
 - **Shift codes are global**, not store-owned. Administrator-level edits to
   shift codes affect every store.
-- **Schedule CSV export writes files**, one per scheduled staff member, under
-  `Documents/Opscore Schedules/<store>/<week>/`. It is not a browser download.
+- **Schedule CSV export writes files** under
+  `Documents/Opscore Schedules/<store>/<week>/`. Legacy individual files use
+  `date,shift_code`; one combined MyESS batch file uses
+  `employee_no,date,shift_code`. These are not browser downloads.
 - **Month selectors** offer the current month and the previous 11 months.
 - **No general CSV/Excel import** for daily records, expenses, staff or
   actions. The only workbook import is the DSC/SPR reference workbook.
@@ -152,14 +154,14 @@ work-in-progress:
 
 ## 10. Current implementation status
 
-Current release line: **v1.2**. Database schema version: **10**.
+Current development release line: **v1.3**. Database schema version: **11**.
 
 | Area | Status |
 |---|---|
 | All operational modules | Implemented |
 | KPI engine and daily-target logic | Implemented |
 | Monthly Report finalization and corrections | Implemented |
-| Weekly scheduling, printing and CSV export | Implemented |
+| Weekly scheduling, printing and individual/MyESS CSV export | Implemented (v1.3) |
 | First-launch account creation and guided tours | Implemented |
 | Single-use recovery keys | Implemented (v1.2) |
 | Ubuntu/Debian desktop package | Released |
@@ -175,15 +177,15 @@ In addition to the scope boundaries above, the following are verified
 limitations in the current implementation. They are documented so users and
 maintainers know the boundaries; they are not fixed by this documentation.
 
-- **No automatic pre-migration backup.** Upgrading the app migrates the
-  database at startup without first taking a safety copy. Download a backup
-  from **Settings → Data** before upgrading. See [Migrations](MIGRATIONS.md).
-- **No guard against older code opening a newer database.** Ordinary startup
-  does not refuse a database whose schema is newer than the app expects.
-  (Restore does reject such files.)
-- **No log rotation.** `opscore.log` grows unbounded over time.
-- **Unbounded retention.** Numbered `store_ops.db.backup-N` copies, old
-  WebView profiles and pre-restore backups are not cleaned up automatically.
+- **Startup-only log rotation.** Logs of at least 5 MiB rotate on startup,
+  with three archives retained. The active log can grow beyond 5 MiB during a
+  continuously running session.
+- **Bounded automatic-backup retention.** Only the newest 10 pre-migration and
+  pre-restore copies are retained. Numbered fresh-start copies, downloaded
+  backups, recovery-script backups and old WebView profiles are not pruned.
+- **No automatic off-device backup.** Pre-migration and pre-restore copies are
+  stored beside the live database. Download a backup from **Settings → Data**
+  and keep it separately before major upgrades. See [Migrations](MIGRATIONS.md).
 - **Windows real-machine validation** is not confirmed by in-repository
   evidence; see the [Changelog](CHANGELOG.md) note.
 - **A Linux launcher fallback bug**: when GTK is unavailable and the system
@@ -193,12 +195,10 @@ maintainers know the boundaries; they are not fixed by this documentation.
 
 ## 12. Future development considerations
 
-There is no published roadmap. The only future item referenced in the source
-is a possible **Users tab in Settings** for account administration (noted in
-`ducklab/ops_settings_pages.py`). Items such as automatic pre-migration
-backups, log rotation and a newer-database startup guard are documented above
-as known limitations and would be natural candidates for future work, but
-none of them should be described as planned features.
+The v1.3 development scope is MyESS batch schedule export, pre-migration
+backups, a newer-schema startup guard, automatic-backup retention and startup
+log rotation. A possible **Users tab in Settings** remains a future item,
+not part of v1.3. Opscore schedule CSV import is not planned in this release.
 
 ## 13. Related documents
 

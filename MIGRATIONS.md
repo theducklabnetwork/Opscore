@@ -62,12 +62,15 @@ cannot drift under normal operation.
 
 `init_db(db_path)`:
 
-1. Reads `PRAGMA user_version`.
-2. Iterates a static, ordered list `(1, _apply_v1) … (11, _apply_v11)`.
-3. Skips versions `<= current`.
-4. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
+1. Reads `PRAGMA user_version` and refuses a version newer than the app.
+2. If an existing database has pending migrations, saves a consistent
+   pre-migration copy before the first transaction. Backup failure aborts
+   migration without changing the live database.
+3. Iterates a static, ordered list `(1, _apply_v1) … (11, _apply_v11)`.
+4. Skips versions `<= current`.
+5. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
    COMMIT`, rolling back the whole step on any error.
-5. Re-running after success is a no-op.
+6. Re-running after success is a no-op and creates no additional backup.
 
 Migrations are **strictly linear and forward-only**. There are no down
 migrations and no branching.
@@ -147,9 +150,9 @@ migrations to the existing database in place.
 ### Recommended upgrade steps
 
 1. **Back up first.** In **Settings → Data → Download Backup**, download a
-   copy of the database and keep it somewhere safe. There is **no automatic
-   pre-migration backup** on a routine upgrade, so this manual backup is your
-   safety copy.
+   copy of the database and keep it somewhere safe. Opscore also creates an
+   automatic local copy before pending migrations, but that copy is beside
+   the live database and is not a substitute for an off-device backup.
 2. Install the new package.
 3. On first launch, choose to keep your existing database (the default) when
    asked. Pending migrations apply automatically and preserve records and
@@ -190,12 +193,15 @@ consistent copy while the app is running. The UI downloads it as
    - Required tables and columns must be present.
    - `user_version` must not exceed the app's `SCHEMA_VERSION` (newer
      databases are rejected with "upgrade the app first").
-3. Run `init_db` on the copy to migrate it forward, then re-validate.
+3. Run `init_db(..., backup_before_migration=False)` on the copy to migrate
+   it forward without a redundant temporary-copy backup, then re-validate.
 4. `os.replace` atomically swaps the live database for the validated copy.
 
 Before the replace, `save_pre_restore_backup` copies the current database to
-`backups/pre-restore-<timestamp>.db` next to it. The UI lists the newest
-five. Any failure before `os.replace` leaves the live database untouched.
+`backups/pre-restore-<timestamp>.db` next to it. Pre-migration and pre-restore
+copies share a newest-10 retention policy and appear together in the UI.
+Only recognized automatic filenames are pruned. Any failure before
+`os.replace` leaves the live database untouched.
 
 Because authentication lives in the same database, **a restore also replaces
 users, roles, password hashes, sessions and recovery-key state**, and the
@@ -209,18 +215,18 @@ current session is signed out.
   restores only the code; it does not reverse the database schema.
 - **Downgrading requires a backup.** The only way back to an older schema is
   restoring an older database backup through **Settings → Data**.
-- **Older code vs newer schema.** The restore path rejects databases newer
-  than the app supports, but ordinary startup does **not** refuse to open a
-  newer database — `init_db` simply no-ops when `user_version >
-  SCHEMA_VERSION`. Do not run older application code against a newer
-  database without an explicit compatibility review.
+- **Older code vs newer schema.** Restore and ordinary startup reject a
+  `user_version` newer than `SCHEMA_VERSION` before any migration or backup.
+  Desktop startup also displays the actionable incompatibility message. An
+  older application cannot modify a newer database.
 
 ## 11. Recovery procedures
 
 | Artifact | Created by | Location |
 |---|---|---|
-| Manual backup | **Settings → Data → Download Backup** | Downloaded file you keep |
-| Pre-restore backup | Restore flow | `backups/pre-restore-<timestamp>.db` next to the database |
+| Manual backup | **Settings → Data → Download Backup** | Downloaded file you keep; never pruned |
+| Pre-migration backup | Pending startup migration | `backups/pre-migration-vN-to-vM-<timestamp>.db`; shared newest-10 retention |
+| Pre-restore backup | Restore flow | `backups/pre-restore-<timestamp>.db`; shared newest-10 retention |
 | Numbered fresh-start copy | Keep/fresh choice → Start fresh | `store_ops.db.backup-N` next to the database |
 | Recovery-script backup | `scripts/recover_admin_password.py` | `<db>.bak-<timestamp>` next to the database |
 
@@ -235,10 +241,9 @@ work.
 
 ## 12. Known limitations
 
-- **No automatic pre-migration backup** on a routine upgrade. The manual
-  download in **Settings → Data** is the only pre-upgrade safety copy.
-- **No startup guard against older code opening a newer database.** Only the
-  restore path rejects newer-schema files.
+- **Automatic backups are local.** The newest 10 pre-migration and
+  pre-restore copies are retained beside the database; keep a separate
+  downloaded backup for device-loss protection.
 - **Unversioned authentication schema.** `auth_db` uses idempotent,
   additive-only initialization with column probes rather than a version
   counter; `auth_login_failures` is created lazily outside any migration.
@@ -279,8 +284,5 @@ Follow these rules when raising `SCHEMA_VERSION`:
 
 These are recommendations, not current behavior:
 
-- Take an automatic backup before applying pending migrations at startup
-  (reuse `backup.create_backup`).
-- Refuse to start when `user_version > SCHEMA_VERSION`.
 - Add a version counter for the authentication schema.
 - Cross-check `schema_migrations` against `user_version` at startup.
