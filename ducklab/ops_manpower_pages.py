@@ -134,10 +134,11 @@ def _leave_section() -> rx.Component:
         ui.stat_grid(
             ui.stat("Annual Leave", LEAVE["annual"], size="6"),
             ui.stat("Medical Leave", LEAVE["mc"], size="6"),
-            ui.stat("Other Paid Leave", LEAVE["other_paid"], size="6"),
+            ui.stat("Other Paid Leave (incl. MC/RPL)", LEAVE["other_paid"], size="6"),
+            ui.stat("Emergency Leave", LEAVE["emergency"], size="6"),
             ui.stat("Unpaid Leave", LEAVE["unpaid"], size="6"),
             ui.stat("Total Leave", LEAVE["total"], size="6"),
-            columns=rx.breakpoints(initial="2", md="5"),
+            columns=rx.breakpoints(initial="2", md="3", lg="6"),
         ),
         title="Leave", id="leave-section",
     )

@@ -35,6 +35,17 @@ from ducklab.ops_shared_state import (
 )
 
 # All status colors: ds.status_color (design.py shared map)
+SCHEDULE_CODE_ORDER = ("M900", "F900", "M945", "F945", "F101", "A121",
+                       "ODM", "ODA", "OOD", "ORD", "AL", "RPL", "UPL",
+                       "EL", "MC", "OPH")
+CONFIG_HIDDEN_CODES = {"EL", "MC", "OPH"}
+PLANNER_HIDDEN_CODES = {"EL", "MC"}
+
+
+def _ordered_codes(codes: list[dict]) -> list[dict]:
+    ranks = {code: index for index, code in enumerate(SCHEDULE_CODE_ORDER)}
+    return sorted(codes, key=lambda row: (ranks.get(row["code"], len(ranks)),
+                                         row["code"]))
 
 
 class ScheduleState(SharedOpsState):
@@ -46,6 +57,7 @@ class ScheduleState(SharedOpsState):
     schedule_notice: str = ""
     schedule_staff: list[dict[str, str]] = []
     schedule_codes: list[dict[str, str]] = []
+    schedule_public_holidays: list[str] = []
     schedule_entries: dict[str, str] = {}
     schedule_week_options: list[str] = []
     schedule_week: str = ""
@@ -74,6 +86,7 @@ class ScheduleState(SharedOpsState):
         self.schedule_error = self.schedule_notice = ""
         self.schedule_staff = []
         self.schedule_codes = []
+        self.schedule_public_holidays = []
         self.schedule_entries = {}
         self.schedule_week_options = []
         self.schedule_week = ""
@@ -108,11 +121,19 @@ class ScheduleState(SharedOpsState):
 
     @rx.var
     def schedule_code_values(self) -> list[str]:
-        return ["", *[c["code"] for c in self.schedule_codes]]
+        return ["", *[c["code"] for c in _ordered_codes(self.schedule_codes)
+                      if c["code"] not in PLANNER_HIDDEN_CODES]]
+
+    @rx.var
+    def schedule_config_codes(self) -> list[dict[str, str]]:
+        return [{k: str(v or "") for k, v in c.items()}
+                for c in _ordered_codes(self.schedule_codes)
+                if c["code"] not in CONFIG_HIDDEN_CODES]
 
     @rx.var
     def schedule_headcounts(self) -> list[int]:
-        timed = {c["code"] for c in self.schedule_codes if c["start_time"]}
+        timed = {c["code"] for c in self.schedule_codes
+                 if c["start_time"] and c["code"] not in PLANNER_HIDDEN_CODES}
         return [sum(self.schedule_entries.get(f"{s['id']}:{d['iso']}") in timed
                     for s in self.schedule_staff) for d in self.schedule_days]
 
@@ -129,15 +150,17 @@ class ScheduleState(SharedOpsState):
                 for d in self.schedule_days]
 
     @rx.var
+    def schedule_day_headers(self) -> list[dict[str, str]]:
+        return [{**d, "holiday": "1" if d["iso"] in self.schedule_public_holidays else "",
+                 "label": d["label"] + (" · PH" if d["iso"] in self.schedule_public_holidays else "")}
+                for d in self.schedule_days]
+
+    @rx.var
     def schedule_legend(self) -> list[dict[str, str]]:
-        order = ("M900", "M945", "F900", "F945", "F101", "A121",
-                 "ODM", "ODA", "OOD", "ORD", "AL")
-        codes = {c["code"]: c for c in self.schedule_codes}
         legend = []
-        for code in order:
-            if code not in codes:
+        for c in _ordered_codes(self.schedule_codes):
+            if c["code"] in PLANNER_HIDDEN_CODES or c["code"] == "OPH":
                 continue
-            c = codes[code]
             detail = c["label"]
             if c["start_time"] and c["end_time"]:
                 start = datetime.strptime(c["start_time"], "%H:%M").strftime("%I:%M %p").lstrip("0")
@@ -292,6 +315,7 @@ class ScheduleState(SharedOpsState):
         self.schedule_error = self.schedule_notice = ""
         self.schedule_staff = []
         self.schedule_codes = []
+        self.schedule_public_holidays = []
         self.schedule_entries = {}
         self.schedule_days = []
         self.schedule_target = ""
@@ -314,6 +338,7 @@ class ScheduleState(SharedOpsState):
             data = app_service.get_schedule(user, store_id, week[0], week[-1])
             self.schedule_staff = [{k: str(v) for k, v in row.items()} for row in data["staff"]]
             self.schedule_codes = [{k: str(v or "") for k, v in row.items()} for row in data["codes"]]
+            self.schedule_public_holidays = [d.isoformat() for d in data["holidays"]]
             self.schedule_entries = {f"{r['staff_id']}:{r['work_date']}": r["code"]
                                      for r in data["entries"]}
             target = app_service.get_schedule_target(user, store_id, week[0])

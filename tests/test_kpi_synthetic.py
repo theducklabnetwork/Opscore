@@ -179,11 +179,13 @@ class SyntheticManpowerTests(unittest.TestCase):
         days = [DailyInput(date(2026, 4, 1), sales_cents=rm(100), ft_working=4, pt_working=2),
                 DailyInput(date(2026, 4, 2), sales_cents=rm(300), ft_working=6, pt_working=0),
                 DailyInput(date(2026, 4, 3), sales_cents=rm(200), leave_annual=1,
-                           leave_mc=2, leave_other_paid=1, leave_unpaid=8)]
+                           leave_mc=2, leave_other_paid=1, leave_unpaid=8,
+                           leave_emergency=1)]
         self.assertEqual(kpi.average_effective_staff(days, Decimal("0.5")), Decimal("5.5"))
         self.assertEqual(kpi.sales_per_staff_cents(days, Decimal("0.5")),
                          Decimal(rm(400)) / Decimal(11))
-        self.assertEqual(kpi.leave_days(days), 12)
+        self.assertEqual(kpi.other_paid_leave_days(days[-1]), 3)
+        self.assertEqual(kpi.leave_days(days), 13)
 
 
 class SyntheticStockActionAndPrecisionTests(unittest.TestCase):

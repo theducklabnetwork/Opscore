@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 class SchemaVersionError(RuntimeError):
@@ -300,6 +300,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (9, _apply_v9),
             (10, _apply_v10),
             (11, _apply_v11),
+            (12, _apply_v12),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -463,19 +464,20 @@ CREATE TABLE schedule_targets (
 """
 
 SHIFT_CODES = [
-    ("M900", "Morning", "09:00", "19:00", "#bbf7d0"),
-    ("M945", "Morning", "09:45", "19:45", "#dcfce7"),
-    ("F900", "Full Day", "09:00", "21:00", "#fed7aa"),
-    ("F945", "Full Day", "09:45", "21:45", "#ffedd5"),
-    ("F101", "Full Day", "10:15", "22:15", "#fdba74"),
-    ("A121", "Afternoon", "12:15", "22:15", "#fde68a"),
+    ("M900", "Morning", "09:00", "19:00", "#FFFFFF"),
+    ("F900", "Full Day", "09:00", "21:00", "#FFFFFF"),
+    ("M945", "Morning", "09:45", "19:45", "#FFFFFF"),
+    ("F945", "Full Day", "09:45", "21:45", "#FFFFFF"),
+    ("F101", "Full Day", "10:15", "22:15", "#FFFFFF"),
+    ("A121", "Afternoon", "12:15", "22:15", "#FFFFFF"),
     ("ODM", "Off Day Morning", "09:00", "19:00", "#bae6fd"),
     ("ODA", "Off Day Afternoon", "12:15", "22:15", "#93c5fd"),
     ("OOD", "Off Day", None, None, "#fef08a"),
     ("ORD", "Rest Day", None, None, "#86efac"),
     ("AL", "Annual Leave", None, None, "#e9d5ff"),
-    ("EL", "Emergency Leave", None, None, "#fecaca"),
+    ("RPL", "Replacement Leave", None, None, "#f5d0fe"),
     ("UPL", "Unpaid Leave", None, None, "#e5e7eb"),
+    ("EL", "Emergency Leave", None, None, "#fecaca"),
     ("MC", "Sick Leave", None, None, "#fbcfe8"),
     ("OPH", "Public Holiday", None, None, "#ddd6fe"),
 ]
@@ -494,10 +496,17 @@ def _apply_v6(conn: sqlite3.Connection) -> None:
 
 
 def _apply_v7(conn: sqlite3.Connection) -> None:
+    v7_colors = {
+        "M900": "#bbf7d0", "F900": "#fed7aa", "M945": "#dcfce7",
+        "F945": "#ffedd5", "F101": "#fdba74", "A121": "#fde68a",
+        "ODM": "#bae6fd", "ODA": "#93c5fd", "OOD": "#fef08a",
+        "ORD": "#86efac", "AL": "#e9d5ff", "EL": "#fecaca",
+        "UPL": "#e5e7eb", "MC": "#fbcfe8", "OPH": "#ddd6fe",
+    }
     old_colors = ("#3b82f6", "#06b6d4", "#8b5cf6", "#a855f7", "#d946ef",
                   "#f59e0b", "#14b8a6", "#10b981", "#64748b", "#78716c",
                   "#22c55e", "#ef4444", "#f97316", "#eab308", "#ec4899")
-    for (code, _label, _start, _end, color), old_color in zip(SHIFT_CODES, old_colors):
+    for (code, color), old_color in zip(v7_colors.items(), old_colors):
         conn.execute("UPDATE shift_codes SET color = ? WHERE code = ? AND color = ?",
                      (color, code, old_color))
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (7)")
@@ -582,3 +591,47 @@ def _apply_v11(conn: sqlite3.Connection) -> None:
     )
     conn.execute("DROP TABLE monthly_expense_budgets_v10")
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (11)")
+
+
+def _apply_v12(conn: sqlite3.Connection) -> None:
+    """Add actual emergency leave and holiday-assignment provenance."""
+    tables = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'")}
+    if "daily_records" in tables:
+        conn.execute(
+            "ALTER TABLE daily_records ADD COLUMN leave_emergency INTEGER"
+        )
+    if "schedule_entries" not in tables:
+        conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (12)")
+        return
+    conn.execute(
+        "ALTER TABLE schedule_entries ADD COLUMN assignment_source "
+        "TEXT NOT NULL DEFAULT 'manual' CHECK(assignment_source IN "
+        "('manual', 'auto_holiday'))"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO shift_codes "
+        "(code, label, start_time, end_time, color) VALUES (?, ?, ?, ?, ?)",
+        ("RPL", "Replacement Leave", None, None, "#f5d0fe"),
+    )
+    v7_colors = {
+        "M900": "#bbf7d0", "F900": "#fed7aa", "M945": "#dcfce7",
+        "F945": "#ffedd5", "F101": "#fdba74", "A121": "#fde68a",
+    }
+    for code, old_color in v7_colors.items():
+        conn.execute(
+            "UPDATE shift_codes SET color = '#FFFFFF' "
+            "WHERE code = ? AND color = ?",
+            (code, old_color),
+        )
+    # Existing ABM rosters and configured holidays are linked during upgrade.
+    conn.execute(
+        "INSERT INTO schedule_entries "
+        "(store_id, staff_id, work_date, code, assignment_source) "
+        "SELECT s.store_id, s.id, h.date, 'OPH', 'auto_holiday' "
+        "FROM staff s JOIN public_holidays h ON h.store_id = s.store_id "
+        "WHERE s.position = 'ABM' AND NOT EXISTS "
+        "(SELECT 1 FROM schedule_entries e "
+        "WHERE e.staff_id = s.id AND e.work_date = h.date)"
+    )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (12)")

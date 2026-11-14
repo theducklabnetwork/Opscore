@@ -367,8 +367,9 @@ class ManpowerState(SharedOpsState):
         self.leave_kpis = {
             "annual": ds.fmt_num(sum(d.leave_annual or 0 for d in days)),
             "mc": ds.fmt_num(sum(d.leave_mc or 0 for d in days)),
-            "other_paid": ds.fmt_num(sum(d.leave_other_paid or 0
+            "other_paid": ds.fmt_num(sum(kpi.other_paid_leave_days(d)
                                          for d in days)),
+            "emergency": ds.fmt_num(sum(d.leave_emergency or 0 for d in days)),
             "unpaid": ds.fmt_num(sum(d.leave_unpaid or 0 for d in days)),
             "total": ds.fmt_num(m.leave_days),
         }
@@ -389,15 +390,15 @@ class ManpowerState(SharedOpsState):
         factor_missing = factor is None and bool(rec.pt_working)
         leave = sum(v or 0 for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
-            rec.leave_unpaid))
+            rec.leave_unpaid, rec.leave_emergency))
         leave_reported = any(v is not None for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
-            rec.leave_unpaid))
+            rec.leave_unpaid, rec.leave_emergency))
         sps = kpi.daily_sales_per_staff_cents(rec, factor)
         filled = sum(v is not None for v in (
             rec.ft_working, rec.pt_working, rec.new_hires_ft,
             rec.resigned_ft, rec.leave_annual, rec.leave_mc,
-            rec.leave_other_paid, rec.leave_unpaid))
+            rec.leave_other_paid, rec.leave_unpaid, rec.leave_emergency))
         # same chips as every page; completeness counts staffing fields
         status = (ds.DAY_COMPLETE if filled >= 3
                   else ds.DAY_PARTIAL if filled else ds.DAY_NOT_REPORTED)

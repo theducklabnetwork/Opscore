@@ -11,7 +11,7 @@ The underlying repositories remain user-unaware; kpi.py stays pure.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -269,10 +269,17 @@ class AppService:
     # -- manpower schedule ---------------------------------------------------
     def get_schedule(self, user: User, store_id: int, start: date, end: date) -> dict:
         authz.require_store_access(user, store_id)
+        holidays = []
+        cursor = start.replace(day=1)
+        while cursor <= end:
+            holidays.extend(self.read_repo.get_public_holidays(
+                store_id, cursor.strftime("%Y-%m")))
+            cursor = (cursor.replace(day=28) + timedelta(days=7)).replace(day=1)
         return {
             "staff": self.read_repo.get_staff(store_id),
             "codes": self.read_repo.get_shift_codes(),
             "entries": self.read_repo.get_schedule_entries(store_id, start, end),
+            "holidays": sorted(set(holidays)),
         }
 
     def get_daily_schedule_preview(self, user: User, store_id: int,
@@ -291,7 +298,7 @@ class AppService:
 
     def save_staff(self, user: User, store_id: int, staff_id, **fields):
         self._store_write(user, store_id)
-        return self.write.repo.save_staff(store_id, staff_id, **fields)
+        return self.write.save_staff(store_id, staff_id, **fields)
 
     def delete_staff(self, user: User, store_id: int, staff_id: int):
         self._store_write(user, store_id)

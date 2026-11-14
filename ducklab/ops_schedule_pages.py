@@ -87,7 +87,9 @@ def _builder() -> rx.Component:
             rx.box(rx.el.table(
                 rx.el.thead(rx.el.tr(
                     ui.th("Staff"),
-                    rx.foreach(M.schedule_days, lambda day: ui.th(day["label"])),
+                    rx.foreach(M.schedule_day_headers, lambda day: rx.el.th(
+                        day["label"], style={"backgroundColor": rx.cond(
+                            day["holiday"] == "1", "#ddd6fe", "transparent")})),
                 )),
                 rx.el.tbody(
                     rx.foreach(M.schedule_grid_rows, _builder_row),
@@ -213,7 +215,7 @@ def _code_row(row) -> rx.Component:
 def _codes_tab() -> rx.Component:
     return ui.section_card(
         ui.data_table(["Code", "Label", "Start", "End", "Color", ""],
-                      rx.foreach(M.schedule_codes, _code_row)),
+                      rx.foreach(M.schedule_config_codes, _code_row)),
         title="Shift Codes",
         extra=rx.cond(M.can_write_schedule,
                       rx.button(rx.icon("plus", size=14), "Add Code",

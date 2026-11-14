@@ -105,6 +105,11 @@ class OperationsWriteService:
         return self.repo.save_expense_budget(store_id, month, category_id,
                                              budget_pct)
 
+    # -- manpower schedule --------------------------------------------------
+    def save_staff(self, store_id: int, staff_id: Optional[int], **fields) -> int:
+        """Save roster details and synchronize automatic ABM holidays atomically."""
+        return self.repo.save_staff(store_id, staff_id, **fields)
+
     # -- daily operations ---------------------------------------------------
     def record_daily(self, store_id: int, day: date,
                      stock_losses: Optional[dict[str, int]] = None,

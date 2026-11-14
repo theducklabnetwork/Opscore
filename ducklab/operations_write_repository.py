@@ -446,6 +446,7 @@ class OperationsWriteRepository:
                     "INSERT INTO public_holidays (store_id, date) "
                     "VALUES (?, ?)",
                     [(store_id, d.isoformat()) for d in sorted(set(holidays))])
+                self._sync_abm_holidays(conn, store_id)
             conn.commit()
             return {
                 "config_id": config_id,
@@ -511,7 +512,7 @@ class OperationsWriteRepository:
     _DAILY_FIELDS = (
         "sales_cents", "transactions", "units", "resigned_ft", "new_hires_ft",
         "ft_working", "pt_working", "leave_annual", "leave_mc",
-        "leave_other_paid", "leave_unpaid",
+        "leave_other_paid", "leave_emergency", "leave_unpaid",
     )
 
     def _validate_daily_fields(self, fields: dict) -> None:
@@ -763,6 +764,7 @@ class OperationsWriteRepository:
                     (name, staff_code, position, employment_type, staff_id, store_id))
                 if not cur.rowcount:
                     raise RecordNotFoundError("Staff member not found in this store")
+            self._sync_abm_holidays(conn, store_id)
             conn.commit()
             return staff_id
         except sqlite3.IntegrityError as exc:
@@ -770,6 +772,27 @@ class OperationsWriteRepository:
             raise DuplicateRecordError("Staff ID already exists in this store") from exc
         finally:
             conn.close()
+
+    @staticmethod
+    def _sync_abm_holidays(conn: sqlite3.Connection, store_id: int) -> None:
+        """Add OPH only to blank ABM holiday cells; remove only automatic OPH."""
+        conn.execute(
+            "DELETE FROM schedule_entries WHERE store_id = ? "
+            "AND assignment_source = 'auto_holiday' AND ("
+            "code != 'OPH' OR work_date NOT IN "
+            "(SELECT date FROM public_holidays WHERE store_id = ?) OR "
+            "staff_id NOT IN (SELECT id FROM staff WHERE store_id = ? "
+            "AND position = 'ABM'))",
+            (store_id, store_id, store_id))
+        conn.execute(
+            "INSERT INTO schedule_entries "
+            "(store_id, staff_id, work_date, code, assignment_source) "
+            "SELECT s.store_id, s.id, h.date, 'OPH', 'auto_holiday' "
+            "FROM staff s JOIN public_holidays h ON h.store_id = s.store_id "
+            "WHERE s.store_id = ? AND s.position = 'ABM' "
+            "AND NOT EXISTS (SELECT 1 FROM schedule_entries e "
+            "WHERE e.staff_id = s.id AND e.work_date = h.date)",
+            (store_id,))
 
     def delete_staff(self, store_id: int, staff_id: int) -> None:
         cur = self._execute(
@@ -831,8 +854,10 @@ class OperationsWriteRepository:
             if code:
                 conn.execute(
                     "INSERT INTO schedule_entries "
-                    "(store_id, staff_id, work_date, code) VALUES (?, ?, ?, ?) "
-                    "ON CONFLICT(staff_id, work_date) DO UPDATE SET code = excluded.code",
+                    "(store_id, staff_id, work_date, code, assignment_source) "
+                    "VALUES (?, ?, ?, ?, 'manual') "
+                    "ON CONFLICT(staff_id, work_date) DO UPDATE SET "
+                    "code = excluded.code, assignment_source = 'manual'",
                     (store_id, staff_id, work_date.isoformat(), code))
             else:
                 conn.execute(

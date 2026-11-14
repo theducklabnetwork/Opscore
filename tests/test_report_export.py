@@ -51,6 +51,7 @@ class ReportExportTest(unittest.TestCase):
         self.write.record_daily(
             self.store_id, date(2026, 9, 1), sales_cents=rm(10000),
             transactions=100, units=300, ft_working=7, pt_working=1,
+            leave_mc=1, leave_other_paid=1, leave_emergency=1,
             stock_losses={"DMO": rm(70), "EXTRA": rm(5)})
         self.write.record_expense(
             self.store_id, incurred_date=date(2026, 9, 1),
@@ -83,6 +84,10 @@ class ReportExportTest(unittest.TestCase):
         self.assertEqual(daily["A2"].number_format, DATE_FORMAT)
         self.assertEqual(daily["B2"].value, 10000)
         self.assertEqual(daily["B2"].number_format, MONEY_FORMAT)
+        self.assertEqual(daily["J2"].value, 1)   # MC remains separate
+        self.assertEqual(daily["K2"].value, 2)   # Other paid = RPL/other + MC
+        self.assertEqual(daily["L2"].value, 1)   # Emergency Leave
+        self.assertEqual(daily["N2"].number_format, MONEY_FORMAT)
         self.assertEqual(self.book["Expenses"]["E2"].value, 3000)
         self.assertEqual(self.book["Expenses"]["E2"].number_format, MONEY_FORMAT)
         self.assertEqual(self.book["Manpower"]["B9"].value, 1.1)

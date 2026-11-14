@@ -31,15 +31,28 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 11)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 12)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])
-        self.assertEqual(len(data["codes"]), 15)
-        self.assertEqual(len({c["color"] for c in data["codes"]}), 15)
+        self.assertEqual(len(data["codes"]), 16)
+        self.assertEqual(len({c["color"] for c in data["codes"]}), 11)
         by_code = {c["code"]: c for c in data["codes"]}
         self.assertEqual(by_code["F101"]["start_time"], "10:15")
         self.assertIsNone(by_code["OOD"]["start_time"])
+        self.assertEqual(by_code["RPL"]["label"], "Replacement Leave")
+        self.assertEqual(by_code["RPL"]["color"], "#f5d0fe")
+        for code in ("M900", "F900", "M945", "F945", "F101", "A121"):
+            self.assertEqual(by_code[code]["color"], "#FFFFFF")
+        state = ScheduleState()
+        state.schedule_codes = [{k: str(v or "") for k, v in row.items()}
+                                for row in data["codes"]]
+        self.assertEqual([c["code"] for c in state.schedule_config_codes], [
+            "M900", "F900", "M945", "F945", "F101", "A121", "ODM",
+            "ODA", "OOD", "ORD", "AL", "RPL", "UPL"])
+        self.assertNotIn("EL", state.schedule_code_values)
+        self.assertNotIn("MC", state.schedule_code_values)
+        self.assertIn("OPH", state.schedule_code_values)
 
     def test_staff_crud_and_store_isolation(self):
         staff_id = self.app.save_staff(self.admin, self.store, None,
@@ -125,13 +138,62 @@ class ScheduleTests(unittest.TestCase):
     def test_viewer_can_read_but_cannot_write(self):
         data = self.app.get_schedule(self.viewer, self.store,
                                      date(2026, 10, 1), date(2026, 10, 2))
-        self.assertEqual(len(data["codes"]), 15)
+        self.assertEqual(len(data["codes"]), 16)
         with self.assertRaises(AuthorizationError):
             self.app.save_staff(self.viewer, self.store, None,
                 name="Alice", staff_code="A001", position="Cashier")
         with self.assertRaises(AuthorizationError):
             self.app.set_schedule_target(self.viewer, self.store,
                                          date(2026, 10, 5), 2)
+
+    def test_public_holidays_mark_schedule_and_sync_only_blank_abm_cells(self):
+        holiday = date(2026, 10, 5)
+        self.app.configure_month_with_budgets(
+            self.admin, self.store, "2026-10", {}, {}, [holiday])
+        abm = self.app.save_staff(
+            self.admin, self.store, None, name="Manager", staff_code="A001",
+            position="ABM", employment_type="Full-Time")
+        ra = self.app.save_staff(
+            self.admin, self.store, None, name="Assistant", staff_code="A002",
+            position="RA", employment_type="Full-Time")
+        data = self.app.get_schedule(
+            self.admin, self.store, holiday, date(2026, 10, 11))
+        entries = {(r["staff_id"], r["work_date"]): r for r in data["entries"]}
+        self.assertEqual(data["holidays"], [holiday])
+        self.assertEqual(entries[(abm, holiday.isoformat())]["code"], "OPH")
+        self.assertEqual(entries[(abm, holiday.isoformat())]["assignment_source"],
+                         "auto_holiday")
+        self.assertNotIn((ra, holiday.isoformat()), entries)
+        state = ScheduleState()
+        state.schedule_days = [{"iso": holiday.isoformat(), "label": "Mon 5"}]
+        state.schedule_public_holidays = [holiday.isoformat()]
+        self.assertEqual(state.schedule_day_headers[0]["label"], "Mon 5 · PH")
+
+        # Manual assignments survive both saving a holiday and its removal.
+        self.app.set_schedule_entry(
+            self.admin, self.store, abm, holiday, "M900")
+        self.app.configure_month_with_budgets(
+            self.admin, self.store, "2026-10", {}, {}, [])
+        data = self.app.get_schedule(
+            self.admin, self.store, holiday, date(2026, 10, 11))
+        self.assertEqual(data["holidays"], [])
+        self.assertEqual(data["entries"][0]["code"], "M900")
+        self.assertEqual(data["entries"][0]["assignment_source"], "manual")
+
+    def test_holiday_removal_clears_only_automatic_oph(self):
+        first, second = date(2026, 10, 5), date(2026, 10, 12)
+        self.app.configure_month_with_budgets(
+            self.admin, self.store, "2026-10", {}, {}, [first, second])
+        abm = self.app.save_staff(
+            self.admin, self.store, None, name="Manager", staff_code="A001",
+            position="ABM", employment_type="Full-Time")
+        self.app.configure_month_with_budgets(
+            self.admin, self.store, "2026-10", {}, {}, [second])
+        data = self.app.get_schedule(
+            self.admin, self.store, first, date(2026, 10, 18))
+        self.assertEqual([(r["work_date"], r["code"], r["assignment_source"])
+                          for r in data["entries"]],
+                         [(second.isoformat(), "OPH", "auto_holiday")])
 
     def test_generated_view_uses_builder_order_dates_and_legend(self):
         first = self.app.save_staff(self.admin, self.store, None,
@@ -183,7 +245,7 @@ class ScheduleTests(unittest.TestCase):
         conn = store_ops_db.connect(path)
         row = conn.execute("SELECT employment_type FROM staff").fetchone()
         self.assertEqual(row["employment_type"], "Not Set")
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 11)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 12)
         self.assertIn(8, [r["version"] for r in conn.execute(
             "SELECT version FROM schema_migrations")])
         conn.close()

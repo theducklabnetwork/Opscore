@@ -175,17 +175,24 @@ Enter each day's figures here.
 
 1. Pick the store and month.
 2. Click **New Entry**, or **Edit** on a day in **Daily Records**.
-3. To use the week's schedule for staffing, click **Apply Schedule**. Review
-   the **Schedule Preview**, including any warnings, then click **Apply to
-   Entry** to fill working full-time and part-time staff and annual, medical
-   and unpaid leave. You can still enter or adjust the figures yourself.
-4. Fill in what you have:
+3. A new entry opens with working full-time and part-time staff, Annual
+   Leave, Replacement Leave (under **Other Paid Leave**) and Unpaid Leave
+   filled from that day's schedule. These are editable planned values.
+   Previously saved entries keep their saved values when reopened. To refresh
+   deliberately, click **Apply Schedule**, review the preview, then **Apply to
+   Entry**.
+4. At day end, adjust FT/PT for unexpected absences and enter **Medical
+   Leave** and **Emergency Leave** manually. The schedule never fills or
+   clears these exceptions. Medical Leave is included in reported Other Paid
+   Leave but remains separately visible; Emergency Leave is reported
+   separately. Total Leave counts every leave person-day once.
+5. Fill in what you have:
    - **Sales**, **Transactions**, **Units Sold**
    - **Stock Loss** by code
    - **Staff**: working full-time and part-time, **New Hires**,
      **Resignations**
-   - **Leave**: Annual, Medical, Other Paid, Unpaid
-5. Click **Save Entry**.
+   - **Leave**: Annual, Medical, Emergency, Other Paid (including RPL), Unpaid
+6. Click **Save Entry**.
 
 **Blank is not zero.** Leave a field blank if it wasn't reported. Enter 0
 only for a real zero, such as a closed day. A blank day shows as not reported
@@ -282,14 +289,20 @@ existing manpower figures remain under **Overview**.
 4. Super Admin and Administrator users can open **Config** to add or edit
    shift codes, labels, times and colors. Start and End must either both be
    set or both be blank. **Shift codes are shared by all stores**; deleting a
-   code used by a schedule is not allowed.
-5. Click **Generate** to open the formatted schedule in **View**, then
+   code used by a schedule is not allowed. RPL means Replacement Leave. EL,
+   MC and OPH are hidden from Config; EL/MC are also excluded from Planner
+   because they are day-end exceptions entered in Daily Operations.
+5. Public holidays configured in **Store Management → Daily Sales** are marked
+   **PH** in Planner. Blank ABM cells on those dates receive OPH automatically;
+   other staff keep their assigned shifts. Opscore never overwrites a manual
+   assignment, and removing a holiday removes only its automatic OPH cells.
+6. Click **Generate** to open the formatted schedule in **View**, then
    **Print** to print it or save it as a PDF.
-6. Click **Export CSV** in Planner to save one CSV per staff member who has
+7. Click **Export CSV** in Planner to save one CSV per staff member who has
    shifts that week. Each file contains `date,shift_code` for import into the
    single-employee detail view in the MyESS HRMS Android app. Files are saved
    at `Documents/Opscore Schedules/<store-code>/<week-start>/`.
-7. Click **MyESS** to save one combined batch file for every employee with
+8. Click **MyESS** to save one combined batch file for every employee with
    shifts that week. Its columns are `employee_no,date,shift_code`;
    `employee_no` is the employee's Opscore **Staff ID**. Upload
    `MyESS_<store-code>_<week-start>.csv` through the MyESS batch schedule

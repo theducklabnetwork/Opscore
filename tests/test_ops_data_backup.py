@@ -141,6 +141,7 @@ class BackupModuleTest(unittest.TestCase):
         v4 = self.dir / "v4.db"
         shutil.copy(self.db, v4)
         conn = sqlite3.connect(v4)
+        conn.execute("ALTER TABLE daily_records DROP COLUMN leave_emergency")
         conn.execute("DROP TABLE reference_data_info")   # v5's table
         for table in ("schedule_entries", "schedule_targets", "staff", "shift_codes"):
             conn.execute(f"DROP TABLE {table}")          # v6's tables
@@ -260,6 +261,7 @@ class BackupModuleTest(unittest.TestCase):
         older = self.dir / "older.db"
         shutil.copy(self.db, older)
         conn = sqlite3.connect(older)
+        conn.execute("ALTER TABLE daily_records DROP COLUMN leave_emergency")
         conn.execute("DROP TABLE reference_data_info")
         for table in ("schedule_entries", "schedule_targets", "staff", "shift_codes"):
             conn.execute(f"DROP TABLE {table}")
