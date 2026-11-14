@@ -837,6 +837,13 @@ class OperationsWriteRepository:
         finally:
             conn.close()
 
+    def set_shift_code_legend(self, code: str, included: bool) -> None:
+        cur = self._execute(
+            "UPDATE shift_codes SET show_in_legend = ? WHERE code = ?",
+            (int(bool(included)), code))
+        if not cur.rowcount:
+            raise RecordNotFoundError("Shift code not found")
+
     def delete_shift_code(self, code: str) -> None:
         cur = self._execute("DELETE FROM shift_codes WHERE code = ?", (code,))
         if not cur.rowcount:

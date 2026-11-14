@@ -343,6 +343,12 @@ class TestShiftCodesAndScheduleSources(StoreOpsDbTestCase):
             ).fetchone()),
             ("Replacement Leave", None, None, "#f5d0fe"),
         )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM shift_codes WHERE show_in_legend = 1"
+            ).fetchone()[0],
+            len(store_ops_db.SHIFT_CODES),
+        )
 
     def test_schedule_assignment_source_defaults_to_manual(self):
         store_id = self.add_store()
@@ -422,7 +428,7 @@ class TestV12Migration(unittest.TestCase):
                     "manual",
                 )
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 12
+                    conn.execute("PRAGMA user_version").fetchone()[0], 13
                 )
             finally:
                 conn.close()
@@ -466,6 +472,28 @@ class TestV12Migration(unittest.TestCase):
                 self.assertIsNone(conn.execute(
                     "SELECT 1 FROM schedule_entries WHERE staff_id = ?",
                     (ra,)).fetchone())
+            finally:
+                conn.close()
+
+
+class TestV13Migration(unittest.TestCase):
+    def test_v12_upgrade_enables_existing_codes_in_view_legend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "v12.db"
+            for version in range(1, 13):
+                conn = store_ops_db.connect(db_path)
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+                conn.commit()
+                conn.close()
+            store_ops_db.init_db(db_path, backup_before_migration=False)
+            conn = store_ops_db.connect(db_path)
+            try:
+                self.assertEqual(
+                    conn.execute("PRAGMA user_version").fetchone()[0], 13)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM shift_codes WHERE show_in_legend = 1"
+                ).fetchone()[0], len(store_ops_db.SHIFT_CODES))
             finally:
                 conn.close()
 
@@ -556,7 +584,7 @@ class TestMigrationSafety(unittest.TestCase):
     def test_existing_database_is_backed_up_before_migration(self):
         store_ops_db.init_db(self.db_path)
         copies = list((self.db_path.parent / "backups").glob(
-            "pre-migration-v1-to-v12-*.db"))
+            "pre-migration-v1-to-v13-*.db"))
         self.assertEqual(len(copies), 1)
         conn = sqlite3.connect(copies[0])
         self.assertEqual(conn.execute("SELECT value FROM marker").fetchone()[0],
@@ -596,7 +624,7 @@ class TestMigrationSafety(unittest.TestCase):
         store_ops_db.connect(empty).close()
         store_ops_db.init_db(empty)
         self.assertEqual(len(list((self.db_path.parent / "backups").glob(
-            "pre-migration-v0-to-v12-*.db"))), 1)
+            "pre-migration-v0-to-v13-*.db"))), 1)
 
     def test_backup_can_be_disabled_for_temporary_restore_copy(self):
         store_ops_db.init_db(self.db_path, backup_before_migration=False)

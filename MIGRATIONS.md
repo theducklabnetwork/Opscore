@@ -38,7 +38,7 @@ data. There is no separate auth database.
 
 ## 3. Current schema version
 
-**Schema version: 12** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
+**Schema version: 13** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
 
 You can see the schema version of a running installation in **Settings →
 About**.
@@ -66,7 +66,7 @@ cannot drift under normal operation.
 2. If an existing database has pending migrations, saves a consistent
    pre-migration copy before the first transaction. Backup failure aborts
    migration without changing the live database.
-3. Iterates a static, ordered list `(1, _apply_v1) … (12, _apply_v12)`.
+3. Iterates a static, ordered list `(1, _apply_v1) … (13, _apply_v13)`.
 4. Skips versions `<= current`.
 5. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
    COMMIT`, rolling back the whole step on any error.
@@ -112,7 +112,7 @@ ensures both base and auth schema exist.
 
 ## 6. Schema history
 
-The complete v1–v12 history, from the migration functions in
+The complete v1–v13 history, from the migration functions in
 `ducklab/store_ops_db.py`:
 
 | Version | Change | Type |
@@ -129,6 +129,7 @@ The complete v1–v12 history, from the migration functions in
 | **v10** | `reference_data_info.bundled` records whether the current reference tables came from the bundled workbook. DSC import stays compatible with v5–v9 by feature-detecting the column. | Additive |
 | **v11** | `monthly_expense_budgets.budget_cents` (fixed RM) is replaced by `budget_pct` (a fraction of the active sales target, e.g. 0.025 = 2.5%). Existing fixed-RM budgets are cleared; the bundled default percentages are then seeded by the startup lifespan task. Finalized snapshots keep their historical RM figures. | Rebuild (sanctioned exception) |
 | **v12** | `daily_records.leave_emergency` stores actual Emergency Leave. `schedule_entries.assignment_source` distinguishes manual assignments from automatic ABM public-holiday OPH. Seeds RPL and changes only known default M900–A121 colours to white, preserving custom labels/times/colours. | Additive + safe data update |
+| **v13** | `shift_codes.show_in_legend` controls inclusion in the generated View legend. Existing codes default to included. | Additive |
 
 ## 7. Migration execution process
 

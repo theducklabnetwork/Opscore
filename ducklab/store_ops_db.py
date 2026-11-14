@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 class SchemaVersionError(RuntimeError):
@@ -301,6 +301,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (10, _apply_v10),
             (11, _apply_v11),
             (12, _apply_v12),
+            (13, _apply_v13),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -635,3 +636,16 @@ def _apply_v12(conn: sqlite3.Connection) -> None:
         "WHERE e.staff_id = s.id AND e.work_date = h.date)"
     )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (12)")
+
+
+def _apply_v13(conn: sqlite3.Connection) -> None:
+    """Allow each configurable shift code to appear in the View legend."""
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'shift_codes'").fetchone()
+    if exists:
+        conn.execute(
+            "ALTER TABLE shift_codes ADD COLUMN show_in_legend "
+            "INTEGER NOT NULL DEFAULT 1 CHECK (show_in_legend IN (0, 1))"
+        )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (13)")

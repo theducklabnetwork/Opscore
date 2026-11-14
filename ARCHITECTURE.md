@@ -129,7 +129,7 @@ Latest-version lookups and the Finalized version list include only rows with
 ## 4. Data model
 
 One SQLite file holds both operations data and accounts. Schema version is
-tracked in `schema_migrations` and `PRAGMA user_version` (currently **12**).
+tracked in `schema_migrations` and `PRAGMA user_version` (currently **13**).
 Initialization is idempotent and migrations are additive. Each migration runs
 in its own transaction, and its `PRAGMA user_version` update commits in that
 same transaction; a failure rolls back the whole step so it can be retried.
@@ -243,6 +243,10 @@ schedule weeks as validation errors. New Daily Entries auto-fill FT/PT, AL,
 RPL (Other Paid Leave) and UPL once; saved actuals are preserved. MC and EL
 are manual exceptions and never schedule-derived. Paid-leave reporting adds
 MC to Other Paid Leave without double-counting Total Leave.
+
+Each shift code's `show_in_legend` setting filters the generated View legend
+without changing Planner, headcounts or exports. Generated names clamp to two
+lines, and print CSS fixes the output to landscape A4/Letter printable bounds.
 
 Store/month public holidays appear as PH markers. `assignment_source` tracks
 automatic ABM-only OPH entries, added only to blank cells and removed only

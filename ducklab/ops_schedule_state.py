@@ -170,6 +170,11 @@ class ScheduleState(SharedOpsState):
         return legend
 
     @rx.var
+    def schedule_generated_legend(self) -> list[dict[str, str]]:
+        return [c for c in self.schedule_legend
+                if c.get("show_in_legend", "1") != "0"]
+
+    @rx.var
     def schedule_target_display(self) -> str:
         return self.schedule_target if self.schedule_target.strip() else "—"
 
@@ -337,7 +342,10 @@ class ScheduleState(SharedOpsState):
                                   for i, d in enumerate(week)]
             data = app_service.get_schedule(user, store_id, week[0], week[-1])
             self.schedule_staff = [{k: str(v) for k, v in row.items()} for row in data["staff"]]
-            self.schedule_codes = [{k: str(v or "") for k, v in row.items()} for row in data["codes"]]
+            self.schedule_codes = [{
+                **{k: str(v or "") for k, v in row.items()},
+                "show_in_legend": "1" if row.get("show_in_legend", 1) else "0",
+            } for row in data["codes"]]
             self.schedule_public_holidays = [d.isoformat() for d in data["holidays"]]
             self.schedule_entries = {f"{r['staff_id']}:{r['work_date']}": r["code"]
                                      for r in data["entries"]}
@@ -482,6 +490,22 @@ class ScheduleState(SharedOpsState):
         else:
             self.schedule_form_open = False
             yield ScheduleState.load_schedule_data()
+
+    @rx.event
+    def set_shift_code_legend(self, code: str, included: bool):
+        self.schedule_error = self.schedule_notice = ""
+        if not self.can_write_schedule:
+            self.schedule_error = "You have read-only access."
+            return
+        try:
+            app_service.set_shift_code_legend(
+                self._actor(), self._selected_store_id(), code, bool(included))
+            self.schedule_codes = [{
+                **row, "show_in_legend": "1" if included else "0"
+            } if row["code"] == code else row for row in self.schedule_codes]
+            self.schedule_notice = "View legend updated."
+        except (AuthenticationError, AuthorizationError, RepositoryError):
+            self.schedule_error = "Could not update the View legend."
 
     @rx.event
     def delete_schedule_staff(self, staff_id: str):

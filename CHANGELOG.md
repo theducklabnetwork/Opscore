@@ -7,7 +7,7 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **12**.
+Schema version: **13**.
 
 ### Added
 
@@ -31,6 +31,9 @@ Schema version: **12**.
 - **RPL shift code.** Replacement Leave joins the ordered, editable shift-code
   configuration. EL/MC/OPH are hidden from Config, and unexpected EL/MC are
   excluded from Planner.
+- **Generated schedule refinements.** Per-code View checkboxes control the
+  generated legend, long staff names clamp to two lines beside a compact
+  Position column, and print/PDF output uses fixed landscape A4/Letter bounds.
 
 ### Changed
 

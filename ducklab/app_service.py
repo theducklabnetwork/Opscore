@@ -308,6 +308,11 @@ class AppService:
         authz.require_config_manager(user)
         self.write.repo.save_shift_code(original_code, **fields)
 
+    def set_shift_code_legend(self, user: User, store_id: int,
+                              code: str, included: bool):
+        authz.require_config_manager(user)
+        self.write.repo.set_shift_code_legend(code, included)
+
     def delete_shift_code(self, user: User, store_id: int, code: str):
         authz.require_config_manager(user)
         self.write.repo.delete_shift_code(code)

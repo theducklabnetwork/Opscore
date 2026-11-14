@@ -289,15 +289,19 @@ existing manpower figures remain under **Overview**.
 4. Super Admin and Administrator users can open **Config** to add or edit
    shift codes, labels, times and colors. Start and End must either both be
    set or both be blank. **Shift codes are shared by all stores**; deleting a
-   code used by a schedule is not allowed. RPL means Replacement Leave. EL,
-   MC and OPH are hidden from Config; EL/MC are also excluded from Planner
-   because they are day-end exceptions entered in Daily Operations.
+   code used by a schedule is not allowed. Use the small **View** checkbox
+   before each code to include or omit it from the generated View legend;
+   this does not change assignments, headcounts or exports. RPL means
+   Replacement Leave. EL, MC and OPH are hidden from Config; EL/MC are also
+   excluded from Planner because they are day-end exceptions entered in Daily
+   Operations.
 5. Public holidays configured in **Store Management → Daily Sales** are marked
    **PH** in Planner. Blank ABM cells on those dates receive OPH automatically;
    other staff keep their assigned shifts. Opscore never overwrites a manual
    assignment, and removing a holiday removes only its automatic OPH cells.
-6. Click **Generate** to open the formatted schedule in **View**, then
-   **Print** to print it or save it as a PDF.
+6. Click **Generate** to open the formatted schedule in **View**. Long names
+   use at most two lines, with a compact Position column. Click **Print** to
+   print or save as a landscape A4/Letter PDF sized to the printable page.
 7. Click **Export CSV** in Planner to save one CSV per staff member who has
    shifts that week. Each file contains `date,shift_code` for import into the
    single-employee detail view in the MyESS HRMS Android app. Files are saved

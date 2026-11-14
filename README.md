@@ -113,7 +113,7 @@ Architecture document.
 ## Project status
 
 Current development release line: **v1.3** (see the [Changelog](CHANGELOG.md)).
-Database schema version: **12**.
+Database schema version: **13**.
 
 - Ubuntu/Debian desktop package: released and in use.
 - Windows desktop package and installer: released from v1.1 onward; see the

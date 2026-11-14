@@ -31,7 +31,7 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 12)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 13)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])
@@ -218,6 +218,59 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual(legend["M900"], "9:00 AM - 7:00 PM")
         self.assertEqual(legend["OOD"], "Off Day")
 
+    def test_view_legend_toggle_persists_and_preserves_planner_legend(self):
+        import ducklab.ops_schedule_state as mod
+
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_codes = [{
+            "code": "M900", "label": "Morning", "start_time": "09:00",
+            "end_time": "19:00", "color": "#FFFFFF", "show_in_legend": "1",
+        }]
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store):
+            state.set_shift_code_legend("M900", False)
+        self.assertEqual(state.schedule_error, "")
+        self.assertEqual(state.schedule_codes[0]["show_in_legend"], "0")
+        self.assertEqual(state.schedule_generated_legend, [])
+        self.assertEqual([row["code"] for row in state.schedule_legend], ["M900"])
+        saved = next(row for row in self.app.get_schedule(
+            self.admin, self.store, date(2026, 10, 26),
+            date(2026, 11, 1))["codes"] if row["code"] == "M900")
+        self.assertEqual(saved["show_in_legend"], 0)
+
+    def test_view_legend_toggle_requires_config_permission(self):
+        with self.assertRaises(AuthorizationError):
+            self.app.set_shift_code_legend(
+                self.viewer, self.store, "M900", False)
+        with self.assertRaises(AuthorizationError):
+            branch = self.app.create_user(
+                self.admin, "branch@ducklab.com", "Branch", "Passw0rd!xyz")
+            self.app.assign_role(self.admin, branch.id, "branch_manager")
+            self.app.assign_store(self.admin, branch.id, self.store)
+            branch = self.app.auth.get_user(branch.id)
+            self.app.set_shift_code_legend(
+                branch, self.store, "M900", False)
+
+    def test_generated_layout_and_print_rules(self):
+        from ducklab import ops_schedule_pages as pages
+
+        row = {"number": "1", "name": "A very long staff name",
+               "staff_code": "A001", "position": "ABM",
+               "cells": [{"code": "M900", "color": "#FFFFFF"}]}
+        self.assertIn('className:"generated-name"', str(pages._generated_row(row)))
+        self.assertIn('className:"generated-position"', str(pages._generated_row(row)))
+        self.assertIn("schedule_generated_legend", str(pages._generated()))
+        self.assertIn('"View"', str(pages._codes_tab()))
+        css = (Path(__file__).parents[1] / "assets" / "schedule_print.css").read_text()
+        self.assertIn("size: A4 landscape", css)
+        self.assertIn("width: 281mm !important", css)
+        self.assertIn("height: 194mm !important", css)
+        self.assertIn("-webkit-line-clamp: 2", css)
+
     def test_employment_type_migration_preserves_staff_as_not_set(self):
         path = Path(self.tmp.name) / "migration.db"
         conn = store_ops_db.connect(path)
@@ -245,7 +298,7 @@ class ScheduleTests(unittest.TestCase):
         conn = store_ops_db.connect(path)
         row = conn.execute("SELECT employment_type FROM staff").fetchone()
         self.assertEqual(row["employment_type"], "Not Set")
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 12)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 13)
         self.assertIn(8, [r["version"] for r in conn.execute(
             "SELECT version FROM schema_migrations")])
         conn.close()

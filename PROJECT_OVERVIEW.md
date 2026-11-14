@@ -154,7 +154,7 @@ work-in-progress:
 
 ## 10. Current implementation status
 
-Current development release line: **v1.3**. Database schema version: **12**.
+Current development release line: **v1.3**. Database schema version: **13**.
 
 | Area | Status |
 |---|---|

@@ -120,6 +120,7 @@ EXPECTED_COLUMNS = {
 POST_MIGRATION_COLUMNS = {
     "daily_records": ("leave_emergency",),
     "schedule_entries": ("assignment_source",),
+    "shift_codes": ("show_in_legend",),
 }
 
 
