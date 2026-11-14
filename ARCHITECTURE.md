@@ -478,7 +478,13 @@ locked dependency set changes, the bundled runtime's pip is upgraded first
 and then `requirements.lock` plus `requirements-windows.txt` are installed.
 The Inno Setup script (`packaging/windows/opscore.iss`) compiles a per-user
 installer that preserves user data and offers the keep/fresh database choice
-when an existing database is detected.
+when an existing database is detected. The build scripts do not sign the
+installer. The published v1.2 installer was signed afterwards with a
+self-signed `Opscore Development` Authenticode certificate and a DigiCert
+timestamp. The signature protects file integrity but does not establish
+publisher trust on an ordinary Windows machine; no private CA needs to be
+installed to run the app. Signing keys and passwords are not stored in the
+repository.
 
 ### Alternative frozen build
 

@@ -42,6 +42,13 @@ Opscore supports **64-bit Windows 10 and 11**.
 3. Open **Opscore** from the Start Menu. The app uses WebView2, with
    Microsoft Edge app mode and the default browser as fallbacks.
 
+The v1.2 installer has an Authenticode signature from the self-signed
+**Opscore Development** certificate, with a DigiCert timestamp. Windows may
+show **Unknown publisher** or a SmartScreen warning because this certificate
+is not issued by a publicly trusted certificate authority. Only continue with
+an installer obtained from the official Opscore release. You do not need to
+install a private CA certificate to run Opscore.
+
 The installer places the program under `%LOCALAPPDATA%\Programs\Opscore`.
 Your database, log and backups are kept separately under
 `%LOCALAPPDATA%\Opscore` and are preserved by upgrades and uninstallation.
