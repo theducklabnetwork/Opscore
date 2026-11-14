@@ -5,12 +5,37 @@ tags and published releases; see the provenance note at the end.
 
 ---
 
-## v1.2 — 2026-11-12 (release pending)
+## v1.3 — in development
 
-This entry covers the work merged after v1.1 (pull requests #67–#73). The
-Linux `.deb` and Windows installer for v1.2 are published separately; there
-is no `v1.2` git tag yet. The date is the source date of the final commit
-(`09b8855`), not the artifact publication date.
+Schema version: **11** (unchanged from v1.2).
+
+### Added
+
+- **MyESS batch schedule export.** Planner retains its individual
+  `date,shift_code` files and adds one combined
+  `employee_no,date,shift_code` CSV for multi-employee upload in the MyESS
+  HRMS Android app. Opscore Staff ID supplies `employee_no`.
+- **Automatic pre-migration backups.** An existing database is copied through
+  SQLite's online backup API before pending migrations begin. A failed backup
+  prevents migration; restore staging does not create a redundant copy.
+- **Newer-schema startup protection.** Older application code refuses to
+  modify a newer database and displays an actionable desktop error.
+
+### Changed
+
+- **Bounded automatic backups and logs.** The newest 10 pre-migration and
+  pre-restore backups are retained and listed together in Settings → Data.
+  Manual downloads, fresh-start copies and recovery-script backups are not
+  pruned. At startup, `opscore.log` rotates at 5 MiB with three archives;
+  the active file may grow during a continuously running session.
+
+---
+
+## v1.2 — 2026-11-12
+
+This entry covers the work merged after v1.1 (pull requests #67–#73 and
+subsequent v1.2 fixes). The `v1.2` tag points to `50f999b`; the Linux `.deb`
+and Windows installer were published separately.
 
 ### Added
 
@@ -160,11 +185,10 @@ GitHub release and the commit range. Schema version: **5**.
 
 ## Provenance
 
-- **Version anchors** are the git tags `v0.1.0`, `v0.1.1`, `v1.0` and `v1.1`
-  and their published GitHub releases. Tag dates are in UTC+08:00.
-- **v1.2** has no git tag; its content is the merged pull requests #67–#73
-  between `v1.1` and `09b8855`, and its date is provisional pending
-  publication of the release artifacts.
+- **Version anchors** are the git tags `v0.1.0`, `v0.1.1`, `v1.0`, `v1.1`
+  and `v1.2` and their published GitHub releases. Tag dates are in UTC+08:00.
+- **v1.2** is tagged at `50f999b`; its content includes the merged pull
+  requests #67–#76, with subsequent documentation on `main`.
 - **v1.0 and v0.1.0** entries are reconstructed from tag messages, release
   bodies and commit ranges because no complete in-repository changelog existed
   at those tags; they are marked as such.

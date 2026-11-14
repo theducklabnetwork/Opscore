@@ -336,6 +336,68 @@ class TestPortCheck(unittest.TestCase):
         self.assertIn("already used", show_error.call_args.args[0])
 
 
+class TestLogRotation(unittest.TestCase):
+    def setUp(self):
+        self.desktop = load_desktop_module()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.log = Path(self.tmp.name) / "opscore.log"
+        self.patcher = mock.patch.object(self.desktop, "LOG_PATH", self.log)
+        self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.tmp.cleanup()
+
+    def test_small_log_is_not_rotated(self):
+        self.log.write_bytes(b"keep")
+        self.desktop.rotate_log_at_startup()
+        self.assertEqual(self.log.read_bytes(), b"keep")
+        self.assertFalse(self.log.with_name("opscore.log.1").exists())
+
+    def test_large_log_keeps_three_archives(self):
+        for number in range(1, 4):
+            self.log.with_name(f"opscore.log.{number}").write_text(f"old-{number}")
+        self.log.write_bytes(b"x" * self.desktop.LOG_MAX_BYTES)
+        self.desktop.rotate_log_at_startup()
+        self.assertEqual(self.log.read_bytes(), b"")
+        self.assertEqual(self.log.with_name("opscore.log.1").stat().st_size,
+                         self.desktop.LOG_MAX_BYTES)
+        self.assertEqual(self.log.with_name("opscore.log.2").read_text(), "old-1")
+        self.assertEqual(self.log.with_name("opscore.log.3").read_text(), "old-2")
+
+    def test_rotation_failure_does_not_block_startup(self):
+        with mock.patch.object(self.desktop.Path, "stat", side_effect=OSError("locked")):
+            self.desktop.rotate_log_at_startup()
+
+
+class TestSchemaPreflight(unittest.TestCase):
+    def test_newer_schema_produces_actionable_desktop_error(self):
+        desktop = load_desktop_module()
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(desktop, "DATA_DIR", Path(tmp)), \
+                mock.patch.object(desktop, "DB_PATH", Path(tmp) / "store_ops.db"), \
+                mock.patch.object(desktop, "URL_PATH", Path(tmp) / "current.json"), \
+                mock.patch.object(desktop, "acquire_lock", return_value=mock.Mock()), \
+                mock.patch.object(desktop, "active_app", return_value=None), \
+                mock.patch.object(desktop, "windows_port_available", return_value=True), \
+                mock.patch.object(desktop, "rotate_log_at_startup"), \
+                mock.patch.object(desktop, "redirect_output_to_log"), \
+                mock.patch.object(desktop, "show_error") as show_error, \
+                mock.patch.object(desktop, "start_backend") as start, \
+                mock.patch.object(desktop, "stop_backend"):
+            db = Path(tmp) / "store_ops.db"
+            import sqlite3
+            conn = sqlite3.connect(db)
+            conn.execute("PRAGMA user_version = 999")
+            conn.close()
+            with mock.patch.object(desktop.sys, "platform", "win32"), \
+                    mock.patch.object(desktop.sys, "argv", ["opscore_desktop.py"]):
+                self.assertEqual(desktop.main(), 1)
+        start.assert_not_called()
+        self.assertIn("newer than this app", show_error.call_args.args[0])
+        self.assertIn("Upgrade Opscore", show_error.call_args.args[0])
+
+
 class TestWindowsWindow(unittest.TestCase):
     def setUp(self):
         self.desktop = load_desktop_module()

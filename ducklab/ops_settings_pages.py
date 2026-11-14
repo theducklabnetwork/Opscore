@@ -596,7 +596,7 @@ class SettingsState(SharedOpsState):
             {"name": b.name,
              "date": ds.fmt_kl_datetime(b.created_at.isoformat()),
              "size": _fmt_size(b.size_bytes)}
-            for b in backup.list_pre_restore_backups(DB_PATH)
+            for b in backup.list_automatic_backups(DB_PATH)
         ]
 
     @rx.event
@@ -1114,14 +1114,16 @@ def _data_tab() -> rx.Component:
                      "you will be signed out.",
                 id="data-restore-section"),
             ui.form_section(
-                "Automatic Pre-Restore Backups",
+                "Automatic Backups",
                 rx.cond(S.data_backups.length() > 0,
                         rx.vstack(rx.foreach(S.data_backups, _backup_row),
                                   spacing="0", width="100%"),
                         ui.note("No automatic backups yet.")),
-                hint="Before every restore the current database is copied "
-                     "to the backups folder next to it. The last 5 are "
-                     "listed here.",
+                hint="Before migrations and restores, the current database "
+                     "is copied to the backups folder. The newest 10 "
+                     "automatic backups are kept; downloaded backups, "
+                     "fresh-start copies and recovery-script copies are not "
+                     "deleted.",
                 id="data-backups-section"),
         ),
         _db_confirm_dialog(),

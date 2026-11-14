@@ -1,8 +1,8 @@
 """S3 tests: Settings > Data — backup & restore of the ops database.
 
 Backup round trip through the SQLite backup API, every restore rejection
-case (not SQLite, corrupt, missing tables, newer schema), the automatic
-pre-restore copy, and the listing of the last 5 backups. Disposable temp
+case (not SQLite, corrupt, missing tables, newer schema), automatic copies,
+and newest-10 retention across migration and restore backups. Disposable temp
 DBs only.
 
 Run: python -m pytest tests/test_ops_data_backup.py -v
@@ -197,15 +197,81 @@ class BackupModuleTest(unittest.TestCase):
         self.assertEqual(
             backup.validate_restore(saved), store_ops_db.SCHEMA_VERSION)
 
-    def test_list_last_five_newest_first(self):
+    def test_automatic_backups_keep_ten_newest_across_both_kinds(self):
         base = datetime(2026, 10, 20, 8, 0, 0)
         for i in range(7):
             backup.save_pre_restore_backup(self.db,
                                            now=base + timedelta(hours=i))
-        items = backup.list_pre_restore_backups(self.db)
-        self.assertEqual(len(items), 5)
+            backup.save_pre_migration_backup(
+                self.db, 10, 11, now=base + timedelta(hours=i, minutes=30))
+        items = backup.list_automatic_backups(self.db)
+        self.assertEqual(len(items), 10)
         self.assertTrue(items[0].name > items[-1].name)
         self.assertTrue(all(b.size_bytes > 0 for b in items))
+        self.assertEqual(len(list((self.dir / "backups").glob("*.db"))), 10)
+
+    def test_automatic_backup_names_never_overwrite_same_second_copy(self):
+        now = datetime(2026, 10, 25, 9, 15, 0)
+        first = backup.save_pre_restore_backup(self.db, now=now)
+        second = backup.save_pre_restore_backup(self.db, now=now)
+        self.assertNotEqual(first, second)
+        self.assertEqual(second.name, "pre-restore-20261025-091500-1.db")
+        self.assertEqual(backup.validate_restore(first),
+                         store_ops_db.SCHEMA_VERSION)
+
+    def test_pruning_preserves_manual_and_unrecognized_files(self):
+        preserved = [
+            self.dir / "opscore-backup-2026-10-25-0915.db",
+            self.dir / "store_ops.db.backup-1",
+            self.dir / "store_ops.db.bak-20261025-091500",
+            self.dir / "backups" / "manual.db",
+        ]
+        for path in preserved:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"keep")
+        base = datetime(2026, 10, 20, 8, 0, 0)
+        for i in range(11):
+            backup.save_pre_restore_backup(self.db,
+                                           now=base + timedelta(hours=i))
+        self.assertEqual(len(backup.list_automatic_backups(self.db)), 10)
+        for path in preserved:
+            self.assertEqual(path.read_bytes(), b"keep")
+
+    def test_prune_failure_does_not_invalidate_new_backup(self):
+        saved = backup.save_pre_restore_backup(self.db)
+        doomed = self.dir / "backups" / "pre-restore-20200101-000000.db"
+        doomed.write_bytes(b"old")
+        with mock.patch.object(backup.Path, "unlink",
+                               side_effect=OSError("locked")):
+            backup.prune_automatic_backups(self.db, keep=1)
+        self.assertTrue(saved.is_file())
+        self.assertTrue(doomed.is_file())
+
+    def test_symlinked_backup_directory_is_not_enumerated(self):
+        external = self.dir / "external"
+        external.mkdir()
+        (external / "pre-restore-20200101-000000.db").write_bytes(b"keep")
+        backup_dir = self.dir / "backups"
+        backup_dir.symlink_to(external, target_is_directory=True)
+        self.assertEqual(backup.list_automatic_backups(self.db), [])
+        self.assertTrue((external / "pre-restore-20200101-000000.db").is_file())
+
+    def test_restore_migration_does_not_make_extra_migration_backup(self):
+        older = self.dir / "older.db"
+        shutil.copy(self.db, older)
+        conn = sqlite3.connect(older)
+        conn.execute("DROP TABLE reference_data_info")
+        for table in ("schedule_entries", "schedule_targets", "staff", "shift_codes"):
+            conn.execute(f"DROP TABLE {table}")
+        conn.execute("DELETE FROM schema_migrations WHERE version >= 5")
+        conn.execute("PRAGMA user_version = 4")
+        conn.commit()
+        conn.close()
+        with mock.patch("ducklab.backup.save_pre_migration_backup") as save, \
+                mock.patch("ducklab.store_ops_db.init_db", wraps=store_ops_db.init_db) as init:
+            backup.restore(self.db, older)
+        self.assertFalse(init.call_args.kwargs["backup_before_migration"])
+        save.assert_not_called()
 
 
 class SettingsDataTabTest(unittest.TestCase):

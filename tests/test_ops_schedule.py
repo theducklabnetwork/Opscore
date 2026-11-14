@@ -308,6 +308,105 @@ class ScheduleTests(unittest.TestCase):
         self.assertIsNone(spec)
         self.assertEqual(state.schedule_error, "You have read-only access.")
 
+    def test_myess_batch_csv_combines_staff_in_staff_and_day_order(self):
+        import csv
+        import ducklab.ops_schedule_state as mod
+        from ducklab import platform_utils
+
+        zed = self.app.save_staff(self.admin, self.store, None,
+            name="Zed One", staff_code="Z/001, West", position="RA")
+        amy = self.app.save_staff(self.admin, self.store, None,
+            name="Amy Two", staff_code="A002", position="SV")
+        self.app.save_staff(self.admin, self.store, None,
+            name="No Shifts", staff_code="N001", position="RA")
+        week = date(2026, 11, 2)
+        # Insert out of order to verify that export uses staff then day order.
+        self.app.set_schedule_entry(self.admin, self.store, amy,
+                                    date(2026, 11, 8), "ORD")
+        self.app.set_schedule_entry(self.admin, self.store, zed,
+                                    date(2026, 11, 4), "AL")
+        self.app.set_schedule_entry(self.admin, self.store, zed, week, "M900")
+        self.app.set_schedule_entry(self.admin, self.store, amy,
+                                    date(2026, 11, 3), "F101")
+
+        export_root = Path(self.tmp.name) / "Documents"
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_week = "2026-11-02"
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store), \
+                mock.patch.object(platform_utils, "documents_dir",
+                                  lambda: export_root):
+            state.export_myess_batch_csv()
+
+        self.assertEqual(state.schedule_error, "")
+        folder = export_root / "Opscore Schedules" / "A01" / "2026-11-02"
+        path = folder / "MyESS_A01_2026-11-02.csv"
+        self.assertEqual(
+            state.schedule_notice, f"MyESS batch schedule saved: {path.resolve()}")
+        self.assertEqual([p.name for p in folder.iterdir()], [path.name])
+        with path.open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(list(csv.reader(handle)), [
+                ["employee_no", "date", "shift_code"],
+                ["A002", "2026-11-03", "F101"],
+                ["A002", "2026-11-08", "ORD"],
+                ["Z/001, West", "2026-11-02", "M900"],
+                ["Z/001, West", "2026-11-04", "AL"],
+            ])
+
+    def test_myess_batch_csv_no_shifts_does_not_create_file(self):
+        import ducklab.ops_schedule_state as mod
+        from ducklab import platform_utils
+
+        self.app.save_staff(self.admin, self.store, None,
+            name="No Shifts", staff_code="N001", position="RA")
+        export_root = Path(self.tmp.name) / "Documents"
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_week = "2026-11-02"
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store), \
+                mock.patch.object(platform_utils, "documents_dir",
+                                  lambda: export_root):
+            state.export_myess_batch_csv()
+
+        self.assertEqual(state.schedule_error,
+                         "No scheduled shifts to export for this week.")
+        self.assertEqual(state.schedule_notice, "")
+        self.assertFalse(export_root.exists())
+
+    def test_myess_batch_csv_read_only_user_denied(self):
+        state = ScheduleState()
+        state.can_write_schedule = False
+        state.schedule_week = "2026-11-02"
+        spec = state.export_myess_batch_csv()
+        self.assertIsNone(spec)
+        self.assertEqual(state.schedule_error, "You have read-only access.")
+
+    def test_myess_batch_csv_reports_malformed_week(self):
+        import ducklab.ops_schedule_state as mod
+
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_week = "not-a-date"
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store):
+            state.export_myess_batch_csv()
+
+        self.assertEqual(
+            state.schedule_error,
+            "Invalid schedule week. Select a valid week and try again.")
+        self.assertEqual(state.schedule_notice, "")
+
 
 if __name__ == "__main__":
     unittest.main()

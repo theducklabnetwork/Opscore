@@ -75,6 +75,11 @@ def _builder() -> rx.Component:
                                      variant="soft", on_click=M.export_schedule_csv,
                                      id="export-schedule-csv", aria_label="Export CSV"),
                        content="Export CSV"),
+            rx.tooltip(rx.button("MyESS", size="1", variant="soft",
+                                 on_click=M.export_myess_batch_csv,
+                                 id="export-myess-batch-csv",
+                                 aria_label="Export MyESS batch CSV"),
+                       content="Export one MyESS CSV for all scheduled staff"),
             width="100%", align="end", flex_wrap="nowrap",
         ),
         rx.cond(

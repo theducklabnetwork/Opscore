@@ -386,6 +386,71 @@ class TestMigrationAtomicity(unittest.TestCase):
                     conn.close()
 
 
+class TestMigrationSafety(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self._tmp.name) / "existing.db"
+        conn = store_ops_db.connect(self.db_path)
+        store_ops_db._apply_v1(conn)
+        conn.execute("CREATE TABLE marker (value TEXT)")
+        conn.execute("INSERT INTO marker VALUES ('original')")
+        conn.execute("PRAGMA user_version = 1")
+        conn.commit()
+        conn.close()
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_existing_database_is_backed_up_before_migration(self):
+        store_ops_db.init_db(self.db_path)
+        copies = list((self.db_path.parent / "backups").glob(
+            "pre-migration-v1-to-v11-*.db"))
+        self.assertEqual(len(copies), 1)
+        conn = sqlite3.connect(copies[0])
+        self.assertEqual(conn.execute("SELECT value FROM marker").fetchone()[0],
+                         "original")
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        conn.close()
+
+    def test_current_and_new_databases_do_not_create_migration_backups(self):
+        current = self.db_path.with_name("current.db")
+        store_ops_db.init_db(current)
+        store_ops_db.init_db(current)
+        self.assertFalse((self.db_path.parent / "backups").exists())
+
+    def test_backup_failure_prevents_migration(self):
+        from ducklab import backup
+        before = self.db_path.read_bytes()
+        with mock.patch.object(backup, "save_pre_migration_backup",
+                               side_effect=backup.BackupError("disk full")):
+            with self.assertRaisesRegex(backup.BackupError, "disk full"):
+                store_ops_db.init_db(self.db_path)
+        self.assertEqual(self.db_path.read_bytes(), before)
+
+    def test_newer_schema_is_rejected_without_changes(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(f"PRAGMA user_version = {store_ops_db.SCHEMA_VERSION + 1}")
+        conn.commit()
+        conn.close()
+        before = self.db_path.read_bytes()
+        with self.assertRaisesRegex(store_ops_db.SchemaVersionError,
+                                    "newer than this app"):
+            store_ops_db.init_db(self.db_path)
+        self.assertEqual(self.db_path.read_bytes(), before)
+        self.assertFalse((self.db_path.parent / "backups").exists())
+
+    def test_version_zero_existing_database_is_backed_up(self):
+        empty = self.db_path.with_name("version-zero.db")
+        store_ops_db.connect(empty).close()
+        store_ops_db.init_db(empty)
+        self.assertEqual(len(list((self.db_path.parent / "backups").glob(
+            "pre-migration-v0-to-v11-*.db"))), 1)
+
+    def test_backup_can_be_disabled_for_temporary_restore_copy(self):
+        store_ops_db.init_db(self.db_path, backup_before_migration=False)
+        self.assertFalse((self.db_path.parent / "backups").exists())
+
+
 class TestPrototypePreservation(unittest.TestCase):
     def test_placement_tracker_db_untouched(self):
         before = PROTOTYPE_DB.stat() if PROTOTYPE_DB.exists() else None
