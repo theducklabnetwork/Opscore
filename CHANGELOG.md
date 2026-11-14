@@ -27,6 +27,11 @@ is no `v1.2` git tag yet. The date is the source date of the final commit
 - **Default expense categories on store creation.** New stores receive the
   ten default categories. Also includes an offline
   `scripts/recover_admin_password.py` for locked-out administrators. (#67)
+- **Signed Windows installer.** The published `Opscore-Setup-1.2.exe` carries
+  an Authenticode signature from the self-signed **Opscore Development**
+  certificate, with a DigiCert timestamp. Its signed file digest and timestamp
+  verify successfully, but the publisher is not trusted by Windows by default.
+  Signing was a post-build release step, not part of the build scripts.
 
 ### Fixed
 
