@@ -74,15 +74,19 @@
   body * {
     visibility: hidden !important;
   }
+  /* Visibility is inherited; restore every schedule ancestor as well as its
+     descendants. Fixed positioning escapes the application shell's offset. */
+  body:has(#generated-schedule-print),
+  body:has(#generated-schedule-print) > *,
+  body:has(#generated-schedule-print) .radix-themes,
+  body:has(#generated-schedule-print) .radix-themes > *,
   #generated-schedule-print,
   #generated-schedule-print * {
     visibility: visible !important;
   }
   #generated-schedule-print {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: auto !important;
+    position: fixed !important;
+    inset: 0 auto auto 0 !important;
     box-sizing: border-box !important;
     width: 281mm !important;
     min-width: 281mm !important;
