@@ -142,8 +142,11 @@ Migrations run automatically; no operator action is required.
 2. Two Reflex lifespan tasks then run:
    - `seed_default_expense_categories` — inserts the ten default categories
      only for stores with zero categories.
-   - `load_bundled_reference_data` — imports the bundled workbook only when
-     both reference tables are empty. Failures are logged and non-fatal.
+   - `load_bundled_reference_data` — imports the bundled workbook when both
+     reference tables are empty, and refreshes it when the stored data still
+     came from the bundle but its content no longer matches the bundled
+     workbook (an upgrade). User-imported data is never replaced. Failures
+     are logged and non-fatal.
 
 On a desktop upgrade, the first launch of the new version applies pending
 migrations to the existing database in place.

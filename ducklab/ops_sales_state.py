@@ -503,8 +503,14 @@ class SalesState(SharedOpsState):
 
     def _daily_rows(self, days, month: str, cfg, shares: dict,
                     holidays: set, targets) -> list[dict[str, str]]:
-        """Daily Sales table: day share, Daily / Adjusted Target and Result
-        from kpi.daily_targets; basket figures with their % vs target."""
+        """Daily Sales table: day contribution, Daily / Adjusted Target and
+        Result from kpi.daily_targets; basket figures with their % vs
+        target.
+
+        The Contribution column shows the NORMALIZED share (the day's share
+        of the monthly target), so it multiplies out to the Daily Target
+        beside it — the same figure the workbook shows in S.Ctrb.
+        """
         from datetime import timedelta
         if not days:
             return []
@@ -513,6 +519,8 @@ class SalesState(SharedOpsState):
         by_target = {t.date: t for t in targets or []}
         target_transactions = kpi.effective_target_transactions(
             cfg.target_transactions, cfg.level1_base_cents, cfg.target_spr_cents)
+        normalized = (kpi.normalized_day_shares(month, shares, holidays)
+                      if shares else None)
         rows = []
         for i in range(dim):
             day = first + timedelta(days=i)
@@ -523,7 +531,6 @@ class SalesState(SharedOpsState):
             ipr = (kpi.upt(d.units, txn)
                    if txn and d.units is not None else None)
             t = by_target.get(day)
-            share = kpi.day_share(day, shares, holidays) if shares else None
             pcts = {
                 "txn_pct": ds.fmt_variance_pct(
                     kpi.transactions_pct(txn, target_transactions, dim)),
@@ -533,12 +540,13 @@ class SalesState(SharedOpsState):
                     kpi.pct_vs_target(ipr, cfg.target_ipr)),
             }
             result = t.result if t is not None else None
+            contribution = (normalized.get(day) if normalized else None)
             rows.append({
                 "iso": day.isoformat(),
                 "date": day.strftime("%d %b"),
                 "weekday": day.strftime("%a"),
                 "ph": "PH" if day in holidays else "",
-                "contribution": ds.fmt_share(share),
+                "contribution": ds.fmt_contribution(contribution),
                 "target": ds.fmt_rm(t.target_cents if t else None),
                 "adjusted": ds.fmt_rm(t.adjusted_cents if t else None),
                 "sales": ds.fmt_rm(d.sales_cents) if reported else "—",

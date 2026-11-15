@@ -127,6 +127,35 @@ class DailyTargetKpiTests(unittest.TestCase):
         self.assertIsNone(self.targets(shares=partial))
         self.assertIsNone(self.targets(level1=None))
 
+    def test_normalized_share_is_the_share_of_the_monthly_target(self):
+        rows = self.targets()
+        # 1 Jul raw 0.0295, month total 1.0025 -> 0.029426...
+        self.assertEqual(rows[0].normalized_share,
+                         D("0.0295") / D("1.0025"))
+        # the normalized share is what multiplies out to the Daily Target
+        self.assertEqual(int(D(30000000) * rows[0].normalized_share),
+                         rows[0].target_cents)
+
+    def test_normalized_day_shares_without_a_target(self):
+        norm = kpi.normalized_day_shares("2026-07", JULY, set())
+        self.assertEqual(len(norm), 31)
+        self.assertEqual(norm[date(2026, 7, 1)], D("0.0295") / D("1.0025"))
+        # the normalized shares of the month add up to exactly 1 (within
+        # Decimal's division precision)
+        self.assertAlmostEqual(float(sum(norm.values())), 1.0, places=12)
+        # no shares at all -> None
+        self.assertIsNone(kpi.normalized_day_shares("2026-07", {}, set()))
+        partial = dict(JULY)
+        del partial["Sun"]
+        self.assertIsNone(kpi.normalized_day_shares("2026-07", partial, set()))
+
+    def test_contribution_format_is_one_decimal(self):
+        self.assertEqual(ds.fmt_contribution(D("0.0435284472827429")), "4.4%")
+        self.assertEqual(ds.fmt_contribution(D("0.0292160004862452")), "2.9%")
+        self.assertEqual(ds.fmt_contribution(None), "—")
+        # the raw share keeps its own two-decimal format
+        self.assertEqual(ds.fmt_share(D("0.0435284472827429")), "4.35%")
+
     def test_basket_percentages_literal(self):
         txn = kpi.transactions_pct(380, 12400, 31)
         spr = kpi.pct_vs_target(rm("23.00"), rm("25.00"))
@@ -427,7 +456,12 @@ class SalesTableTests(Fixture):
                           "Achieved", "Achieved", "Not Achieved"])
         self.assertEqual([r["result_color"] for r in rows[:2]],
                          ["red", "red"])
-        self.assertEqual(rows[0]["contribution"], "2.95%")
+        self.assertEqual(rows[0]["contribution"], "2.9%")
+        # the Contribution column is the NORMALIZED share: the day's share of
+        # the monthly target, so it multiplies out to the Target beside it
+        # (300,000 x 2.9% ~= RM 8,827.93).
+        self.assertEqual([r["contribution"] for r in rows[:6]],
+                         ["2.9%", "2.6%", "3.1%", "3.9%", "4.4%", "3.0%"])
         # 6 Jul: 8,700 / 380 = 22.89 SPR; 1,292 / 380 = 3.40 IPR
         r6 = rows[5]
         self.assertEqual((r6["transactions"], r6["txn_pct"],
@@ -467,7 +501,7 @@ class SalesTableTests(Fixture):
         self.july(holidays=[date(2026, 7, 6)])
         rows = self.sales().sp_rows
         self.assertEqual(rows[5]["ph"], "PH")
-        self.assertEqual(rows[5]["contribution"], "5.00%")
+        self.assertEqual(rows[5]["contribution"], "4.9%")
         self.assertEqual(rows[5]["target"], "RM 14,669.93")
         self.assertEqual(rows[4]["ph"], "")
 

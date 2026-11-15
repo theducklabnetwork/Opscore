@@ -116,10 +116,25 @@ def backfill_default_budget_pct(
 def load_bundled_reference_data(
         db_path: Path | str = store_ops_db.DB_PATH,
         workbook: Path = WORKBOOK) -> bool:
-    """Import defaults only when both reference tables are empty.
+    """Load the bundled reference data, replacing stale bundled copies.
 
-    Return True when the bundled workbook was imported. Existing data and
-    import failures are deliberately non-fatal to application startup.
+    The bundled workbook ships with the application, so an installation
+    whose reference tables still hold an OLDER bundled copy must be
+    refreshed — otherwise it keeps using outdated day shares (and the
+    wrong daily targets) forever. Data the user imported explicitly is
+    never touched: ``reference_data_info.bundled`` records where the
+    current data came from.
+
+    Rules:
+
+    * both tables empty -> import the bundled workbook;
+    * the tables hold BUNDLED data whose content differs from the bundled
+      workbook -> import the bundled workbook (an upgrade, not a
+      user-intent violation);
+    * the tables hold user-imported data -> leave them alone.
+
+    Return True when the bundled workbook was imported. Import failures
+    are deliberately non-fatal to application startup.
     """
     try:
         store_ops_db.init_db(db_path)
@@ -128,16 +143,79 @@ def load_bundled_reference_data(
             empty = all(conn.execute(f"SELECT NOT EXISTS (SELECT 1 FROM {table})")
                         .fetchone()[0]
                         for table in ("contribution_shares", "basket_benchmarks"))
+            if empty:
+                bundled = True
+            else:
+                row = conn.execute(
+                    "SELECT bundled FROM reference_data_info WHERE id = 1"
+                ).fetchone()
+                if row is None or not row[0]:
+                    return False        # user-imported data: never replaced
+                bundled = True
         finally:
             conn.close()
-        if not empty:
+        if not bundled:
             return False
         if not Path(workbook).is_file():
             log.error("Bundled reference workbook is missing: %s", workbook)
             return False
+        if not empty and not _bundled_data_differs(
+                Path(workbook), db_path):
+            return False        # already the bundled content: nothing to do
         dsc_import.import_workbook(Path(workbook), Path(db_path), bundled=True)
     except Exception:
         log.warning("Could not load bundled reference data; continuing without it",
                     exc_info=True)
         return False
     return True
+
+
+def _bundled_data_differs(workbook: Path, db_path: Path) -> bool:
+    """True when the stored reference data is not the bundled workbook's.
+
+    Compares the day shares and the SPR/IPR benchmarks that the workbook
+    contains. A workbook row the database does not have (or a different
+    value) means the stored data is an older bundled copy.
+    """
+    try:
+        shares = dsc_import.parse_dsc(
+            dsc_import.read_sheet(workbook, dsc_import.DSC_SHEET))
+        benchmarks = dsc_import.parse_spr(
+            dsc_import.read_sheet(workbook, dsc_import.SPR_SHEET))
+    except Exception:
+        log.warning("Could not read the bundled reference workbook for "
+                    "comparison; leaving the stored data alone",
+                    exc_info=True)
+        return False
+    conn = store_ops_db.connect(db_path)
+    try:
+        stored_shares = {
+            (r["state"], r["concept"], r["day"], r["month"]): r["share"]
+            for r in conn.execute(
+                "SELECT state, concept, day, month, share "
+                "FROM contribution_shares")}
+        stored_benchmarks = {
+            (r["concept"], r["state"], r["month"]): (r["avg_spr"], r["avg_ipr"])
+            for r in conn.execute(
+                "SELECT concept, state, month, avg_spr, avg_ipr "
+                "FROM basket_benchmarks")}
+    finally:
+        conn.close()
+    for state, concept, day, month, share in shares:
+        key = (state, concept, day, month)
+        if key not in stored_shares:
+            return True
+        if abs(float(stored_shares[key]) - float(share)) > 1e-12:
+            return True
+    for concept, state, month, spr, ipr in benchmarks:
+        key = (concept, state, month)
+        if key not in stored_benchmarks:
+            return True
+        stored_spr, stored_ipr = stored_benchmarks[key]
+        if spr is not None and stored_spr is not None:
+            if abs(float(stored_spr) - float(spr)) > 1e-9:
+                return True
+        if ipr is not None and stored_ipr is not None:
+            if abs(float(stored_ipr) - float(ipr)) > 1e-9:
+                return True
+    return False
