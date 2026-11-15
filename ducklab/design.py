@@ -113,6 +113,15 @@ def fmt_share(share, dash="—") -> str:
     return f"{float(share) * 100:.2f}%"
 
 
+def fmt_contribution(share, dash="—") -> str:
+    """Normalized contribution (the day's share of the monthly target) ->
+    '4.4%'. One decimal, matching the workbook's S.Ctrb column; the figure
+    multiplies out to the Daily Target shown beside it."""
+    if share is None:
+        return dash
+    return f"{float(share) * 100:.1f}%"
+
+
 def fmt_achievement(ratio, status: str, dash="—") -> str:
     """Achievement vs a target level, 1 decimal. A shortfall is never
     rounded up: when the level's status is Below target the percentage is

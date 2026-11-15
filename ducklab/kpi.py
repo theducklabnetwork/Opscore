@@ -530,7 +530,8 @@ class DailyTarget:
     """One day of the Daily Sales table. Money in integer cents."""
     date: date
     public_holiday: bool
-    share: Decimal
+    share: Decimal            # raw imported DSC share (the benchmark)
+    normalized_share: Optional[Decimal]   # share / month's total share
     target_cents: int
     adjusted_cents: Optional[int]     # None: unreported (not the next day)
     result: Optional[str]             # None: unreported
@@ -545,12 +546,40 @@ def day_share(day: date, shares: dict[str, Decimal],
     return to_decimal(shares.get(DSC_WEEKDAYS[day.weekday()]))
 
 
+def normalized_day_shares(month: str, shares: dict[str, Decimal], holidays
+                          ) -> Optional[dict[date, Optional[Decimal]]]:
+    """{date: normalized share} for every day of the month.
+
+    The normalized share is the day's raw DSC share divided by the sum of
+    the month's day shares: the share of the monthly target that day
+    carries. It is independent of any target amount, so it can be shown
+    even when no Level 1 target is configured.
+
+    None when the month has no shares at all (no State/Concept match) or
+    when the month's shares sum to zero.
+    """
+    start, _, dim = month_bounds(month)
+    days = [date(start.year, start.month, n) for n in range(1, dim + 1)]
+    day_shares = [day_share(d, shares, holidays) for d in days]
+    if any(s is None for s in day_shares):
+        return None
+    total = sum(day_shares)
+    if total <= 0:
+        return None
+    return {d: (s / total) for d, s in zip(days, day_shares)}
+
+
 def daily_targets(month: str, level1_cents: Optional[int],
                   shares: dict[str, Decimal], holidays,
                   sales_by_day: dict[date, Optional[int]]
                   ) -> Optional[list[DailyTarget]]:
     """Daily Target = Level 1 x day share / sum of the month's day shares,
     rounded half-up to the cent (the figure shown is the one compared).
+
+    The same division gives each day's ``normalized_share``: the share of
+    the monthly target that day carries. It is what the workbook shows in
+    its S.Ctrb column and what multiplies out to the Daily Target; the raw
+    imported share is the benchmark behind it.
 
     Adjusted Target = Daily Target + shortfall carried from earlier
     reported days (their cumulative Daily Target - cumulative sales, when
@@ -586,7 +615,8 @@ def daily_targets(month: str, level1_cents: Optional[int],
             result = (RESULT_ACHIEVED if sales >= adjusted
                       else RESULT_NOT_ACHIEVED)
         show = sales is not None or d.toordinal() == next_day
-        out.append(DailyTarget(d, d in holidays, share, target,
+        out.append(DailyTarget(d, d in holidays, share,
+                               share / total if total else None, target,
                                adjusted if show else None, result))
         if sales is not None:  # only reported days build the shortfall
             cum_target += target

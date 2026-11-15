@@ -46,6 +46,15 @@ Schema version: **14**.
 
 ### Changed
 
+- **Contribution column matches the HQ workbook.** Sales Performance's daily
+  table now shows each day's **normalized** share of the monthly target
+  (1 decimal, e.g. 4.4%) instead of the raw imported DSC share. It is the
+  figure that multiplies out to the Daily Target beside it and matches the
+  workbook's **S.Ctrb** column. Daily Target formulas are unchanged.
+- **Bundled reference data refreshes on upgrade.** Startup re-imports the
+  bundled DSC/SPR workbook when the stored reference tables still came from
+  the bundle but their content no longer matches it, so corrected day shares
+  reach existing installs. Workbooks uploaded by the user are never replaced.
 - **Manpower clarity and precision.** Monthly Sales per Staff preserves
   fractional cents and explains its staffed-day/effective-staff-day basis.
   Incomplete-month salary ratios keep their numeric values but use neutral

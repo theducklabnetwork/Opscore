@@ -78,9 +78,11 @@ question appears on the first launch after installing or upgrading.
    tour the first time you open it. Replay any tour with the **?** button at
    the top right.
 4. **Check reference data.** Opscore loads the bundled Daily Sales
-   Contribution workbook automatically when both reference tables are empty.
-   Go to **Settings → Reference Data** to review it or upload a replacement.
-   This gives each day its target.
+   Contribution workbook automatically when both reference tables are empty,
+   and refreshes it on upgrade when the stored copy still came from the
+   bundle but no longer matches the bundled workbook (your own uploads are
+   never replaced). Go to **Settings → Reference Data** to review it or
+   upload a replacement. This gives each day its target.
 5. **Add your stores.** Go to **Store Management** (see section 4).
 
 ## 3. Getting around
@@ -212,12 +214,16 @@ expenses for each day, including an entered RM0 expense.
 | Basket | **BV**, **UPT**, **ASP**, compared with the **State Average** |
 | Sales Trend | Chart of daily and cumulative sales against target levels |
 | Sales Calendar | The month at a glance, colour-coded by result |
-| Daily Sales | Each day's **Daily Target**, **Adjusted Target**, **Sales** and **Result** |
+| Daily Sales | Each day's **Contribution**, **Daily Target**, **Adjusted Target**, **Sales** and **Result** |
 
 ### How daily targets work
 
 - **Daily Target** is Level 1 × that day's share of the month (depending on
   the weekday or public holiday, your State and Concept).
+- **Contribution** is the day's normalized share of the monthly target, shown
+  to 1 decimal (e.g. 4.4%). It is the imported day share divided by the sum of
+  the month's day shares, so it multiplies out to the Daily Target beside it
+  and matches the HQ workbook's **S.Ctrb** column.
 - **Adjusted Target** adds any shortfall from earlier days. If you miss
   today's target, the gap carries forward to the **next reported day**.
 - A day with no sales entered keeps its Daily Target but gets no Adjusted
@@ -442,7 +448,10 @@ replaces the previous key immediately.
   Categories are never deleted; renaming keeps history.
 - **Daily Sales Contribution**: upload a DSC workbook (up to 64 MiB) to
   replace the contribution shares and BV/UPT benchmarks for every store. The
-  import is all-or-nothing: a rejected workbook changes nothing.
+  import is all-or-nothing: a rejected workbook changes nothing. A workbook
+  you upload yourself is never overwritten by the bundled data; a copy that
+  came from the bundle is refreshed automatically when the bundled workbook
+  changes on upgrade.
 
 ### Backup and restore (Super Admin)
 

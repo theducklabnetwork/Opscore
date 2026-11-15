@@ -14,7 +14,8 @@ from ducklab import reference_bootstrap, store_ops_db
 from ducklab.app_service import AppService
 from ducklab.dsc_import import reference_data_info
 
-from test_daily_targets_t1 import build_workbook, july_dsc_rows, spr_row
+from test_daily_targets_t1 import (MONTH_NAMES, build_workbook, july_dsc_rows,
+                                 spr_row)
 
 
 class BundledReferenceTests(unittest.TestCase):
@@ -68,6 +69,7 @@ class BundledReferenceTests(unittest.TestCase):
         importer.assert_not_called()
 
     def test_either_nonempty_table_prevents_import(self):
+        """User-imported data is never replaced by the bundled workbook."""
         for populated in ("contribution_shares", "basket_benchmarks"):
             with self.subTest(populated=populated):
                 with tempfile.TemporaryDirectory() as other:
@@ -91,6 +93,54 @@ class BundledReferenceTests(unittest.TestCase):
                             reference_bootstrap.load_bundled_reference_data(
                                 db, self.xlsx))
                     importer.assert_not_called()
+
+    def test_stale_bundled_data_is_refreshed(self):
+        """A database holding an OLDER bundled copy is upgraded.
+
+        This is the upgrade path for installations that imported before the
+        bundled workbook was corrected: they keep the stale day shares (and
+        therefore the wrong daily targets) until the bundled data is
+        refreshed.
+        """
+        # an older bundled copy: the same workbook with one share changed
+        stale = self.tmp / "stale.xlsx"
+        stale_rows = []
+        for row in july_dsc_rows():
+            row = list(row)
+            if row[2] == "Mon":
+                row[3 + MONTH_NAMES.index("July")] = 0.5
+            stale_rows.append(row)
+        build_workbook(
+            stale, stale_rows,
+            [spr_row("Mall", "Johor", {"July": 25.5}, {"July": 3.2})])
+        self.assertTrue(reference_bootstrap.load_bundled_reference_data(
+            self.db, stale))
+        self.assertTrue(reference_data_info(self.db)["bundled"])
+        stored = self.rows("contribution_shares")
+        self.assertTrue(stored)
+        mon = [r for r in stored if r[2] == "Mon" and r[3] == 7][0]
+        self.assertAlmostEqual(mon[4], 0.5, places=9)
+
+        # the current bundled workbook replaces the stale copy
+        self.assertTrue(reference_bootstrap.load_bundled_reference_data(
+            self.db, self.xlsx))
+        conn = sqlite3.connect(self.db)
+        try:
+            mon = conn.execute(
+                "SELECT share FROM contribution_shares WHERE day = 'Mon' "
+                "AND month = 7").fetchone()
+        finally:
+            conn.close()
+        self.assertAlmostEqual(mon[0], 0.030, places=9)
+
+    def test_matching_bundled_data_is_left_alone(self):
+        """Once the stored data IS the bundled content, startup is a no-op."""
+        self.assertTrue(reference_bootstrap.load_bundled_reference_data(
+            self.db, self.xlsx))
+        before = self.rows("contribution_shares")
+        self.assertFalse(reference_bootstrap.load_bundled_reference_data(
+            self.db, self.xlsx))
+        self.assertEqual(self.rows("contribution_shares"), before)
 
     def test_failed_import_logs_warning_and_does_not_raise(self):
         with mock.patch.object(
