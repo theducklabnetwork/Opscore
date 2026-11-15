@@ -263,13 +263,30 @@ categories are left unchanged.
 
 ## 8. Manpower Efficiency
 
-The **Overview** tab shows **Opening** and **Closing Headcount** against
-budget, **Effective Staff**, **Hires**, **Resignations**, **Turnover**,
+The **Overview** tab shows **Opening** and **Closing FT Headcount** against
+the FT budget, **Effective Staff**, **Hires**, **Resignations**, **Turnover**,
 **Leave Days**, **Sales per Staff**, **Salary Cost** and **Salary Ratio**
-against target.
+against target. Headcount, budget variance and turnover are full-time-only;
+turnover is resignations ÷ opening FT headcount (the workbook method).
 
-Salary figures appear only to Super Admin and Administrator. Until month-end
-payroll is entered, the salary ratio shows **Awaiting Payroll**.
+**Daily Staffing records attendance, not roster size.** FT/PT means staff who
+actually worked that day; record absences under **Leave**. For example, if 12
+full-time staff are on the roster but only 9 work today, enter 9 in Full-Time
+Staff, not 12. Days without attendance are not treated as zero staff.
+
+**Workforce Mix** measures part-time usage from daily attendance, so no
+separate PT roster is maintained: **PT Active Days**, **Average PT Working**
+(reported PT-attendance days only), **Peak PT Working**, and **PT Contribution**
+(PT share of average effective staff). A missing PT conversion factor is shown
+as **Factor not set**, never silently ignored. Non-blocking review warnings
+highlight possible FT roster/attendance inconsistencies and PT coverage of an
+FT vacancy; they do not prevent daily entries from being saved.
+
+**Sales per Staff** is sales on staffed days ÷ effective staff-days. Salary
+figures appear only to Super Admin and Administrator. Until month-end payroll
+is entered, the salary ratio shows **Awaiting Payroll**. Before the month is
+complete, the ratio is month-to-date and uses a neutral status color; final
+Within target/Failure coloring applies after month completion.
 
 ### Weekly schedule
 

@@ -103,6 +103,43 @@ class ManpowerTests(Fixture):
         self.assertEqual(st.pay_kpis["budget"], "RM 6,136.20")
         self.assertEqual(st.pay_kpis["variance"], "−RM 6,363.80")
         self.assertEqual(st.pay_kpis["mtd"], "1")       # "(To Date)" labels
+        self.assertEqual(st.pay_kpis["status_color"], "gray")
+        self.assertEqual(st.pay_kpis["bar_color"], "gray")
+        self.assertEqual(st.eff_kpis["sales_per_staff"], "RM 1,125.00")
+        self.assertEqual(st.mix_kpis["active_days"], "10")
+        self.assertEqual(st.mix_kpis["average_pt"], "2.00")
+        self.assertEqual(st.mix_kpis["peak_pt"], "2")
+        self.assertEqual(st.mix_kpis["contribution"], "12.5%")
+        self.assertIn("actually worked", st.staffing_note)
+
+    def test_complete_month_salary_ratio_has_final_status_color(self):
+        for d in range(11, 32):
+            self.app.record_daily(self.admin, self.sid, date(2026, 10, d),
+                                  sales_cents=rm(9000), ft_working=7,
+                                  pt_working=2)
+        st, _, _ = self.load("ops_manpower_state", "ManpowerState",
+                             "load_manpower_data")
+        self.assertEqual(st.pay_kpis["mtd"], "")
+        self.assertEqual(st.pay_kpis["status_color"], "green")
+        self.assertEqual(st.pay_kpis["bar_color"], "green")
+
+    def test_monthly_sales_per_staff_preserves_fractional_cents(self):
+        self.app.record_daily(self.admin, self.sid, date(2026, 10, 11),
+                              sales_cents=1, ft_working=3, pt_working=0)
+        st, _, _ = self.load("ops_manpower_state", "ManpowerState",
+                             "load_manpower_data")
+        self.assertEqual(st.eff_kpis["sales_per_staff"], "RM 1,084.34")
+
+    def test_staffing_roster_warning_is_non_blocking(self):
+        self.app.record_daily(self.admin, self.sid, date(2026, 10, 11),
+                              ft_working=10, leave_annual=1)
+        st, _, _ = self.load("ops_manpower_state", "ManpowerState",
+                             "load_manpower_data")
+        self.assertIn("FT working exceeds closing FT headcount", st.staffing_review)
+        self.assertIn("leave may exceed the FT roster", st.staffing_review)
+        rec = next(d for d in self.app.get_daily_records(
+            self.admin, self.sid, self.month) if d.date == date(2026, 10, 11))
+        self.assertEqual(rec.ft_working, 10)
 
     def test_viewer_payroll_still_restricted(self):
         viewer = self.app.create_user(self.admin, "v@ducklab.com", "V",
@@ -254,10 +291,13 @@ class PageWordingTests(unittest.TestCase):
     def test_manpower(self):
         from ducklab.ops_manpower_pages import manpower_page
         self.check(str(manpower_page()),
-                   ("Opening Headcount", "New Hires", "Resignations",
-                    "Closing Headcount", "Budget Headcount", "Variance",
-                    "Turnover", "Productivity", "Average Effective Staff",
-                    "Sales per Staff", "Salary", "Target", "Salary Cost",
+                   ("Opening FT Headcount", "New Hires", "Resignations",
+                    "Closing FT Headcount", "Budget FT Headcount", "FT Variance",
+                    "Headcount (Full-Time)", "Turnover", "Productivity",
+                    "Average Effective Staff", "Sales per Staff",
+                    "Workforce Mix", "PT Active Days", "Average PT Working",
+                    "Peak PT Working", "PT Contribution",
+                    "Salary", "Target", "Salary Cost",
                     "Basic + Allowance", "Overtime", "Support Cost",
                     "Salary Budget", "Edit Payroll", "Annual Leave",
                     "Medical Leave", "Other Paid Leave (incl. MC/RPL)",

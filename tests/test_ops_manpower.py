@@ -148,6 +148,46 @@ class TestStaffing(ManpowerFixture):
         self.assertEqual(int(m.sales_per_staff), rm(100))
 
 
+class TestWorkforceMix(ManpowerFixture):
+    def test_pt_metrics_use_reported_days_and_leave_ft_unchanged(self):
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
+                              ft_working=8, pt_working=4,
+                              sales_cents=rm(1000))
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 2),
+                              ft_working=8, pt_working=2,
+                              sales_cents=rm(1000))
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 3),
+                              ft_working=8, pt_working=None)
+        rep = self.app.preview_month(self.admin, self.sa, "2026-10",
+                                     as_of=date(2026, 10, 31))
+        mix = kpi.workforce_mix(rep.days, Decimal("0.25"))
+        self.assertEqual(mix["active_days"], 2)
+        self.assertEqual(mix["average_pt"], Decimal(3))
+        self.assertEqual(mix["peak_pt"], 4)
+        # Avg PT 3 x factor .25 = .75; avg effective (9 + 8.5 + 8)/3 = 8.5.
+        self.assertEqual(mix["contribution"], Decimal("0.75") / Decimal("8.5"))
+        self.assertEqual(rep.manpower.closing_headcount, 11)
+        self.assertEqual(rep.manpower.turnover_pct, Decimal(0))
+
+    def test_pt_contribution_zero_when_no_pt_worked(self):
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
+                              ft_working=8, pt_working=0)
+        rep = self.app.preview_month(self.admin, self.sa, "2026-10")
+        mix = kpi.workforce_mix(rep.days, Decimal("0.25"))
+        self.assertEqual(mix["contribution"], Decimal(0))
+        self.assertEqual(mix["active_days"], 0)
+
+    def test_pt_contribution_unavailable_without_factor(self):
+        self.app.configure_month(self.admin, self.sa, "2026-10",
+                                 part_timer_factor=None)
+        self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),
+                              ft_working=8, pt_working=2)
+        rep = self.app.preview_month(self.admin, self.sa, "2026-10")
+        mix = kpi.workforce_mix(rep.days, None)
+        self.assertIsNone(mix["contribution"])
+        self.assertEqual(mix["average_pt"], Decimal(2))
+
+
 class TestLeave(ManpowerFixture):
     def test_leave_totals(self):
         self.app.record_daily(self.admin, self.sa, date(2026, 10, 1),

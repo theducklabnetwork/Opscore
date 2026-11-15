@@ -187,9 +187,9 @@ class ManpowerPageTests(Fixture):
                        "load_manpower_data")
         self.assertTrue(st.pay_kpis["status"].startswith("Month to date: "))
         self.assertEqual(st.pay_kpis["mtd"], "1")
-        # colour still from the engine status
-        raw = st.pay_kpis["status"].removeprefix("Month to date: ")
-        self.assertEqual(st.pay_kpis["status_color"], ds.status_color(raw))
+        # A partial month shows the numeric ratio without a red/green verdict.
+        self.assertEqual(st.pay_kpis["status_color"], "gray")
+        self.assertEqual(st.pay_kpis["bar_color"], "gray")
 
     def test_each_figure_once_and_collapsed_days(self):
         self.record(1, sales_cents=rm(12000), ft_working=8, pt_working=1,

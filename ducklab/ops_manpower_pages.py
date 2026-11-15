@@ -14,7 +14,8 @@ from ducklab.ops_schedule_pages import schedule_tab
 
 
 M = ManpowerState
-HC, EFF, PAY, LEAVE = M.hc_kpis, M.eff_kpis, M.pay_kpis, M.leave_kpis
+HC, EFF, MIX, PAY, LEAVE = (M.hc_kpis, M.eff_kpis, M.mix_kpis,
+                            M.pay_kpis, M.leave_kpis)
 
 
 # ---------------------------------------------------------------------------
@@ -25,13 +26,14 @@ HC, EFF, PAY, LEAVE = M.hc_kpis, M.eff_kpis, M.pay_kpis, M.leave_kpis
 def _headcount_section() -> rx.Component:
     return ui.section_card(
         ui.stat_grid(
-            ui.stat("Opening Headcount", HC["opening"], size="6"),
+            ui.stat("Opening FT Headcount", HC["opening"], size="6"),
             ui.stat("New Hires", HC["hires"], size="6"),
             ui.stat("Resignations", HC["resigned"], size="6"),
-            ui.stat("Closing Headcount", HC["closing"], size="6"),
-            ui.stat("Budget Headcount", HC["budget"], size="6"),
-            ui.stat("Variance", HC["variance"], size="6"),
+            ui.stat("Closing FT Headcount", HC["closing"], size="6"),
+            ui.stat("Budget FT Headcount", HC["budget"], size="6"),
+            ui.stat("FT Variance", HC["variance"], size="6"),
             ui.stat("Turnover", HC["turnover"], size="6",
+                    sub=HC["turnover_sub"],
                     chip=(HC["turnover_status"], HC["turnover_color"])),
         ),
         rx.cond(
@@ -45,7 +47,7 @@ def _headcount_section() -> rx.Component:
             rx.callout("Over Budget", icon="triangle-alert",
                        color_scheme="red", variant="soft", width="100%"),
         ),
-        title="Headcount",
+        title="Headcount (Full-Time)",
         id="headcount-section",
     )
 
@@ -56,10 +58,27 @@ def _efficiency_section() -> rx.Component:
             ui.stat("Sales", EFF["sales_mtd"], size="6"),
             ui.stat("Average Effective Staff", EFF["avg_effective"],
                     size="6"),
-            ui.stat("Sales per Staff", EFF["sales_per_staff"], size="6"),
+            ui.stat("Sales per Staff", EFF["sales_per_staff"], size="6",
+                    sub="Sales on staffed days ÷ effective staff-days"),
             columns=rx.breakpoints(initial="1", sm="3"),
         ),
         title="Productivity", id="efficiency-section",
+    )
+
+
+def _workforce_mix_section() -> rx.Component:
+    return ui.section_card(
+        ui.stat_grid(
+            ui.stat("PT Active Days", MIX["active_days"], size="6"),
+            ui.stat("Average PT Working", MIX["average_pt"], size="6"),
+            ui.stat("Peak PT Working", MIX["peak_pt"], size="6"),
+            ui.stat("PT Contribution", MIX["contribution"], size="6",
+                    sub="PT share of average effective staff"),
+            columns=rx.breakpoints(initial="2", md="4"),
+        ),
+        title="Workforce Mix",
+        subtitle="Part-time usage measured from daily attendance; no PT roster is maintained.",
+        id="workforce-mix-section",
     )
 
 
@@ -187,7 +206,11 @@ def _staffing_table() -> rx.Component:
             phone=("Date", "Effective", "Status", ""),
         ),
         ui.status_legend((ds.DAY_COMPLETE, ds.DAY_PARTIAL,
-                          ds.DAY_NOT_REPORTED)),
+                          ds.DAY_NOT_REPORTED), note=M.staffing_note),
+        rx.cond(M.staffing_review != "",
+                rx.callout(M.staffing_review, icon="triangle-alert",
+                           color_scheme="amber", variant="soft",
+                           width="100%", id="staffing-review")),
         title="Daily Staffing", id="staffing-table",
     )
 
@@ -281,6 +304,7 @@ def manpower_page() -> rx.Component:
                         rx.vstack(
                             _headcount_section(),
                             _efficiency_section(),
+                            _workforce_mix_section(),
                             _payroll_section(),
                             _leave_section(),
                             _staffing_table(),

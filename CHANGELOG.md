@@ -11,6 +11,12 @@ Schema version: **14**.
 
 ### Added
 
+- **PT Workforce Mix.** Manpower Efficiency now reports PT Active Days,
+  Average/Peak PT Working and PT Contribution from daily attendance, without a
+  separate PT roster. FT headcount and turnover formulas remain unchanged.
+- **Staffing review guidance.** FT-only labels and attendance instructions
+  clarify roster size versus staff actually working. Non-blocking warnings flag
+  possible FT roster/attendance inconsistencies and PT coverage of FT vacancies.
 - **MyESS batch schedule export.** Planner retains its individual
   `date,shift_code` files and adds one combined
   `employee_no,date,shift_code` CSV for multi-employee upload in the MyESS
@@ -40,6 +46,10 @@ Schema version: **14**.
 
 ### Changed
 
+- **Manpower clarity and precision.** Monthly Sales per Staff preserves
+  fractional cents and explains its staffed-day/effective-staff-day basis.
+  Incomplete-month salary ratios keep their numeric values but use neutral
+  status colors until the month is complete.
 - **Bounded automatic backups and logs.** The newest 10 pre-migration and
   pre-restore backups are retained and listed together in Settings → Data.
   Manual downloads, fresh-start copies and recovery-script backups are not

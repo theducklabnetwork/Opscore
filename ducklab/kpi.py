@@ -1113,6 +1113,38 @@ def average_effective_staff(days: list[DailyInput], pt_factor) -> Optional[Decim
     return sum(reported) / len(reported)
 
 
+def workforce_mix(days: list[DailyInput], pt_factor) -> dict:
+    """PT usage from daily attendance; no separate PT roster is maintained.
+
+    The average uses days where PT attendance was entered (blank days are
+    not zeros). PT contribution is the PT share of average effective staff;
+    it is unavailable when PT worked without a configured factor.
+    """
+    pt_days = [d for d in days if d.pt_working is not None]
+    total_pt = sum(d.pt_working or 0 for d in days)
+    average_pt = (Decimal(total_pt) / len(pt_days)) if pt_days else None
+    active_days = sum(1 for d in days if (d.pt_working or 0) > 0)
+    peak_pt = max((d.pt_working or 0 for d in days), default=0)
+    average_effective = average_effective_staff(days, pt_factor)
+    if active_days and pt_factor is None:
+        contribution = None
+    elif not average_effective:
+        contribution = None
+    elif not active_days:
+        contribution = Decimal(0)
+    elif average_pt is None:
+        contribution = None
+    else:
+        contribution = (average_pt * to_decimal(pt_factor)
+                        / average_effective)
+    return {
+        "active_days": active_days if days else None,
+        "average_pt": average_pt,
+        "peak_pt": peak_pt if days else None,
+        "contribution": contribution,
+    }
+
+
 def daily_sales_per_staff_cents(d: DailyInput, pt_factor) -> Optional[Decimal]:
     """One day's sales per effective working staff (Daily!AQ per row)."""
     e = effective_staff(d.ft_working, d.pt_working, pt_factor)
