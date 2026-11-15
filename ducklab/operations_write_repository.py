@@ -775,7 +775,7 @@ class OperationsWriteRepository:
 
     @staticmethod
     def _sync_abm_holidays(conn: sqlite3.Connection, store_id: int) -> None:
-        """Add OPH only to blank ABM holiday cells; remove only automatic OPH."""
+        """Enforce OPH on ABM holiday cells; remove only automatic OPH."""
         conn.execute(
             "DELETE FROM schedule_entries WHERE store_id = ? "
             "AND assignment_source = 'auto_holiday' AND ("
@@ -790,8 +790,8 @@ class OperationsWriteRepository:
             "SELECT s.store_id, s.id, h.date, 'OPH', 'auto_holiday' "
             "FROM staff s JOIN public_holidays h ON h.store_id = s.store_id "
             "WHERE s.store_id = ? AND s.position = 'ABM' "
-            "AND NOT EXISTS (SELECT 1 FROM schedule_entries e "
-            "WHERE e.staff_id = s.id AND e.work_date = h.date)",
+            "ON CONFLICT(staff_id, work_date) DO UPDATE SET "
+            "code = 'OPH', assignment_source = 'auto_holiday'",
             (store_id,))
 
     def delete_staff(self, store_id: int, staff_id: int) -> None:
@@ -858,14 +858,22 @@ class OperationsWriteRepository:
                 (staff_id, store_id)).fetchone()
             if not owned:
                 raise RecordNotFoundError("Staff member not found in this store")
+            holiday_abm = conn.execute(
+                "SELECT 1 FROM staff s JOIN public_holidays h "
+                "ON h.store_id = s.store_id AND h.date = ? "
+                "WHERE s.id = ? AND s.store_id = ? AND s.position = 'ABM'",
+                (work_date.isoformat(), staff_id, store_id)).fetchone()
+            if holiday_abm:
+                code = "OPH"
+            source = "auto_holiday" if holiday_abm else "manual"
             if code:
                 conn.execute(
                     "INSERT INTO schedule_entries "
                     "(store_id, staff_id, work_date, code, assignment_source) "
-                    "VALUES (?, ?, ?, ?, 'manual') "
+                    "VALUES (?, ?, ?, ?, ?) "
                     "ON CONFLICT(staff_id, work_date) DO UPDATE SET "
-                    "code = excluded.code, assignment_source = 'manual'",
-                    (store_id, staff_id, work_date.isoformat(), code))
+                    "code = excluded.code, assignment_source = excluded.assignment_source",
+                    (store_id, staff_id, work_date.isoformat(), code, source))
             else:
                 conn.execute(
                     "DELETE FROM schedule_entries WHERE store_id = ? "

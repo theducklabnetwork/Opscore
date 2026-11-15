@@ -111,7 +111,8 @@ def _generated_legend_item(code) -> rx.Component:
     return rx.hstack(
         rx.box(width="14px", height="14px", background=code["color"],
                border="1px solid #999"),
-        rx.text(code["code"] + ": " + code["detail"], size="1"),
+        rx.text(code["code"] + ": " + code["detail"], size="1",
+                white_space="nowrap"),
         spacing="1", align="center",
     )
 
@@ -142,10 +143,12 @@ def _generated() -> rx.Component:
             rx.heading("Staff Weekly Planned Schedule", size="5", weight="bold",
                        text_align="center"),
             rx.hstack(
-                rx.text("Store: " + M.selected_store_label),
-                rx.text("Target Manpower: " + M.schedule_target_display),
-                rx.text("Week: " + M.schedule_week_label),
-                justify="between", width="100%", class_name="schedule-print-meta",
+                rx.box(rx.text("Store: " + M.selected_store_label),
+                       class_name="schedule-meta-store"),
+                rx.text("Manpower: " + M.schedule_manpower_display,
+                        text_align="center"),
+                rx.text("Week: " + M.schedule_week_label, text_align="right"),
+                width="100%", class_name="schedule-print-meta",
             ),
             rx.box(
                 rx.foreach(M.schedule_generated_legend, _generated_legend_item),

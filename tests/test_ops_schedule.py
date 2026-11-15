@@ -31,7 +31,7 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 13)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 14)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])
@@ -146,7 +146,7 @@ class ScheduleTests(unittest.TestCase):
             self.app.set_schedule_target(self.viewer, self.store,
                                          date(2026, 10, 5), 2)
 
-    def test_public_holidays_mark_schedule_and_sync_only_blank_abm_cells(self):
+    def test_public_holidays_overwrite_only_abm_planner_cells(self):
         holiday = date(2026, 10, 5)
         self.app.configure_month_with_budgets(
             self.admin, self.store, "2026-10", {}, {}, [holiday])
@@ -165,20 +165,52 @@ class ScheduleTests(unittest.TestCase):
                          "auto_holiday")
         self.assertNotIn((ra, holiday.isoformat()), entries)
         state = ScheduleState()
+        self.app.set_schedule_entry(
+            self.admin, self.store, ra, holiday, "M900")
+        data = self.app.get_schedule(
+            self.admin, self.store, holiday, date(2026, 10, 11))
+        entries = {(r["staff_id"], r["work_date"]): r for r in data["entries"]}
+        self.assertEqual(entries[(ra, holiday.isoformat())]["code"], "M900")
         state.schedule_days = [{"iso": holiday.isoformat(), "label": "Mon 5"}]
         state.schedule_public_holidays = [holiday.isoformat()]
         self.assertEqual(state.schedule_day_headers[0]["label"], "Mon 5 · PH")
 
-        # Manual assignments survive both saving a holiday and its removal.
+        # Manual ABM assignments become OPH while the holiday remains set.
         self.app.set_schedule_entry(
             self.admin, self.store, abm, holiday, "M900")
-        self.app.configure_month_with_budgets(
-            self.admin, self.store, "2026-10", {}, {}, [])
         data = self.app.get_schedule(
             self.admin, self.store, holiday, date(2026, 10, 11))
-        self.assertEqual(data["holidays"], [])
-        self.assertEqual(data["entries"][0]["code"], "M900")
-        self.assertEqual(data["entries"][0]["assignment_source"], "manual")
+        abm_entry = next(r for r in data["entries"] if r["staff_id"] == abm)
+        self.assertEqual(abm_entry["code"], "OPH")
+        self.assertEqual(abm_entry["assignment_source"], "auto_holiday")
+        self.app.configure_month_with_budgets(
+            self.admin, self.store, "2026-10", {}, {}, [])
+        remaining = self.app.get_schedule(
+            self.admin, self.store, holiday, date(2026, 10, 11))["entries"]
+        self.assertEqual([(r["staff_id"], r["code"]) for r in remaining],
+                         [(ra, "M900")])
+
+    def test_abm_holiday_planner_edit_immediately_displays_oph(self):
+        import ducklab.ops_schedule_state as mod
+
+        holiday = date(2026, 10, 5)
+        self.app.configure_month_with_budgets(
+            self.admin, self.store, "2026-10", {}, {}, [holiday])
+        abm = self.app.save_staff(
+            self.admin, self.store, None, name="Manager", staff_code="A001",
+            position="ABM", employment_type="Full-Time")
+        state = ScheduleState()
+        state.can_write_schedule = True
+        state.schedule_staff = [{"id": str(abm), "position": "ABM"}]
+        state.schedule_public_holidays = [holiday.isoformat()]
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store):
+            state.set_schedule_cell(str(abm), holiday.isoformat(), "M900")
+        self.assertEqual(state.schedule_error, "")
+        self.assertEqual(state.schedule_entries[f"{abm}:{holiday}"], "OPH")
 
     def test_holiday_removal_clears_only_automatic_oph(self):
         first, second = date(2026, 10, 5), date(2026, 10, 12)
@@ -194,6 +226,44 @@ class ScheduleTests(unittest.TestCase):
         self.assertEqual([(r["work_date"], r["code"], r["assignment_source"])
                           for r in data["entries"]],
                          [(second.isoformat(), "OPH", "auto_holiday")])
+
+    def test_generated_manpower_excludes_abm(self):
+        state = ScheduleState()
+        state.schedule_staff = [
+            {"position": position} for position
+            in ("ABM", "SV", "ASV", "RA", "RA")]
+        state.schedule_target = "4"
+        self.assertEqual(state.schedule_manpower_display, "4/4")
+        state.schedule_target = "12"
+        self.assertEqual(state.schedule_manpower_display, "4/12")
+        state.schedule_target = ""
+        self.assertEqual(state.schedule_manpower_display, "4/—")
+
+    def test_generated_view_prioritizes_positions_and_preserves_builder(self):
+        state = ScheduleState()
+        state.schedule_staff = [
+            {"id": "1", "name": "Retail One", "staff_code": "R1",
+             "position": "RA"},
+            {"id": "2", "name": "Assistant Supervisor", "staff_code": "A1",
+             "position": "ASV"},
+            {"id": "3", "name": "Supervisor One", "staff_code": "S1",
+             "position": "SV"},
+            {"id": "4", "name": "Supervisor Two", "staff_code": "S2",
+             "position": "SV"},
+            {"id": "5", "name": "Branch Manager", "staff_code": "B1",
+             "position": "ABM"},
+        ]
+        state.schedule_days = [{"iso": "2026-10-26", "label": "Mon 26"}]
+        self.assertEqual([row["position"] for row in state.schedule_grid_rows],
+                         ["RA", "ASV", "SV", "SV", "ABM"])
+        self.assertEqual([row["name"] for row in state.schedule_generated_rows], [
+            "Branch Manager", "Supervisor One", "Supervisor Two",
+            "Assistant Supervisor", "Retail One"])
+
+        # Missing higher-priority positions do not leave gaps or placeholders.
+        state.schedule_staff = state.schedule_staff[1:4]
+        self.assertEqual([row["position"] for row in state.schedule_generated_rows],
+                         ["SV", "SV", "ASV"])
 
     def test_generated_view_uses_builder_order_dates_and_legend(self):
         first = self.app.save_staff(self.admin, self.store, None,
@@ -263,11 +333,14 @@ class ScheduleTests(unittest.TestCase):
                "cells": [{"code": "M900", "color": "#FFFFFF"}]}
         self.assertIn('className:"generated-name"', str(pages._generated_row(row)))
         self.assertIn('className:"generated-position"', str(pages._generated_row(row)))
+        self.assertIn("Manpower: ", str(pages._generated()))
         self.assertIn("schedule_generated_legend", str(pages._generated()))
         self.assertIn('"View"', str(pages._codes_tab()))
         css = (Path(__file__).parents[1] / "assets" / "schedule_print.css").read_text()
         self.assertNotIn("@media print", css)
         self.assertIn("-webkit-line-clamp: 2", css)
+        self.assertIn("gap: 3px", css)
+        self.assertIn('["whiteSpace"] : "nowrap"', str(pages._generated()))
         self.assertIn("Save PDF", str(pages._generated()))
 
     def test_save_pdf_writes_a4_landscape_file_without_print_dialog(self):
@@ -278,6 +351,9 @@ class ScheduleTests(unittest.TestCase):
             self.admin, self.store, None,
             name="Alexandria Cassandra Montgomery-Richardson With A Very Long Name",
             staff_code="A001", position="ABM", employment_type="Full-Time")
+        self.app.save_staff(
+            self.admin, self.store, None, name="Zed Supervisor",
+            staff_code="S001", position="SV", employment_type="Full-Time")
         monday = date(2026, 11, 2)
         self.app.set_schedule_entry(
             self.admin, self.store, staff_id, monday, "M900")
@@ -293,8 +369,15 @@ class ScheduleTests(unittest.TestCase):
                 mock.patch.object(ScheduleState, "_selected_store_id",
                                   lambda _: self.store), \
                 mock.patch.object(platform_utils, "documents_dir",
-                                  lambda: export_root):
+                                  lambda: export_root), \
+                mock.patch("ducklab.schedule_pdf.write_schedule_pdf",
+                           wraps=__import__("ducklab.schedule_pdf",
+                                            fromlist=["write_schedule_pdf"]
+                                            ).write_schedule_pdf) as writer:
             state.save_schedule_pdf()
+        self.assertEqual([row["position"] for row in writer.call_args.kwargs["staff"]],
+                         ["ABM", "SV"])
+        self.assertEqual(writer.call_args.kwargs["target"], "1/3")
         self.assertEqual(state.schedule_error, "")
         path = export_root / "Opscore Schedules" / "A01" / "2026-11-02" / "Schedule_A01_2026-11-02.pdf"
         self.assertTrue(path.is_file())
@@ -331,7 +414,7 @@ class ScheduleTests(unittest.TestCase):
         conn = store_ops_db.connect(path)
         row = conn.execute("SELECT employment_type FROM staff").fetchone()
         self.assertEqual(row["employment_type"], "Not Set")
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 13)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 14)
         self.assertIn(8, [r["version"] for r in conn.execute(
             "SELECT version FROM schema_migrations")])
         conn.close()

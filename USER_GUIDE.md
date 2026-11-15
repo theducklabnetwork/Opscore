@@ -296,11 +296,14 @@ existing manpower figures remain under **Overview**.
    excluded from Planner because they are day-end exceptions entered in Daily
    Operations.
 5. Public holidays configured in **Store Management → Daily Sales** are marked
-   **PH** in Planner. Blank ABM cells on those dates receive OPH automatically;
-   other staff keep their assigned shifts. Opscore never overwrites a manual
-   assignment, and removing a holiday removes only its automatic OPH cells.
-6. Click **Generate** to open the formatted schedule in **View**. Long names
-   use at most two lines, with a compact Position column. Click **Save PDF**
+   **PH** in Planner. Every ABM assignment on those dates becomes OPH
+   automatically, including when the Planner cell is edited; other staff keep
+   their assigned shifts. Removing a holiday removes only its automatic OPH
+   cells.
+6. Click **Generate** to open the formatted schedule in **View**. Staff are
+   ordered ABM, SV, ASV, then RA. **Manpower** shows non-ABM staff against the
+   weekly target. Long names use at most two lines, with a compact Position
+   column. Click **Save PDF**
    to save a landscape A4 PDF directly under the store/week folder in
    `Documents/Opscore Schedules/`; no print dialog or popup is opened.
 7. Click **Export CSV** in Planner to save one CSV per staff member who has

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -86,8 +86,15 @@ def write_schedule_pdf(path, *, store_label: str, week_start: date,
         "ScheduleMeta", fontName="Helvetica", fontSize=9, leading=11,
         alignment=TA_LEFT,
     )
+    centered_meta_style = ParagraphStyle(
+        "ScheduleCenteredMeta", parent=meta_style, alignment=TA_CENTER,
+    )
+    right_meta_style = ParagraphStyle(
+        "ScheduleRightMeta", parent=meta_style, alignment=TA_RIGHT,
+    )
     legend_style = ParagraphStyle(
         "ScheduleLegend", fontName="Helvetica", fontSize=7.5, leading=9,
+        splitLongWords=False,
     )
     cell_style = ParagraphStyle(
         "ScheduleCell", fontName="Helvetica-Bold", fontSize=7.5, leading=9,
@@ -111,8 +118,8 @@ def write_schedule_pdf(path, *, store_label: str, week_start: date,
                       Spacer(1, 3 * mm)]
     header_content.append(Table(
         [[_paragraph(f"Store: {store_label}", meta_style),
-          _paragraph(f"Target Manpower: {target or '—'}", meta_style),
-          _paragraph(f"Week: {week_label}", meta_style)]],
+          _paragraph(f"Manpower: {target}", centered_meta_style),
+          _paragraph(f"Week: {week_label}", right_meta_style)]],
         colWidths=[(PAGE_SIZE[0] - 2 * MARGIN) / 3] * 3,
         style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
                           ("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -134,9 +141,10 @@ def write_schedule_pdf(path, *, store_label: str, week_start: date,
                                ("BACKGROUND", (0, 0), (-1, -1), _colour(row["color"])),
                                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#999999")),
                            ]))
+            legend_text = _text(f"{row['code']}: {_legend_detail(row)}")
             cells.append(Table(
-                [[swatch, _paragraph(
-                    f"{row['code']}: {_legend_detail(row)}", legend_style)]],
+                [[swatch, "", Paragraph(legend_text, legend_style)]],
+                colWidths=[3 * mm, 1 * mm, None], rowHeights=[4 * mm],
                 style=TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                                   ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                   ("RIGHTPADDING", (0, 0), (-1, -1), 4),

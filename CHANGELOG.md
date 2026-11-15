@@ -7,7 +7,7 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **13**.
+Schema version: **14**.
 
 ### Added
 
@@ -26,15 +26,17 @@ Schema version: **13**.
   change when the schedule changes. Reports include MC in paid leave, show EL
   separately and count each leave person-day once.
 - **Store holidays in Planner.** Configured public holidays receive PH markers
-  and automatic OPH only for blank ABM cells. Manual shifts are preserved, and
-  removing a holiday clears only automatically created OPH assignments.
+  and replace every ABM assignment with automatic OPH, including later Planner
+  edits. Other staff keep their assigned shifts, and removing a holiday clears
+  only automatically created OPH assignments.
 - **RPL shift code.** Replacement Leave joins the ordered, editable shift-code
   configuration. EL/MC/OPH are hidden from Config, and unexpected EL/MC are
   excluded from Planner.
 - **Generated schedule refinements.** Per-code View checkboxes control the
   generated legend, long staff names clamp to two lines beside a compact
-  Position column, and **Save PDF** writes a fitted A4-landscape PDF directly
-  without browser print dialogs or popups.
+  Position column. Staff are ordered ABM, SV, ASV, then RA, and the centered
+  Manpower count excludes ABM. **Save PDF** writes a fitted A4-landscape PDF
+  directly without browser print dialogs or popups.
 
 ### Changed
 

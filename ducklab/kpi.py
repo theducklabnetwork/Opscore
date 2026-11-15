@@ -57,6 +57,11 @@ def kl_today() -> date:
     return datetime.now(KL_TZ).date()
 
 
+def scheduled_manpower(staff: list[dict]) -> int:
+    """Count scheduled operational staff; ABM is outside manpower targets."""
+    return sum(row["position"] != "ABM" for row in staff)
+
+
 def schedule_day_preview(staff: list[dict], entries: list[dict],
                          codes: list[dict]) -> dict[str, int]:
     """Daily-entry values from schedule rows for one day.

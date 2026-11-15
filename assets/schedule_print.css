@@ -6,11 +6,21 @@
   background: white;
   color: black;
 }
+.schedule-print-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+}
 .generated-legend {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-auto-flow: row;
-  gap: 6px 14px;
+  gap: 6px 10px;
+}
+.generated-legend > * {
+  min-width: 0;
+  gap: 3px;
+  flex-wrap: nowrap;
 }
 .generated-schedule-table {
   width: 100%;

@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 class SchemaVersionError(RuntimeError):
@@ -302,6 +302,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (11, _apply_v11),
             (12, _apply_v12),
             (13, _apply_v13),
+            (14, _apply_v14),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -649,3 +650,23 @@ def _apply_v13(conn: sqlite3.Connection) -> None:
             "INTEGER NOT NULL DEFAULT 1 CHECK (show_in_legend IN (0, 1))"
         )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (13)")
+
+
+def _apply_v14(conn: sqlite3.Connection) -> None:
+    """Public holidays replace every ABM assignment with automatic OPH."""
+    exists = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'schedule_entries'").fetchone()
+    if not exists:
+        conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)")
+        return
+    conn.execute(
+        "INSERT INTO schedule_entries "
+        "(store_id, staff_id, work_date, code, assignment_source) "
+        "SELECT s.store_id, s.id, h.date, 'OPH', 'auto_holiday' "
+        "FROM staff s JOIN public_holidays h ON h.store_id = s.store_id "
+        "WHERE s.position = 'ABM' "
+        "ON CONFLICT(staff_id, work_date) DO UPDATE SET "
+        "code = 'OPH', assignment_source = 'auto_holiday'"
+    )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)")

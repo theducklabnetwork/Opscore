@@ -40,6 +40,15 @@ SCHEDULE_CODE_ORDER = ("M900", "F900", "M945", "F945", "F101", "A121",
                        "EL", "MC", "OPH")
 CONFIG_HIDDEN_CODES = {"EL", "MC", "OPH"}
 PLANNER_HIDDEN_CODES = {"EL", "MC"}
+GENERATED_POSITION_ORDER = ("ABM", "SV", "ASV", "RA")
+
+
+def generated_staff_order(staff: list[dict]) -> list[dict]:
+    """Rank generated View/PDF staff, retaining name order within positions."""
+    ranks = {position: index for index, position
+             in enumerate(GENERATED_POSITION_ORDER)}
+    return sorted(staff, key=lambda row: (
+        ranks.get(row["position"], len(ranks)), row["name"], row["staff_code"]))
 
 
 def _ordered_codes(codes: list[dict]) -> list[dict]:
@@ -143,6 +152,11 @@ class ScheduleState(SharedOpsState):
         return month_label(month) if month else ""
 
     @rx.var
+    def schedule_manpower_display(self) -> str:
+        actual = kpi.scheduled_manpower(self.schedule_staff)
+        return f"{actual}/{self.schedule_target_display}"
+
+    @rx.var
     def schedule_generated_days(self) -> list[dict[str, str]]:
         return [{**d,
                  "short_date": f"{int(d['iso'][8:10])}/{calendar.month_abbr[int(d['iso'][5:7])]}" if d["iso"] else "",
@@ -180,7 +194,8 @@ class ScheduleState(SharedOpsState):
 
     @rx.var
     def schedule_generated_rows(self) -> list[dict[str, list[dict[str, str]]]]:
-        return [{**row, "number": str(i)} for i, row in enumerate(self.schedule_grid_rows, 1)]
+        rows = generated_staff_order(self.schedule_grid_rows)
+        return [{**row, "number": str(i)} for i, row in enumerate(rows, 1)]
 
     @rx.var
     def schedule_day_summaries(self) -> list[dict[str, str]]:
@@ -330,8 +345,10 @@ class ScheduleState(SharedOpsState):
             path = folder / f"Schedule_{store_part}_{self.schedule_week}.pdf"
             write_schedule_pdf(
                 path, store_label=f"{store.code} — {store.name}",
-                week_start=week_start, target=self.schedule_target,
-                staff=data["staff"], entries=data["entries"], codes=data["codes"])
+                week_start=week_start,
+                target=f"{kpi.scheduled_manpower(data['staff'])}/{self.schedule_target_display}",
+                staff=generated_staff_order(data["staff"]),
+                entries=data["entries"], codes=data["codes"])
             self.schedule_notice = f"PDF saved: {path.resolve()}"
         except AuthenticationError:
             self.schedule_error = SESSION_EXPIRED
@@ -402,7 +419,11 @@ class ScheduleState(SharedOpsState):
                                            parse_client_id(staff_id, "staff"),
                                            date.fromisoformat(work_date), code)
             key = f"{staff_id}:{work_date}"
-            self.schedule_entries = {**self.schedule_entries, key: code}
+            staff = next(row for row in self.schedule_staff
+                         if row["id"] == staff_id)
+            saved_code = ("OPH" if staff["position"] == "ABM"
+                          and work_date in self.schedule_public_holidays else code)
+            self.schedule_entries = {**self.schedule_entries, key: saved_code}
             self.schedule_error = ""
         except (AuthenticationError, AuthorizationError, ValidationError,
                 ValueError, RepositoryError) as exc:
