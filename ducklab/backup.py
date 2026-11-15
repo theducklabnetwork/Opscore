@@ -116,6 +116,13 @@ EXPECTED_COLUMNS = {
     ),
 }
 
+# Added by migrations after an older backup passes its initial validation.
+POST_MIGRATION_COLUMNS = {
+    "daily_records": ("leave_emergency",),
+    "schedule_entries": ("assignment_source",),
+    "shift_codes": ("show_in_legend",),
+}
+
 
 class BackupError(Exception):
     """Any backup/restore failure; message is safe to show in the UI."""
@@ -158,8 +165,8 @@ def download_name(now: datetime | None = None) -> str:
     return f"opscore-backup-{now.strftime('%Y-%m-%d-%H%M')}.db"
 
 
-def _validate_schema(conn: sqlite3.Connection) -> None:
-    """Check the tables and columns required by the application."""
+def _validate_schema(conn: sqlite3.Connection, *, migrated: bool = False) -> None:
+    """Check required tables and columns, including post-migration additions."""
     tables = {
         r[0] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")
@@ -168,8 +175,12 @@ def _validate_schema(conn: sqlite3.Connection) -> None:
     if missing:
         raise BackupError("Missing expected tables: " + ", ".join(missing))
 
+    expected_columns = dict(EXPECTED_COLUMNS)
+    if migrated:
+        for table, added in POST_MIGRATION_COLUMNS.items():
+            expected_columns[table] = (*expected_columns.get(table, ()), *added)
     missing_columns = []
-    for table, expected in EXPECTED_COLUMNS.items():
+    for table, expected in expected_columns.items():
         columns = {
             r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')
         }
@@ -309,6 +320,11 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
         version = validate_restore(temp_path)
         try:
             store_ops_db.init_db(temp_path, backup_before_migration=False)
+            conn = _connect(temp_path)
+            try:
+                _validate_schema(conn, migrated=True)
+            finally:
+                conn.close()
             validate_restore(temp_path)
         except (sqlite3.Error, store_ops_db.SchemaVersionError) as exc:
             raise BackupError(f"Database migration failed: {exc}")

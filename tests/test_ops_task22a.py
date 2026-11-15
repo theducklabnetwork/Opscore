@@ -262,8 +262,8 @@ class PartTimerFactorTests(Fixture):
         self.run_bound(self.bind(mod, ManpowerState),
                        st.load_manpower_data)
         self.assertEqual(st.eff_kpis["avg_effective"], "6.00")
-        # RM 1,000 / 6 staff = RM 166.666... -> RM 166.66
-        self.assertEqual(st.eff_kpis["sales_per_staff"], "RM 166.66")
+        # RM 1,000 / 6 staff = RM 166.666... -> RM 166.67
+        self.assertEqual(st.eff_kpis["sales_per_staff"], "RM 166.67")
         self.assertEqual(st.staff_rows[0]["effective"], "6.00")
 
     def test_daily_rows_and_form(self):

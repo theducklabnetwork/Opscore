@@ -171,7 +171,8 @@ class PageWordingTests(unittest.TestCase):
         for text in ("Sales", "Manpower", "Stock Loss", "Sales (RM)",
                      "Units Sold", "Full-Time Staff", "Part-Time Staff",
                      "New Hires", "Resignations", "Annual Leave",
-                     "Medical Leave", "Other Paid Leave", "Unpaid Leave",
+                     "Medical Leave", "Other Paid Leave (incl. RPL)",
+                     "Emergency Leave", "Unpaid Leave",
                      "Total Loss", "Information Only"):
             self.assertIn(f'"{text}"', dialog, text)
         for gone in ("Record a day", "Sales MTD", "Month-end sales",

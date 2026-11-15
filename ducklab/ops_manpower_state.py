@@ -109,6 +109,7 @@ class ManpowerState(SharedOpsState):
     # KPI groups (preformatted strings); each figure appears once on the page
     hc_kpis: dict[str, str] = {}         # headcount + turnover
     eff_kpis: dict[str, str] = {}        # staffing efficiency (+ sales MTD)
+    mix_kpis: dict[str, str] = {}        # PT usage from daily attendance
     pay_kpis: dict[str, str] = {}        # payroll (restricted values)
     leave_kpis: dict[str, str] = {}      # leave totals
     pt_factor_label: str = "—"
@@ -120,6 +121,7 @@ class ManpowerState(SharedOpsState):
     staff_hidden_label: str = ""
     staff_show_hidden: bool = False
     staffing_note: str = ""
+    staffing_review: str = ""
 
     # --- monthly configuration editor -----------------------------------
     cfg_open: bool = False
@@ -146,6 +148,7 @@ class ManpowerState(SharedOpsState):
         """
         self.hc_kpis = {}
         self.eff_kpis = {}
+        self.mix_kpis = {}
         self.pay_kpis = {}
         self.leave_kpis = {}
         self.staff_rows = []
@@ -153,6 +156,7 @@ class ManpowerState(SharedOpsState):
         self.staff_hidden_count = 0
         self.staff_hidden_label = ""
         self.staffing_note = ""
+        self.staffing_review = ""
         self.pt_factor_label = "—"
         self.mp_error = ""
         self.mp_notice = ""
@@ -281,7 +285,8 @@ class ManpowerState(SharedOpsState):
             "turnover": ds.fmt_pct(m.turnover_pct),
             "turnover_status": m.turnover_status,
             "turnover_color": ds.status_color(m.turnover_status),
-            "turnover_sub": ("Resignations ÷ opening · threshold "
+            "turnover_sub": ("Resignations ÷ opening FT headcount "
+                             "(workbook method) · threshold "
                              + ds.fmt_pct(cfg.turnover_threshold)),
         }
         factor_missing = m.pt_factor_missing
@@ -292,10 +297,7 @@ class ManpowerState(SharedOpsState):
                                   if m.average_effective_staff is not None
                                   else None)),
             "sales_per_staff": (kpi.PT_FACTOR_NOT_SET if factor_missing
-                                else ds.fmt_rm(
-                                    int(m.sales_per_staff)
-                                    if m.sales_per_staff is not None
-                                    else None)),
+                                else ds.fmt_rm(m.sales_per_staff)),
             "turnover": ds.fmt_pct(m.turnover_pct),
             "turnover_status": m.turnover_status,
             "turnover_color": ds.status_color(m.turnover_status),
@@ -303,6 +305,17 @@ class ManpowerState(SharedOpsState):
             "sales_mtd": ds.fmt_rm(s.sales_mtd_cents),
             "completeness": (f"{s.days_entered} of {s.days_in_month} "
                              "days reported"),
+        }
+        mix = kpi.workforce_mix(days, cfg.part_timer_factor)
+        self.mix_kpis = {
+            "active_days": ds.fmt_num(mix["active_days"]),
+            "average_pt": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                           else ds.fmt_num(float(mix["average_pt"])
+                                           if mix["average_pt"] is not None
+                                           else None)),
+            "peak_pt": ds.fmt_num(mix["peak_pt"]),
+            "contribution": (kpi.PT_FACTOR_NOT_SET if factor_missing
+                             else ds.fmt_pct(mix["contribution"])),
         }
         month_complete = s.days_entered >= s.days_in_month
         # Payroll block: restricted values are never populated for
@@ -332,12 +345,14 @@ class ManpowerState(SharedOpsState):
                            in (kpi.SALARY_WITHIN, kpi.SALARY_FAILURE)
                            else m.salary_ratio_status),
                 "mtd": "" if month_complete else "1",
-                "status_color": ds.status_color(m.salary_ratio_status),
-                # bar in the status colour (red on failure), as the Overview
-                "bar_color": ("red" if m.salary_ratio_status
-                              == kpi.SALARY_FAILURE else "green"
-                              if m.salary_ratio_status == kpi.SALARY_WITHIN
-                              else "gray"),
+                # A partial month compares full payroll with sales to date:
+                # keep the numeric ratio but do not show a red/green verdict.
+                "status_color": (ds.status_color(m.salary_ratio_status)
+                                 if month_complete else "gray"),
+                "bar_color": (("red" if m.salary_ratio_status
+                               == kpi.SALARY_FAILURE else "green"
+                               if m.salary_ratio_status == kpi.SALARY_WITHIN
+                               else "gray") if month_complete else "gray"),
                 "ratio_bar": (f"{ratio_used_pct:.0f}"
                               if ratio_used_pct is not None else "0"),
                 "sales": ds.fmt_rm(s.sales_mtd_cents),
@@ -361,14 +376,42 @@ class ManpowerState(SharedOpsState):
         self.staff_hidden_count = n_days - reported
         self.staff_hidden_label = ds.days_not_reported_label(
             self.staff_hidden_count)
+        # Soft review only: leave is not FT/PT-specific, so these warnings
+        # never block or alter the saved daily attendance records.
         self.staffing_note = (
-            f"{reported} of {n_days} days have staffing data. Days without "
-            "attendance are not reported — never zero staff.")
+            "FT/PT = staff who actually worked that day. Record absences "
+            f"under Leave. {reported} of {n_days} days have staffing data; "
+            "days without attendance are not reported — never zero staff.")
+        review_days = [d.date.isoformat() for d in days
+                       if m.closing_headcount is not None
+                       and (d.ft_working or 0) > m.closing_headcount]
+        reviews = []
+        if review_days:
+            reviews.append(
+                "FT working exceeds closing FT headcount on "
+                + ", ".join(d[5:] for d in review_days))
+        leave_over = [d.date.isoformat() for d in days
+                      if m.closing_headcount is not None
+                      and (d.ft_working or 0)
+                      + sum(v or 0 for v in (
+                          d.leave_annual, d.leave_mc, d.leave_other_paid,
+                          d.leave_unpaid, d.leave_emergency))
+                      > m.closing_headcount]
+        if leave_over:
+            reviews.append(
+                "FT working + leave may exceed the FT roster (leave is not "
+                "FT/PT-specific); review " + ", ".join(d[5:] for d in leave_over))
+        if (m.headcount_status == "Vacancy" and mix["active_days"]
+                and mix["contribution"] is not None
+                and mix["contribution"] > 0):
+            reviews.append("FT vacancy may be partially covered by PT staffing.")
+        self.staffing_review = " ".join(reviews)
         self.leave_kpis = {
             "annual": ds.fmt_num(sum(d.leave_annual or 0 for d in days)),
             "mc": ds.fmt_num(sum(d.leave_mc or 0 for d in days)),
-            "other_paid": ds.fmt_num(sum(d.leave_other_paid or 0
+            "other_paid": ds.fmt_num(sum(kpi.other_paid_leave_days(d)
                                          for d in days)),
+            "emergency": ds.fmt_num(sum(d.leave_emergency or 0 for d in days)),
             "unpaid": ds.fmt_num(sum(d.leave_unpaid or 0 for d in days)),
             "total": ds.fmt_num(m.leave_days),
         }
@@ -389,15 +432,15 @@ class ManpowerState(SharedOpsState):
         factor_missing = factor is None and bool(rec.pt_working)
         leave = sum(v or 0 for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
-            rec.leave_unpaid))
+            rec.leave_unpaid, rec.leave_emergency))
         leave_reported = any(v is not None for v in (
             rec.leave_annual, rec.leave_mc, rec.leave_other_paid,
-            rec.leave_unpaid))
+            rec.leave_unpaid, rec.leave_emergency))
         sps = kpi.daily_sales_per_staff_cents(rec, factor)
         filled = sum(v is not None for v in (
             rec.ft_working, rec.pt_working, rec.new_hires_ft,
             rec.resigned_ft, rec.leave_annual, rec.leave_mc,
-            rec.leave_other_paid, rec.leave_unpaid))
+            rec.leave_other_paid, rec.leave_unpaid, rec.leave_emergency))
         # same chips as every page; completeness counts staffing fields
         status = (ds.DAY_COMPLETE if filled >= 3
                   else ds.DAY_PARTIAL if filled else ds.DAY_NOT_REPORTED)

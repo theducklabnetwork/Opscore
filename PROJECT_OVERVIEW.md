@@ -89,10 +89,10 @@ routed features are marked experimental or "coming soon".
 | Module | What it does |
 |---|---|
 | **Dashboard** | Month at a glance: pillar cards for Sales, Expenses, Salary Ratio and Stock Loss, Sales Trend, targets, Alerts and Summary. An **All Stores** view aggregates across assigned stores. Cards deep-link into their modules. |
-| **Daily Operations** | Per-day entry of sales, transactions, units, FT/PT staffing, hires, resignations, four leave types, and all stock-loss codes. Paid expenses for the day are shown read-only. **Apply Schedule** previews schedule-derived staffing before applying it. Explicit clearing stores NULL. |
+| **Daily Operations** | Per-day entry of sales, transactions, units, FT/PT staffing, hires, resignations, five leave inputs, and all stock-loss codes. New entries auto-fill planned FT/PT/AL/RPL/UPL from the schedule; saved actuals are preserved. MC/EL are manual, with MC included in paid-leave reporting. Explicit clearing stores NULL. |
 | **Sales Performance** | Levels 1–4 achievement, actual and projected sales, Level Reached, average daily sales, BV/UPT/ASP against imported state benchmarks, Sales Trend, Daily Sales vs Target, Sales by Day, Sales Calendar, target ladder and daily table. Editing is done in Daily Operations. |
 | **Expenses Management** | Paid/Incurred/Pending/Budget/Utilization/Variance KPIs, percentage budgets calculated against the active sales target, Needs Review filtering, Budget vs Paid and Expense Mix charts, and a transaction register with filtering and sorting. Incomplete drafts are allowed and flagged. |
-| **Manpower Efficiency** | Overview of headcount, productivity, salary, turnover and leave; payroll editing for configuration managers. The **Schedule** tab adds a weekly Planner (autosaving shift cells and target manpower), Staff roster, shift-code Config, and a printable generated View. |
+| **Manpower Efficiency** | Overview of FT-only headcount, productivity, salary, turnover and leave; PT Workforce Mix indicators derived from daily attendance (no separate PT roster), attendance guidance and non-blocking roster-consistency review warnings. Incomplete-month salary ratios remain numeric with neutral status colors. Payroll editing is restricted to configuration managers. The **Schedule** tab adds a weekly Planner (autosaving shift cells and target manpower), Staff roster, ordered shift-code Config with RPL, printable View, and store holiday markers with safe automatic OPH for ABM staff only. |
 | **Stock Management** | Read-only analytics: Total Loss, Loss Ratio, Missing and Extra, daily loss and category charts, and previous-month comparison. All editing happens in Daily Operations. |
 | **Action Tracker** | Open/Overdue/Completed tracking with filters, carried-over actions from earlier months, and full add/edit dialogs. |
 | **Store Management** | New Store, Edit, Activate/Deactivate (never delete), user-to-store assignment, and Monthly Setup (targets, holidays, manpower, stock, percentage expense budgets, month-end inputs) with HQ defaults and Copy From Last Month. |
@@ -154,7 +154,7 @@ work-in-progress:
 
 ## 10. Current implementation status
 
-Current development release line: **v1.3**. Database schema version: **11**.
+Current development release line: **v1.3**. Database schema version: **13**.
 
 | Area | Status |
 |---|---|

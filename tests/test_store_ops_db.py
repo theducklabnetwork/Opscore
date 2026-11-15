@@ -318,6 +318,232 @@ class TestSnapshots(StoreOpsDbTestCase):
         self.assertEqual(rows[0][2], cur2.lastrowid)
 
 
+class TestShiftCodesAndScheduleSources(StoreOpsDbTestCase):
+    def test_new_database_seeds_shift_codes_in_display_order(self):
+        rows = self.conn.execute(
+            "SELECT code, label, start_time, end_time, color FROM shift_codes"
+        ).fetchall()
+        self.assertEqual([tuple(row) for row in rows], store_ops_db.SHIFT_CODES)
+        self.assertEqual(
+            [row["code"] for row in rows],
+            ["M900", "F900", "M945", "F945", "F101", "A121", "ODM", "ODA",
+             "OOD", "ORD", "AL", "RPL", "UPL", "EL", "MC", "OPH"],
+        )
+        for code in ("M900", "F900", "M945", "F945", "F101", "A121"):
+            self.assertEqual(
+                self.conn.execute(
+                    "SELECT color FROM shift_codes WHERE code = ?", (code,)
+                ).fetchone()[0],
+                "#FFFFFF",
+            )
+        self.assertEqual(
+            tuple(self.conn.execute(
+                "SELECT label, start_time, end_time, color FROM shift_codes "
+                "WHERE code = 'RPL'"
+            ).fetchone()),
+            ("Replacement Leave", None, None, "#f5d0fe"),
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM shift_codes WHERE show_in_legend = 1"
+            ).fetchone()[0],
+            len(store_ops_db.SHIFT_CODES),
+        )
+
+    def test_schedule_assignment_source_defaults_to_manual(self):
+        store_id = self.add_store()
+        staff_id = self.conn.execute(
+            "INSERT INTO staff (store_id, name, staff_code, position) "
+            "VALUES (?, 'Staff A', 'A01', 'Sales Assistant')",
+            (store_id,),
+        ).lastrowid
+        entry_id = self.conn.execute(
+            "INSERT INTO schedule_entries (store_id, staff_id, work_date, code) "
+            "VALUES (?, ?, '2026-11-14', 'RPL')",
+            (store_id, staff_id),
+        ).lastrowid
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT assignment_source FROM schedule_entries WHERE id = ?",
+                (entry_id,),
+            ).fetchone()[0],
+            "manual",
+        )
+
+
+class TestV12Migration(unittest.TestCase):
+    def test_v11_upgrade_preserves_custom_colors_and_existing_sources(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "v11.db"
+            for version in range(1, 12):
+                conn = store_ops_db.connect(db_path)
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+                conn.commit()
+                conn.close()
+
+            conn = store_ops_db.connect(db_path)
+            conn.execute("UPDATE shift_codes SET color = '#123456' WHERE code = 'M900'")
+            conn.execute("UPDATE shift_codes SET label = 'Custom Morning', "
+                         "start_time = '08:00', end_time = '18:00' "
+                         "WHERE code = 'F900'")
+            store_id = conn.execute(
+                "INSERT INTO stores (code, name) VALUES ('S01', 'Store A')"
+            ).lastrowid
+            staff_id = conn.execute(
+                "INSERT INTO staff (store_id, name, staff_code, position) "
+                "VALUES (?, 'Staff A', 'A01', 'Sales Assistant')",
+                (store_id,),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO schedule_entries (store_id, staff_id, work_date, code) "
+                "VALUES (?, ?, '2026-11-14', 'F900')",
+                (store_id, staff_id),
+            )
+            conn.commit()
+            conn.close()
+
+            store_ops_db.init_db(db_path, backup_before_migration=False)
+            conn = store_ops_db.connect(db_path)
+            try:
+                colors = dict(conn.execute(
+                    "SELECT code, color FROM shift_codes"
+                ).fetchall())
+                self.assertEqual(colors["M900"], "#123456")
+                self.assertEqual(colors["F900"], "#FFFFFF")
+                for code in ("M945", "F945", "F101", "A121"):
+                    self.assertEqual(colors[code], "#FFFFFF")
+                self.assertEqual(colors["RPL"], "#f5d0fe")
+                self.assertEqual(
+                    tuple(conn.execute(
+                        "SELECT label, start_time, end_time FROM shift_codes "
+                        "WHERE code = 'F900'"
+                    ).fetchone()),
+                    ("Custom Morning", "08:00", "18:00"),
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT assignment_source FROM schedule_entries"
+                    ).fetchone()[0],
+                    "manual",
+                )
+                self.assertEqual(
+                    conn.execute("PRAGMA user_version").fetchone()[0], 14
+                )
+            finally:
+                conn.close()
+
+    def test_v11_upgrade_backfills_abm_public_holidays(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "v11-holidays.db"
+            for version in range(1, 12):
+                conn = store_ops_db.connect(db_path)
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+                conn.commit()
+                conn.close()
+            conn = store_ops_db.connect(db_path)
+            store_id = conn.execute(
+                "INSERT INTO stores (code, name) VALUES ('S01', 'Store A')"
+            ).lastrowid
+            abm = conn.execute(
+                "INSERT INTO staff (store_id, name, staff_code, position) "
+                "VALUES (?, 'Manager', 'A01', 'ABM')", (store_id,)).lastrowid
+            ra = conn.execute(
+                "INSERT INTO staff (store_id, name, staff_code, position) "
+                "VALUES (?, 'Assistant', 'A02', 'RA')", (store_id,)).lastrowid
+            conn.execute(
+                "INSERT INTO public_holidays (store_id, date) "
+                "VALUES (?, '2026-12-25'), (?, '2026-12-26')",
+                (store_id, store_id))
+            conn.execute(
+                "INSERT INTO schedule_entries (store_id, staff_id, work_date, code) "
+                "VALUES (?, ?, '2026-12-26', 'M900')", (store_id, abm))
+            conn.commit()
+            conn.close()
+            store_ops_db.init_db(db_path, backup_before_migration=False)
+            conn = store_ops_db.connect(db_path)
+            try:
+                self.assertEqual([tuple(row) for row in conn.execute(
+                    "SELECT work_date, code, assignment_source FROM schedule_entries "
+                    "ORDER BY work_date")],
+                    [("2026-12-25", "OPH", "auto_holiday"),
+                     ("2026-12-26", "OPH", "auto_holiday")])
+                self.assertIsNone(conn.execute(
+                    "SELECT 1 FROM schedule_entries WHERE staff_id = ?",
+                    (ra,)).fetchone())
+            finally:
+                conn.close()
+
+
+class TestV14Migration(unittest.TestCase):
+    def test_v14_upgrade_replaces_abm_holiday_shifts_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "v13-holidays.db"
+            for version in range(1, 14):
+                conn = store_ops_db.connect(db_path)
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+                conn.commit()
+                conn.close()
+            conn = store_ops_db.connect(db_path)
+            store_id = conn.execute(
+                "INSERT INTO stores (code, name) VALUES ('S01', 'Store A')"
+            ).lastrowid
+            abm = conn.execute(
+                "INSERT INTO staff (store_id, name, staff_code, position) "
+                "VALUES (?, 'Manager', 'A01', 'ABM')", (store_id,)).lastrowid
+            ra = conn.execute(
+                "INSERT INTO staff (store_id, name, staff_code, position) "
+                "VALUES (?, 'Assistant', 'A02', 'RA')", (store_id,)).lastrowid
+            conn.execute(
+                "INSERT INTO public_holidays (store_id, date) "
+                "VALUES (?, '2026-12-25'), (?, '2026-12-26')",
+                (store_id, store_id))
+            conn.executemany(
+                "INSERT INTO schedule_entries "
+                "(store_id, staff_id, work_date, code) VALUES (?, ?, ?, 'M900')",
+                [(store_id, abm, "2026-12-25"),
+                 (store_id, abm, "2026-12-27"),
+                 (store_id, ra, "2026-12-26")])
+            conn.commit()
+            conn.close()
+            store_ops_db.init_db(db_path, backup_before_migration=False)
+            conn = store_ops_db.connect(db_path)
+            try:
+                self.assertEqual([tuple(row) for row in conn.execute(
+                    "SELECT staff_id, work_date, code, assignment_source "
+                    "FROM schedule_entries ORDER BY staff_id, work_date")],
+                    [(abm, "2026-12-25", "OPH", "auto_holiday"),
+                     (abm, "2026-12-26", "OPH", "auto_holiday"),
+                     (abm, "2026-12-27", "M900", "manual"),
+                     (ra, "2026-12-26", "M900", "manual")])
+            finally:
+                conn.close()
+
+
+class TestV13Migration(unittest.TestCase):
+    def test_v12_upgrade_enables_existing_codes_in_view_legend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "v12.db"
+            for version in range(1, 13):
+                conn = store_ops_db.connect(db_path)
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+                conn.commit()
+                conn.close()
+            store_ops_db.init_db(db_path, backup_before_migration=False)
+            conn = store_ops_db.connect(db_path)
+            try:
+                self.assertEqual(
+                    conn.execute("PRAGMA user_version").fetchone()[0], 14)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM shift_codes WHERE show_in_legend = 1"
+                ).fetchone()[0], len(store_ops_db.SHIFT_CODES))
+            finally:
+                conn.close()
+
+
 class TestMigrationAtomicity(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -404,7 +630,7 @@ class TestMigrationSafety(unittest.TestCase):
     def test_existing_database_is_backed_up_before_migration(self):
         store_ops_db.init_db(self.db_path)
         copies = list((self.db_path.parent / "backups").glob(
-            "pre-migration-v1-to-v11-*.db"))
+            "pre-migration-v1-to-v14-*.db"))
         self.assertEqual(len(copies), 1)
         conn = sqlite3.connect(copies[0])
         self.assertEqual(conn.execute("SELECT value FROM marker").fetchone()[0],
@@ -444,7 +670,7 @@ class TestMigrationSafety(unittest.TestCase):
         store_ops_db.connect(empty).close()
         store_ops_db.init_db(empty)
         self.assertEqual(len(list((self.db_path.parent / "backups").glob(
-            "pre-migration-v0-to-v11-*.db"))), 1)
+            "pre-migration-v0-to-v14-*.db"))), 1)
 
     def test_backup_can_be_disabled_for_temporary_restore_copy(self):
         store_ops_db.init_db(self.db_path, backup_before_migration=False)

@@ -196,7 +196,7 @@ def _schedule_preview() -> rx.Component:
     rows = [("Full-Time Staff", "ft_working"),
             ("Part-Time Staff", "pt_working"),
             ("Annual Leave", "leave_annual"),
-            ("Medical Leave", "leave_mc"),
+            ("Other Paid Leave (RPL)", "leave_other_paid"),
             ("Unpaid Leave", "leave_unpaid")]
     return rx.cond(
         DailyState.schedule_preview_visible,
@@ -236,8 +236,10 @@ def _manpower_section() -> rx.Component:
         ("f_leave_annual", "set_f_leave_annual", "Annual Leave",
          "f-leave-annual"),
         ("f_leave_mc", "set_f_leave_mc", "Medical Leave", "f-leave-mc"),
-        ("f_leave_other", "set_f_leave_other", "Other Paid Leave",
+        ("f_leave_other", "set_f_leave_other", "Other Paid Leave (incl. RPL)",
          "f-leave-other"),
+        ("f_leave_emergency", "set_f_leave_emergency", "Emergency Leave",
+         "f-leave-emergency"),
         ("f_leave_unpaid", "set_f_leave_unpaid", "Unpaid Leave",
          "f-leave-unpaid"),
     ]

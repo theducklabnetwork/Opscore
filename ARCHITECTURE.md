@@ -129,7 +129,7 @@ Latest-version lookups and the Finalized version list include only rows with
 ## 4. Data model
 
 One SQLite file holds both operations data and accounts. Schema version is
-tracked in `schema_migrations` and `PRAGMA user_version` (currently **11**).
+tracked in `schema_migrations` and `PRAGMA user_version` (currently **13**).
 Initialization is idempotent and migrations are additive. Each migration runs
 in its own transaction, and its `PRAGMA user_version` update commits in that
 same transaction; a failure rolls back the whole step so it can be retried.
@@ -237,10 +237,21 @@ employment type (`Full-Time`, `Part-Time` or `Not Set`). Only shift codes
 with working times count toward daily headcount, and schedule staffing uses
 employment type to separate full-time and part-time workers.
 
-`ops_schedule_state.py` writes per-staff CSV files to
+`ops_schedule_state.py` writes individual and combined MyESS CSV files to
 `Documents/Opscore Schedules/<store-code>/<week-start>/` and reports malformed
-schedule weeks as validation errors. Daily Operations can apply a selected
-day's schedule through **Apply Schedule**, showing a preview before applying.
+schedule weeks as validation errors. New Daily Entries auto-fill FT/PT, AL,
+RPL (Other Paid Leave) and UPL once; saved actuals are preserved. MC and EL
+are manual exceptions and never schedule-derived. Paid-leave reporting adds
+MC to Other Paid Leave without double-counting Total Leave.
+
+Each shift code's `show_in_legend` setting filters the generated View legend
+without changing Planner, headcounts or exports. Generated names clamp to two
+lines. `schedule_pdf.py` writes fitted A4-landscape PDFs directly to the
+store/week schedule folder; no browser print dialog or popup is involved.
+
+Store/month public holidays appear as PH markers. `assignment_source` tracks
+automatic ABM-only OPH entries, added only to blank cells and removed only
+when their holiday disappears. Manual assignments and other staff are intact.
 
 ## 6. Security model
 

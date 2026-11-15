@@ -302,6 +302,7 @@ class OperationsRepository:
                 leave_mc=r["leave_mc"],
                 leave_other_paid=r["leave_other_paid"],
                 leave_unpaid=r["leave_unpaid"],
+                leave_emergency=r["leave_emergency"],
                 stock_losses=losses.get(r["id"], {}),
             )
             for r in rows

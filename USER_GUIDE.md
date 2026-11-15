@@ -175,17 +175,24 @@ Enter each day's figures here.
 
 1. Pick the store and month.
 2. Click **New Entry**, or **Edit** on a day in **Daily Records**.
-3. To use the week's schedule for staffing, click **Apply Schedule**. Review
-   the **Schedule Preview**, including any warnings, then click **Apply to
-   Entry** to fill working full-time and part-time staff and annual, medical
-   and unpaid leave. You can still enter or adjust the figures yourself.
-4. Fill in what you have:
+3. A new entry opens with working full-time and part-time staff, Annual
+   Leave, Replacement Leave (under **Other Paid Leave**) and Unpaid Leave
+   filled from that day's schedule. These are editable planned values.
+   Previously saved entries keep their saved values when reopened. To refresh
+   deliberately, click **Apply Schedule**, review the preview, then **Apply to
+   Entry**.
+4. At day end, adjust FT/PT for unexpected absences and enter **Medical
+   Leave** and **Emergency Leave** manually. The schedule never fills or
+   clears these exceptions. Medical Leave is included in reported Other Paid
+   Leave but remains separately visible; Emergency Leave is reported
+   separately. Total Leave counts every leave person-day once.
+5. Fill in what you have:
    - **Sales**, **Transactions**, **Units Sold**
    - **Stock Loss** by code
    - **Staff**: working full-time and part-time, **New Hires**,
      **Resignations**
-   - **Leave**: Annual, Medical, Other Paid, Unpaid
-5. Click **Save Entry**.
+   - **Leave**: Annual, Medical, Emergency, Other Paid (including RPL), Unpaid
+6. Click **Save Entry**.
 
 **Blank is not zero.** Leave a field blank if it wasn't reported. Enter 0
 only for a real zero, such as a closed day. A blank day shows as not reported
@@ -256,13 +263,30 @@ categories are left unchanged.
 
 ## 8. Manpower Efficiency
 
-The **Overview** tab shows **Opening** and **Closing Headcount** against
-budget, **Effective Staff**, **Hires**, **Resignations**, **Turnover**,
+The **Overview** tab shows **Opening** and **Closing FT Headcount** against
+the FT budget, **Effective Staff**, **Hires**, **Resignations**, **Turnover**,
 **Leave Days**, **Sales per Staff**, **Salary Cost** and **Salary Ratio**
-against target.
+against target. Headcount, budget variance and turnover are full-time-only;
+turnover is resignations ÷ opening FT headcount (the workbook method).
 
-Salary figures appear only to Super Admin and Administrator. Until month-end
-payroll is entered, the salary ratio shows **Awaiting Payroll**.
+**Daily Staffing records attendance, not roster size.** FT/PT means staff who
+actually worked that day; record absences under **Leave**. For example, if 12
+full-time staff are on the roster but only 9 work today, enter 9 in Full-Time
+Staff, not 12. Days without attendance are not treated as zero staff.
+
+**Workforce Mix** measures part-time usage from daily attendance, so no
+separate PT roster is maintained: **PT Active Days**, **Average PT Working**
+(reported PT-attendance days only), **Peak PT Working**, and **PT Contribution**
+(PT share of average effective staff). A missing PT conversion factor is shown
+as **Factor not set**, never silently ignored. Non-blocking review warnings
+highlight possible FT roster/attendance inconsistencies and PT coverage of an
+FT vacancy; they do not prevent daily entries from being saved.
+
+**Sales per Staff** is sales on staffed days ÷ effective staff-days. Salary
+figures appear only to Super Admin and Administrator. Until month-end payroll
+is entered, the salary ratio shows **Awaiting Payroll**. Before the month is
+complete, the ratio is month-to-date and uses a neutral status color; final
+Within target/Failure coloring applies after month completion.
 
 ### Weekly schedule
 
@@ -282,14 +306,28 @@ existing manpower figures remain under **Overview**.
 4. Super Admin and Administrator users can open **Config** to add or edit
    shift codes, labels, times and colors. Start and End must either both be
    set or both be blank. **Shift codes are shared by all stores**; deleting a
-   code used by a schedule is not allowed.
-5. Click **Generate** to open the formatted schedule in **View**, then
-   **Print** to print it or save it as a PDF.
-6. Click **Export CSV** in Planner to save one CSV per staff member who has
+   code used by a schedule is not allowed. Use the small **View** checkbox
+   before each code to include or omit it from the generated View legend;
+   this does not change assignments, headcounts or exports. RPL means
+   Replacement Leave. EL, MC and OPH are hidden from Config; EL/MC are also
+   excluded from Planner because they are day-end exceptions entered in Daily
+   Operations.
+5. Public holidays configured in **Store Management → Daily Sales** are marked
+   **PH** in Planner. Every ABM assignment on those dates becomes OPH
+   automatically, including when the Planner cell is edited; other staff keep
+   their assigned shifts. Removing a holiday removes only its automatic OPH
+   cells.
+6. Click **Generate** to open the formatted schedule in **View**. Staff are
+   ordered ABM, SV, ASV, then RA. **Manpower** shows non-ABM staff against the
+   weekly target. Long names use at most two lines, with a compact Position
+   column. Click **Save PDF**
+   to save a landscape A4 PDF directly under the store/week folder in
+   `Documents/Opscore Schedules/`; no print dialog or popup is opened.
+7. Click **Export CSV** in Planner to save one CSV per staff member who has
    shifts that week. Each file contains `date,shift_code` for import into the
    single-employee detail view in the MyESS HRMS Android app. Files are saved
    at `Documents/Opscore Schedules/<store-code>/<week-start>/`.
-7. Click **MyESS** to save one combined batch file for every employee with
+8. Click **MyESS** to save one combined batch file for every employee with
    shifts that week. Its columns are `employee_no,date,shift_code`;
    `employee_no` is the employee's Opscore **Staff ID**. Upload
    `MyESS_<store-code>_<week-start>.csv` through the MyESS batch schedule

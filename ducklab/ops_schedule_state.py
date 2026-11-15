@@ -35,6 +35,26 @@ from ducklab.ops_shared_state import (
 )
 
 # All status colors: ds.status_color (design.py shared map)
+SCHEDULE_CODE_ORDER = ("M900", "F900", "M945", "F945", "F101", "A121",
+                       "ODM", "ODA", "OOD", "ORD", "AL", "RPL", "UPL",
+                       "EL", "MC", "OPH")
+CONFIG_HIDDEN_CODES = {"EL", "MC", "OPH"}
+PLANNER_HIDDEN_CODES = {"EL", "MC"}
+GENERATED_POSITION_ORDER = ("ABM", "SV", "ASV", "RA")
+
+
+def generated_staff_order(staff: list[dict]) -> list[dict]:
+    """Rank generated View/PDF staff, retaining name order within positions."""
+    ranks = {position: index for index, position
+             in enumerate(GENERATED_POSITION_ORDER)}
+    return sorted(staff, key=lambda row: (
+        ranks.get(row["position"], len(ranks)), row["name"], row["staff_code"]))
+
+
+def _ordered_codes(codes: list[dict]) -> list[dict]:
+    ranks = {code: index for index, code in enumerate(SCHEDULE_CODE_ORDER)}
+    return sorted(codes, key=lambda row: (ranks.get(row["code"], len(ranks)),
+                                         row["code"]))
 
 
 class ScheduleState(SharedOpsState):
@@ -46,6 +66,7 @@ class ScheduleState(SharedOpsState):
     schedule_notice: str = ""
     schedule_staff: list[dict[str, str]] = []
     schedule_codes: list[dict[str, str]] = []
+    schedule_public_holidays: list[str] = []
     schedule_entries: dict[str, str] = {}
     schedule_week_options: list[str] = []
     schedule_week: str = ""
@@ -74,6 +95,7 @@ class ScheduleState(SharedOpsState):
         self.schedule_error = self.schedule_notice = ""
         self.schedule_staff = []
         self.schedule_codes = []
+        self.schedule_public_holidays = []
         self.schedule_entries = {}
         self.schedule_week_options = []
         self.schedule_week = ""
@@ -108,11 +130,19 @@ class ScheduleState(SharedOpsState):
 
     @rx.var
     def schedule_code_values(self) -> list[str]:
-        return ["", *[c["code"] for c in self.schedule_codes]]
+        return ["", *[c["code"] for c in _ordered_codes(self.schedule_codes)
+                      if c["code"] not in PLANNER_HIDDEN_CODES]]
+
+    @rx.var
+    def schedule_config_codes(self) -> list[dict[str, str]]:
+        return [{k: str(v or "") for k, v in c.items()}
+                for c in _ordered_codes(self.schedule_codes)
+                if c["code"] not in CONFIG_HIDDEN_CODES]
 
     @rx.var
     def schedule_headcounts(self) -> list[int]:
-        timed = {c["code"] for c in self.schedule_codes if c["start_time"]}
+        timed = {c["code"] for c in self.schedule_codes
+                 if c["start_time"] and c["code"] not in PLANNER_HIDDEN_CODES}
         return [sum(self.schedule_entries.get(f"{s['id']}:{d['iso']}") in timed
                     for s in self.schedule_staff) for d in self.schedule_days]
 
@@ -122,6 +152,11 @@ class ScheduleState(SharedOpsState):
         return month_label(month) if month else ""
 
     @rx.var
+    def schedule_manpower_display(self) -> str:
+        actual = kpi.scheduled_manpower(self.schedule_staff)
+        return f"{actual}/{self.schedule_target_display}"
+
+    @rx.var
     def schedule_generated_days(self) -> list[dict[str, str]]:
         return [{**d,
                  "short_date": f"{int(d['iso'][8:10])}/{calendar.month_abbr[int(d['iso'][5:7])]}" if d["iso"] else "",
@@ -129,15 +164,17 @@ class ScheduleState(SharedOpsState):
                 for d in self.schedule_days]
 
     @rx.var
+    def schedule_day_headers(self) -> list[dict[str, str]]:
+        return [{**d, "holiday": "1" if d["iso"] in self.schedule_public_holidays else "",
+                 "label": d["label"] + (" · PH" if d["iso"] in self.schedule_public_holidays else "")}
+                for d in self.schedule_days]
+
+    @rx.var
     def schedule_legend(self) -> list[dict[str, str]]:
-        order = ("M900", "M945", "F900", "F945", "F101", "A121",
-                 "ODM", "ODA", "OOD", "ORD", "AL")
-        codes = {c["code"]: c for c in self.schedule_codes}
         legend = []
-        for code in order:
-            if code not in codes:
+        for c in _ordered_codes(self.schedule_codes):
+            if c["code"] in PLANNER_HIDDEN_CODES or c["code"] == "OPH":
                 continue
-            c = codes[code]
             detail = c["label"]
             if c["start_time"] and c["end_time"]:
                 start = datetime.strptime(c["start_time"], "%H:%M").strftime("%I:%M %p").lstrip("0")
@@ -147,12 +184,18 @@ class ScheduleState(SharedOpsState):
         return legend
 
     @rx.var
+    def schedule_generated_legend(self) -> list[dict[str, str]]:
+        return [c for c in self.schedule_legend
+                if c.get("show_in_legend", "1") != "0"]
+
+    @rx.var
     def schedule_target_display(self) -> str:
         return self.schedule_target if self.schedule_target.strip() else "—"
 
     @rx.var
     def schedule_generated_rows(self) -> list[dict[str, list[dict[str, str]]]]:
-        return [{**row, "number": str(i)} for i, row in enumerate(self.schedule_grid_rows, 1)]
+        rows = generated_staff_order(self.schedule_grid_rows)
+        return [{**row, "number": str(i)} for i, row in enumerate(rows, 1)]
 
     @rx.var
     def schedule_day_summaries(self) -> list[dict[str, str]]:
@@ -279,8 +322,43 @@ class ScheduleState(SharedOpsState):
         self.schedule_subtab = value
 
     @rx.event
-    def print_schedule(self):
-        return rx.call_script("window.print()")
+    def save_schedule_pdf(self):
+        """Save the schedule directly as PDF, without browser print UI."""
+        self.schedule_error = self.schedule_notice = ""
+        store_id = self._selected_store_id()
+        if store_id is None or not self.schedule_week:
+            self.schedule_error = "Select a store and week first."
+            return
+        try:
+            from ducklab.schedule_pdf import write_schedule_pdf
+
+            user = self._actor()
+            week_start = date.fromisoformat(self.schedule_week)
+            data = app_service.get_schedule(
+                user, store_id, week_start, week_start + timedelta(days=6))
+            store = app_service.get_store(user, store_id)
+            store_part = "".join(
+                c if c.isalnum() or c in "-_" else "_" for c in store.code)
+            folder = (platform_utils.documents_dir() / "Opscore Schedules"
+                      / store_part / self.schedule_week)
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"Schedule_{store_part}_{self.schedule_week}.pdf"
+            write_schedule_pdf(
+                path, store_label=f"{store.code} — {store.name}",
+                week_start=week_start,
+                target=f"{kpi.scheduled_manpower(data['staff'])}/{self.schedule_target_display}",
+                staff=generated_staff_order(data["staff"]),
+                entries=data["entries"], codes=data["codes"])
+            self.schedule_notice = f"PDF saved: {path.resolve()}"
+        except AuthenticationError:
+            self.schedule_error = SESSION_EXPIRED
+        except (AuthorizationError, StoreNotFoundError):
+            self.schedule_error = ACCESS_DENIED
+        except ValueError:
+            self.schedule_error = (
+                "Invalid schedule week. Select a valid week and try again.")
+        except (OSError, RepositoryError):
+            self.schedule_error = "Could not save schedule PDF."
 
     @rx.event
     def select_schedule_week(self, value: str):
@@ -292,6 +370,7 @@ class ScheduleState(SharedOpsState):
         self.schedule_error = self.schedule_notice = ""
         self.schedule_staff = []
         self.schedule_codes = []
+        self.schedule_public_holidays = []
         self.schedule_entries = {}
         self.schedule_days = []
         self.schedule_target = ""
@@ -313,7 +392,11 @@ class ScheduleState(SharedOpsState):
                                   for i, d in enumerate(week)]
             data = app_service.get_schedule(user, store_id, week[0], week[-1])
             self.schedule_staff = [{k: str(v) for k, v in row.items()} for row in data["staff"]]
-            self.schedule_codes = [{k: str(v or "") for k, v in row.items()} for row in data["codes"]]
+            self.schedule_codes = [{
+                **{k: str(v or "") for k, v in row.items()},
+                "show_in_legend": "1" if row.get("show_in_legend", 1) else "0",
+            } for row in data["codes"]]
+            self.schedule_public_holidays = [d.isoformat() for d in data["holidays"]]
             self.schedule_entries = {f"{r['staff_id']}:{r['work_date']}": r["code"]
                                      for r in data["entries"]}
             target = app_service.get_schedule_target(user, store_id, week[0])
@@ -336,7 +419,11 @@ class ScheduleState(SharedOpsState):
                                            parse_client_id(staff_id, "staff"),
                                            date.fromisoformat(work_date), code)
             key = f"{staff_id}:{work_date}"
-            self.schedule_entries = {**self.schedule_entries, key: code}
+            staff = next(row for row in self.schedule_staff
+                         if row["id"] == staff_id)
+            saved_code = ("OPH" if staff["position"] == "ABM"
+                          and work_date in self.schedule_public_holidays else code)
+            self.schedule_entries = {**self.schedule_entries, key: saved_code}
             self.schedule_error = ""
         except (AuthenticationError, AuthorizationError, ValidationError,
                 ValueError, RepositoryError) as exc:
@@ -457,6 +544,22 @@ class ScheduleState(SharedOpsState):
         else:
             self.schedule_form_open = False
             yield ScheduleState.load_schedule_data()
+
+    @rx.event
+    def set_shift_code_legend(self, code: str, included: bool):
+        self.schedule_error = self.schedule_notice = ""
+        if not self.can_write_schedule:
+            self.schedule_error = "You have read-only access."
+            return
+        try:
+            app_service.set_shift_code_legend(
+                self._actor(), self._selected_store_id(), code, bool(included))
+            self.schedule_codes = [{
+                **row, "show_in_legend": "1" if included else "0"
+            } if row["code"] == code else row for row in self.schedule_codes]
+            self.schedule_notice = "View legend updated."
+        except (AuthenticationError, AuthorizationError, RepositoryError):
+            self.schedule_error = "Could not update the View legend."
 
     @rx.event
     def delete_schedule_staff(self, staff_id: str):

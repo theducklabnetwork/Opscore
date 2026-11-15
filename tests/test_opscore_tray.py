@@ -64,7 +64,7 @@ class TestTrayImages(unittest.TestCase):
 
         image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
-        draw.ellipse((4, 4, 27, 27), fill=(255, 128, 0, 255))
+        draw.ellipse((4, 4, 28, 28), fill=(255, 128, 0, 255))
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         return buffer.getvalue()
@@ -83,17 +83,19 @@ class TestTrayImages(unittest.TestCase):
         self.assertEqual(muted.mode, "RGBA")
         self.assertEqual(running.size, muted.size)
         width, _ = running.size
-        for image in (running, muted):
-            alpha = image.getchannel("A")
+        running_alpha = running.getchannel("A")
+        muted_alpha = muted.getchannel("A")
+        for alpha in (running_alpha, muted_alpha):
             self.assertEqual(alpha.getpixel((0, 0)), 0)
             self.assertEqual(alpha.getpixel((width - 1, 0)), 0)
             self.assertEqual(alpha.getpixel((0, width - 1)), 0)
             self.assertEqual(alpha.getpixel((width - 1, width - 1)), 0)
             self.assertGreater(alpha.getpixel((width // 2, width // 2)), 0)
-        self.assertEqual(alpha.getpixel((0, 0)), muted.getchannel("A").getpixel((0, 0)))
+        self.assertEqual(running_alpha.getpixel((0, 0)),
+                         muted_alpha.getpixel((0, 0)))
         self.assertLess(
-            muted.getchannel("A").getpixel((width // 2, width // 2)),
-            alpha.getpixel((width // 2, width // 2)),
+            muted_alpha.getpixel((width // 2, width // 2)),
+            running_alpha.getpixel((width // 2, width // 2)),
         )
 
     def test_real_opscore_asset_produces_centered_circular_icon(self):

@@ -114,13 +114,22 @@ class ChipColourTests(unittest.TestCase):
 
 class ManpowerBarTests(Fixture):
     def test_bar_uses_status_colour(self):
-        # RM 10,500 salary vs RM 12,000 sales -> far over the 6.8% target
+        # RM 10,500 salary vs RM 31,000 sales -> far over the 6.8% target.
+        for d in range(1, 32):
+            self.app.record_daily(self.admin, self.sid, date(2026, 10, d),
+                                  sales_cents=rm(1000), ft_working=8)
+        st = self.bound("ops_manpower_state", "ManpowerState",
+                        "load_manpower_data")
+        self.assertIn("Failure", st.pay_kpis["status"])
+        self.assertEqual(st.pay_kpis["bar_color"], "red")
+
+    def test_incomplete_month_bar_is_neutral(self):
         self.app.record_daily(self.admin, self.sid, date(2026, 10, 1),
                               sales_cents=rm(12000), ft_working=8)
         st = self.bound("ops_manpower_state", "ManpowerState",
                         "load_manpower_data")
         self.assertIn("Failure", st.pay_kpis["status"])
-        self.assertEqual(st.pay_kpis["bar_color"], "red")
+        self.assertEqual(st.pay_kpis["bar_color"], "gray")
 
 
 class ExpensesTileTests(Fixture):

@@ -48,7 +48,8 @@ MANPOWER_FIELDS = [
     ("f_resigned", "resigned_ft", "count", "Resignations"),
     ("f_leave_annual", "leave_annual", "count", "Annual Leave"),
     ("f_leave_mc", "leave_mc", "count", "Medical Leave"),
-    ("f_leave_other", "leave_other_paid", "count", "Other Paid Leave"),
+    ("f_leave_other", "leave_other_paid", "count", "Other Paid Leave (incl. RPL)"),
+    ("f_leave_emergency", "leave_emergency", "count", "Emergency Leave"),
     ("f_leave_unpaid", "leave_unpaid", "count", "Unpaid Leave"),
 ]
 
@@ -95,6 +96,7 @@ class DailyState(SharedOpsState):
     f_leave_annual: str = ""
     f_leave_mc: str = ""
     f_leave_other: str = ""
+    f_leave_emergency: str = ""
     f_leave_unpaid: str = ""
     # explicit clear checkboxes: every value-bearing field (sales +
     # manpower) and every stock-loss code. A ticked field writes NULL —
@@ -546,6 +548,8 @@ class DailyState(SharedOpsState):
     @rx.event
     def set_f_leave_other(self, v: str): self.f_leave_other = v
     @rx.event
+    def set_f_leave_emergency(self, v: str): self.f_leave_emergency = v
+    @rx.event
     def set_f_leave_unpaid(self, v: str): self.f_leave_unpaid = v
     @rx.event
     def set_clear_field(self, attr: str, v: bool):
@@ -625,6 +629,19 @@ class DailyState(SharedOpsState):
                                     else str(v))
             for code, cents in rec.stock_losses.items():
                 self.stock_form[code] = f"{cents / 100:.2f}"
+        elif self.can_write:
+            # A new entry starts from planned staffing/approved leave only.
+            # Day-end MC/EL and all unrelated fields remain user input.
+            try:
+                preview = app_service.get_daily_schedule_preview(
+                    user, store_id, date.fromisoformat(iso_date))
+                for attr, col, _, _ in MANPOWER_FIELDS:
+                    if col in preview:
+                        values[attr] = str(preview[col])
+            except (AuthenticationError, AuthorizationError,
+                    StoreNotFoundError) as exc:
+                self.form_error = auth_message(exc)
+                return
         for attr, v in values.items():
             setattr(self, attr, v)
         self.clear_fields = {}

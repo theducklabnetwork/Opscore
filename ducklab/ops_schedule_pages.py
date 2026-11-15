@@ -87,7 +87,9 @@ def _builder() -> rx.Component:
             rx.box(rx.el.table(
                 rx.el.thead(rx.el.tr(
                     ui.th("Staff"),
-                    rx.foreach(M.schedule_days, lambda day: ui.th(day["label"])),
+                    rx.foreach(M.schedule_day_headers, lambda day: rx.el.th(
+                        day["label"], style={"backgroundColor": rx.cond(
+                            day["holiday"] == "1", "#ddd6fe", "transparent")})),
                 )),
                 rx.el.tbody(
                     rx.foreach(M.schedule_grid_rows, _builder_row),
@@ -109,46 +111,55 @@ def _generated_legend_item(code) -> rx.Component:
     return rx.hstack(
         rx.box(width="14px", height="14px", background=code["color"],
                border="1px solid #999"),
-        rx.text(code["code"] + ": " + code["detail"], size="1"),
+        rx.text(code["code"] + ": " + code["detail"], size="1",
+                white_space="nowrap"),
         spacing="1", align="center",
     )
 
 
 def _generated_cell(cell) -> rx.Component:
     return rx.el.td(rx.text(cell["code"], size="1", weight="bold"),
-                    class_name="generated-code", background=cell["color"])
+                    class_name="generated-code",
+                    style={"--shift-color": cell["color"],
+                           "backgroundColor": cell["color"]})
 
 
 def _generated_row(row) -> rx.Component:
     return rx.el.tr(
-        rx.el.td(row["number"], class_name="generated-number"), rx.el.td(row["name"]),
-        rx.el.td(row["staff_code"]), rx.el.td(row["position"]),
+        rx.el.td(row["number"], class_name="generated-number"),
+        rx.el.td(rx.el.span(row["name"], class_name="generated-name"),
+                 class_name="generated-name-cell"),
+        rx.el.td(row["staff_code"]),
+        rx.el.td(row["position"], class_name="generated-position"),
         rx.foreach(row["cells"], _generated_cell),
     )
 
 
 def _generated() -> rx.Component:
     return rx.box(
-        rx.button(rx.icon("printer", size=14), "Print",
-                  on_click=M.print_schedule, class_name="schedule-print-button"),
+        rx.button(rx.icon("file-down", size=14), "Save PDF",
+                  on_click=M.save_schedule_pdf, class_name="schedule-print-button"),
         rx.box(
             rx.heading("Staff Weekly Planned Schedule", size="5", weight="bold",
                        text_align="center"),
             rx.hstack(
-                rx.text("Store: " + M.selected_store_label),
-                rx.text("Target Manpower: " + M.schedule_target_display),
-                rx.text("Week: " + M.schedule_week_label),
-                justify="between", width="100%",
+                rx.box(rx.text("Store: " + M.selected_store_label),
+                       class_name="schedule-meta-store"),
+                rx.text("Manpower: " + M.schedule_manpower_display,
+                        text_align="center"),
+                rx.text("Week: " + M.schedule_week_label, text_align="right"),
+                width="100%", class_name="schedule-print-meta",
             ),
             rx.box(
-                rx.foreach(M.schedule_legend, _generated_legend_item),
+                rx.foreach(M.schedule_generated_legend, _generated_legend_item),
                 class_name="generated-legend",
             ),
             rx.el.table(
                 rx.el.thead(rx.el.tr(
                     rx.el.th("No.", class_name="generated-number"),
-                    rx.el.th("Name"), rx.el.th("Staff ID"),
-                    rx.el.th("Position"),
+                    rx.el.th("Name", class_name="generated-name-cell"),
+                    rx.el.th("Staff ID"),
+                    rx.el.th("Position", class_name="generated-position"),
                     rx.foreach(M.schedule_generated_days,
                                lambda day: rx.el.th(
                                    rx.text(day["weekday"], display="block"),
@@ -197,6 +208,13 @@ def _staff_tab() -> rx.Component:
 
 def _code_row(row) -> rx.Component:
     return rx.el.tr(
+        ui.td(rx.checkbox(
+            checked=row["show_in_legend"] == "1",
+            on_change=lambda included: M.set_shift_code_legend(row["code"], included),
+            disabled=~M.can_write_schedule,
+            aria_label="Include " + row["code"] + " in View legend",
+            size="1",
+        )),
         ui.td(row["code"]), ui.td(row["label"]), ui.td(row["start_time"]),
         ui.td(row["end_time"]),
         ui.td(rx.hstack(rx.box(width="20px", height="20px", border_radius="4px",
@@ -212,8 +230,10 @@ def _code_row(row) -> rx.Component:
 
 def _codes_tab() -> rx.Component:
     return ui.section_card(
-        ui.data_table(["Code", "Label", "Start", "End", "Color", ""],
-                      rx.foreach(M.schedule_codes, _code_row)),
+        rx.text("Tick a code to include it in the generated View legend.",
+                size="1", color=ds.TEXT_MUTED),
+        ui.data_table(["View", "Code", "Label", "Start", "End", "Color", ""],
+                      rx.foreach(M.schedule_config_codes, _code_row)),
         title="Shift Codes",
         extra=rx.cond(M.can_write_schedule,
                       rx.button(rx.icon("plus", size=14), "Add Code",

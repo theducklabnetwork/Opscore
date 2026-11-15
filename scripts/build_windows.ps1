@@ -279,7 +279,7 @@ $ValidateRuntime = @'
 import sys
 
 assert sys.version_info[:2] == (3, 14)
-import reflex, granian, argon2, openpyxl, webview, pystray, PIL
+import reflex, granian, argon2, openpyxl, reportlab, webview, pystray, PIL
 '@
 $ValidateRuntimeScript = Join-Path $Work "validate_runtime.py"
 Set-Content -LiteralPath $ValidateRuntimeScript -Value $ValidateRuntime -Encoding Ascii

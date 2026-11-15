@@ -129,7 +129,7 @@ find "$APP" -type d -name __pycache__ -prune -exec rm -rf -- {} +
 
 printf '==> Validating bundled runtime\n'
 [[ $("$APP/python/bin/python3" -I -c 'import sys; print(sys.version_info[:2])') == '(3, 14)' ]]
-"$APP/python/bin/python3" -I -c 'import reflex, granian, argon2, openpyxl, webview, gi; gi.require_version("Gtk", "3.0"); from gi.repository import Gtk'
+"$APP/python/bin/python3" -I -c 'import reflex, granian, argon2, openpyxl, reportlab, webview, gi; gi.require_version("Gtk", "3.0"); from gi.repository import Gtk'
 [[ ! -e "$APP/.venv" ]]
 # Console entry points are not used at runtime; the app invokes python -m.
 # Remove their build-specific shebangs rather than relocating them with sed.

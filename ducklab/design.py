@@ -277,7 +277,7 @@ DAY_STATUSES = (DAY_COMPLETE, DAY_PARTIAL, DAY_NOT_REPORTED, DAY_ZERO_SALES)
 
 _DAY_FIELDS = ("sales_cents", "transactions", "units", "ft_working",
                "pt_working", "new_hires_ft", "resigned_ft", "leave_annual",
-               "leave_mc", "leave_other_paid", "leave_unpaid")
+               "leave_mc", "leave_other_paid", "leave_unpaid", "leave_emergency")
 
 
 def day_status(rec) -> str:

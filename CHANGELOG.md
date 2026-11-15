@@ -7,10 +7,16 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **11** (unchanged from v1.2).
+Schema version: **14**.
 
 ### Added
 
+- **PT Workforce Mix.** Manpower Efficiency now reports PT Active Days,
+  Average/Peak PT Working and PT Contribution from daily attendance, without a
+  separate PT roster. FT headcount and turnover formulas remain unchanged.
+- **Staffing review guidance.** FT-only labels and attendance instructions
+  clarify roster size versus staff actually working. Non-blocking warnings flag
+  possible FT roster/attendance inconsistencies and PT coverage of FT vacancies.
 - **MyESS batch schedule export.** Planner retains its individual
   `date,shift_code` files and adds one combined
   `employee_no,date,shift_code` CSV for multi-employee upload in the MyESS
@@ -20,14 +26,37 @@ Schema version: **11** (unchanged from v1.2).
   prevents migration; restore staging does not create a redundant copy.
 - **Newer-schema startup protection.** Older application code refuses to
   modify a newer database and displays an actionable desktop error.
+- **Schedule-linked Daily Entry.** New entries auto-fill editable FT/PT,
+  Annual Leave, RPL/Other Paid Leave and Unpaid Leave from the schedule.
+  Unexpected MC and EL remain manual day-end actuals; saved entries do not
+  change when the schedule changes. Reports include MC in paid leave, show EL
+  separately and count each leave person-day once.
+- **Store holidays in Planner.** Configured public holidays receive PH markers
+  and replace every ABM assignment with automatic OPH, including later Planner
+  edits. Other staff keep their assigned shifts, and removing a holiday clears
+  only automatically created OPH assignments.
+- **RPL shift code.** Replacement Leave joins the ordered, editable shift-code
+  configuration. EL/MC/OPH are hidden from Config, and unexpected EL/MC are
+  excluded from Planner.
+- **Generated schedule refinements.** Per-code View checkboxes control the
+  generated legend, long staff names clamp to two lines beside a compact
+  Position column. Staff are ordered ABM, SV, ASV, then RA, and the centered
+  Manpower count excludes ABM. **Save PDF** writes a fitted A4-landscape PDF
+  directly without browser print dialogs or popups.
 
 ### Changed
 
+- **Manpower clarity and precision.** Monthly Sales per Staff preserves
+  fractional cents and explains its staffed-day/effective-staff-day basis.
+  Incomplete-month salary ratios keep their numeric values but use neutral
+  status colors until the month is complete.
 - **Bounded automatic backups and logs.** The newest 10 pre-migration and
   pre-restore backups are retained and listed together in Settings → Data.
   Manual downloads, fresh-start copies and recovery-script backups are not
   pruned. At startup, `opscore.log` rotates at 5 MiB with three archives;
   the active file may grow during a continuously running session.
+- **Working-shift default colours.** M900–A121 default to white; existing
+  custom colours, labels and times are preserved by the v12 migration.
 
 ---
 

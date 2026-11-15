@@ -57,18 +57,24 @@ def kl_today() -> date:
     return datetime.now(KL_TZ).date()
 
 
+def scheduled_manpower(staff: list[dict]) -> int:
+    """Count scheduled operational staff; ABM is outside manpower targets."""
+    return sum(row["position"] != "ABM" for row in staff)
+
+
 def schedule_day_preview(staff: list[dict], entries: list[dict],
                          codes: list[dict]) -> dict[str, int]:
     """Daily-entry values from schedule rows for one day.
 
-    Only timed shifts count as working staff. Leave is mapped by the three
-    standard codes; every other custom, untimed code adds no leave.
+    Only timed shifts count as working staff. Approved AL/RPL/UPL are mapped
+    from the schedule; MC and EL are day-end actuals and never auto-filled.
+    Every other custom, untimed code adds no leave.
     """
     staff_by_id = {row["id"]: row for row in staff}
     codes_by_code = {row["code"]: row for row in codes}
     counts = {"ft_working": 0, "pt_working": 0, "leave_annual": 0,
-              "leave_mc": 0, "leave_unpaid": 0, "not_set": 0}
-    leave_codes = {"AL": "leave_annual", "MC": "leave_mc",
+              "leave_other_paid": 0, "leave_unpaid": 0, "not_set": 0}
+    leave_codes = {"AL": "leave_annual", "RPL": "leave_other_paid",
                    "UPL": "leave_unpaid"}
     for entry in entries:
         member = staff_by_id.get(entry["staff_id"])
@@ -153,6 +159,7 @@ class DailyInput:
     leave_mc: Optional[int] = None
     leave_other_paid: Optional[int] = None
     leave_unpaid: Optional[int] = None
+    leave_emergency: Optional[int] = None
     stock_losses: dict[str, int] = field(default_factory=dict)  # code -> cents
 
 
@@ -1106,6 +1113,38 @@ def average_effective_staff(days: list[DailyInput], pt_factor) -> Optional[Decim
     return sum(reported) / len(reported)
 
 
+def workforce_mix(days: list[DailyInput], pt_factor) -> dict:
+    """PT usage from daily attendance; no separate PT roster is maintained.
+
+    The average uses days where PT attendance was entered (blank days are
+    not zeros). PT contribution is the PT share of average effective staff;
+    it is unavailable when PT worked without a configured factor.
+    """
+    pt_days = [d for d in days if d.pt_working is not None]
+    total_pt = sum(d.pt_working or 0 for d in days)
+    average_pt = (Decimal(total_pt) / len(pt_days)) if pt_days else None
+    active_days = sum(1 for d in days if (d.pt_working or 0) > 0)
+    peak_pt = max((d.pt_working or 0 for d in days), default=0)
+    average_effective = average_effective_staff(days, pt_factor)
+    if active_days and pt_factor is None:
+        contribution = None
+    elif not average_effective:
+        contribution = None
+    elif not active_days:
+        contribution = Decimal(0)
+    elif average_pt is None:
+        contribution = None
+    else:
+        contribution = (average_pt * to_decimal(pt_factor)
+                        / average_effective)
+    return {
+        "active_days": active_days if days else None,
+        "average_pt": average_pt,
+        "peak_pt": peak_pt if days else None,
+        "contribution": contribution,
+    }
+
+
 def daily_sales_per_staff_cents(d: DailyInput, pt_factor) -> Optional[Decimal]:
     """One day's sales per effective working staff (Daily!AQ per row)."""
     e = effective_staff(d.ft_working, d.pt_working, pt_factor)
@@ -1131,11 +1170,16 @@ def sales_per_staff_cents(days: list[DailyInput], pt_factor) -> Optional[Decimal
     return Decimal(total_sales) / total_staff
 
 
+def other_paid_leave_days(day: DailyInput) -> int:
+    """RPL/other paid leave plus paid MC; MC remains separately reported."""
+    return (day.leave_other_paid or 0) + (day.leave_mc or 0)
+
+
 def leave_days(days: list[DailyInput]) -> int:
-    """Summary!B55: SUM of annual + MC + other paid + unpaid leave (blank = 0)."""
+    """Total leave person-days, with MC and EL each counted exactly once."""
     return sum(
-        (d.leave_annual or 0) + (d.leave_mc or 0)
-        + (d.leave_other_paid or 0) + (d.leave_unpaid or 0)
+        (d.leave_annual or 0) + other_paid_leave_days(d)
+        + (d.leave_unpaid or 0) + (d.leave_emergency or 0)
         for d in days
     )
 
