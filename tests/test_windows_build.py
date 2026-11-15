@@ -384,7 +384,7 @@ class TestBuildScriptStructure(unittest.TestCase):
     def test_tray_module_and_dependencies_are_packaged(self):
         self.assertIn('packaging\\opscore_tray.py', self.build)
         self.assertIn('"packaging\\opscore_tray.py"', self.lib)
-        self.assertIn('import reflex, granian, argon2, openpyxl, webview, pystray, PIL', self.build)
+        self.assertIn('import reflex, granian, argon2, openpyxl, reportlab, webview, pystray, PIL', self.build)
 
     def test_default_output_is_a_candidate_folder(self):
         self.assertIn('$OutputName = if ($AllowReleaseOutput) { "Opscore" } else { "Opscore-candidate" }',

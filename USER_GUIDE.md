@@ -300,8 +300,9 @@ existing manpower figures remain under **Overview**.
    other staff keep their assigned shifts. Opscore never overwrites a manual
    assignment, and removing a holiday removes only its automatic OPH cells.
 6. Click **Generate** to open the formatted schedule in **View**. Long names
-   use at most two lines, with a compact Position column. Click **Print** to
-   print or save as a landscape A4/Letter PDF sized to the printable page.
+   use at most two lines, with a compact Position column. Click **Save PDF**
+   to save a landscape A4 PDF directly under the store/week folder in
+   `Documents/Opscore Schedules/`; no print dialog or popup is opened.
 7. Click **Export CSV** in Planner to save one CSV per staff member who has
    shifts that week. Each file contains `date,shift_code` for import into the
    single-employee detail view in the MyESS HRMS Android app. Files are saved

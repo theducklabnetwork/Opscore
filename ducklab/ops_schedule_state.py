@@ -307,8 +307,41 @@ class ScheduleState(SharedOpsState):
         self.schedule_subtab = value
 
     @rx.event
-    def print_schedule(self):
-        return rx.call_script("window.print()")
+    def save_schedule_pdf(self):
+        """Save the schedule directly as PDF, without browser print UI."""
+        self.schedule_error = self.schedule_notice = ""
+        store_id = self._selected_store_id()
+        if store_id is None or not self.schedule_week:
+            self.schedule_error = "Select a store and week first."
+            return
+        try:
+            from ducklab.schedule_pdf import write_schedule_pdf
+
+            user = self._actor()
+            week_start = date.fromisoformat(self.schedule_week)
+            data = app_service.get_schedule(
+                user, store_id, week_start, week_start + timedelta(days=6))
+            store = app_service.get_store(user, store_id)
+            store_part = "".join(
+                c if c.isalnum() or c in "-_" else "_" for c in store.code)
+            folder = (platform_utils.documents_dir() / "Opscore Schedules"
+                      / store_part / self.schedule_week)
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / f"Schedule_{store_part}_{self.schedule_week}.pdf"
+            write_schedule_pdf(
+                path, store_label=f"{store.code} — {store.name}",
+                week_start=week_start, target=self.schedule_target,
+                staff=data["staff"], entries=data["entries"], codes=data["codes"])
+            self.schedule_notice = f"PDF saved: {path.resolve()}"
+        except AuthenticationError:
+            self.schedule_error = SESSION_EXPIRED
+        except (AuthorizationError, StoreNotFoundError):
+            self.schedule_error = ACCESS_DENIED
+        except ValueError:
+            self.schedule_error = (
+                "Invalid schedule week. Select a valid week and try again.")
+        except (OSError, RepositoryError):
+            self.schedule_error = "Could not save schedule PDF."
 
     @rx.event
     def select_schedule_week(self, value: str):

@@ -266,13 +266,43 @@ class ScheduleTests(unittest.TestCase):
         self.assertIn("schedule_generated_legend", str(pages._generated()))
         self.assertIn('"View"', str(pages._codes_tab()))
         css = (Path(__file__).parents[1] / "assets" / "schedule_print.css").read_text()
-        self.assertIn("size: A4 landscape", css)
-        self.assertIn("position: fixed !important", css)
-        self.assertIn("inset: 0 auto auto 0 !important", css)
-        self.assertIn("#generated-schedule-print *", css)
-        self.assertIn("width: 281mm !important", css)
-        self.assertIn("height: 194mm !important", css)
+        self.assertNotIn("@media print", css)
         self.assertIn("-webkit-line-clamp: 2", css)
+        self.assertIn("Save PDF", str(pages._generated()))
+
+    def test_save_pdf_writes_a4_landscape_file_without_print_dialog(self):
+        import ducklab.ops_schedule_state as mod
+        from ducklab import platform_utils
+
+        staff_id = self.app.save_staff(
+            self.admin, self.store, None,
+            name="Alexandria Cassandra Montgomery-Richardson With A Very Long Name",
+            staff_code="A001", position="ABM", employment_type="Full-Time")
+        monday = date(2026, 11, 2)
+        self.app.set_schedule_entry(
+            self.admin, self.store, staff_id, monday, "M900")
+        self.app.set_shift_code_legend(
+            self.admin, self.store, "M900", False)
+        export_root = Path(self.tmp.name) / "Documents"
+        state = ScheduleState()
+        state.schedule_week = monday.isoformat()
+        state.schedule_target = "3"
+        with mock.patch.object(mod, "app_service", self.app), \
+                mock.patch.object(ScheduleState, "_actor",
+                                  lambda _: self.admin), \
+                mock.patch.object(ScheduleState, "_selected_store_id",
+                                  lambda _: self.store), \
+                mock.patch.object(platform_utils, "documents_dir",
+                                  lambda: export_root):
+            state.save_schedule_pdf()
+        self.assertEqual(state.schedule_error, "")
+        path = export_root / "Opscore Schedules" / "A01" / "2026-11-02" / "Schedule_A01_2026-11-02.pdf"
+        self.assertTrue(path.is_file())
+        self.assertEqual(state.schedule_notice, f"PDF saved: {path.resolve()}")
+        pdf = path.read_bytes()
+        self.assertTrue(pdf.startswith(b"%PDF-"))
+        self.assertGreater(len(pdf), 1000)
+        self.assertNotIn("window.print", str(state.save_schedule_pdf))
 
     def test_employment_type_migration_preserves_staff_as_not_set(self):
         path = Path(self.tmp.name) / "migration.db"

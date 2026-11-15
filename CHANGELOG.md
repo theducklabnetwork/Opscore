@@ -33,7 +33,8 @@ Schema version: **13**.
   excluded from Planner.
 - **Generated schedule refinements.** Per-code View checkboxes control the
   generated legend, long staff names clamp to two lines beside a compact
-  Position column, and print/PDF output uses fixed landscape A4/Letter bounds.
+  Position column, and **Save PDF** writes a fitted A4-landscape PDF directly
+  without browser print dialogs or popups.
 
 ### Changed
 

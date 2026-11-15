@@ -246,7 +246,8 @@ MC to Other Paid Leave without double-counting Total Leave.
 
 Each shift code's `show_in_legend` setting filters the generated View legend
 without changing Planner, headcounts or exports. Generated names clamp to two
-lines, and print CSS fixes the output to landscape A4/Letter printable bounds.
+lines. `schedule_pdf.py` writes fitted A4-landscape PDFs directly to the
+store/week schedule folder; no browser print dialog or popup is involved.
 
 Store/month public holidays appear as PH markers. `assignment_source` tracks
 automatic ABM-only OPH entries, added only to blank cells and removed only

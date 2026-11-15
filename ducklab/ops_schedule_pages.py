@@ -118,7 +118,9 @@ def _generated_legend_item(code) -> rx.Component:
 
 def _generated_cell(cell) -> rx.Component:
     return rx.el.td(rx.text(cell["code"], size="1", weight="bold"),
-                    class_name="generated-code", background=cell["color"])
+                    class_name="generated-code",
+                    style={"--shift-color": cell["color"],
+                           "backgroundColor": cell["color"]})
 
 
 def _generated_row(row) -> rx.Component:
@@ -134,8 +136,8 @@ def _generated_row(row) -> rx.Component:
 
 def _generated() -> rx.Component:
     return rx.box(
-        rx.button(rx.icon("printer", size=14), "Print",
-                  on_click=M.print_schedule, class_name="schedule-print-button"),
+        rx.button(rx.icon("file-down", size=14), "Save PDF",
+                  on_click=M.save_schedule_pdf, class_name="schedule-print-button"),
         rx.box(
             rx.heading("Staff Weekly Planned Schedule", size="5", weight="bold",
                        text_align="center"),
@@ -143,7 +145,7 @@ def _generated() -> rx.Component:
                 rx.text("Store: " + M.selected_store_label),
                 rx.text("Target Manpower: " + M.schedule_target_display),
                 rx.text("Week: " + M.schedule_week_label),
-                justify="between", width="100%",
+                justify="between", width="100%", class_name="schedule-print-meta",
             ),
             rx.box(
                 rx.foreach(M.schedule_generated_legend, _generated_legend_item),
