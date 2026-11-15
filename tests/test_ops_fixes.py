@@ -10,6 +10,7 @@ Run: python -m pytest tests/test_ops_fixes.py -v
 import tempfile
 import unittest
 from datetime import date, timedelta
+from unittest import mock
 from decimal import Decimal
 from pathlib import Path
 
@@ -40,6 +41,52 @@ class ReportingDateTests(unittest.TestCase):
         src = inspect.getsource(OpsState._month_choices)
         self.assertIn("kpi.kl_today()", src)
         self.assertNotIn("date.today()", src)
+
+    def test_month_choices_cover_rolling_five_years(self):
+        from ducklab.ops_state import OpsState
+        with mock.patch("ducklab.ops_shared_state.kpi.kl_today",
+                        return_value=date(2026, 11, 16)):
+            choices = OpsState._month_choices(OpsState())
+        self.assertEqual(len(choices), 60)
+        self.assertEqual(choices[0], ("2026-11", "November 2026"))
+        self.assertEqual(choices[-1], ("2021-12", "December 2021"))
+        self.assertNotIn(("2021-11", "November 2021"), choices)
+        self.assertNotIn(("2026-12", "December 2026"), choices)
+
+    def test_split_selectors_compose_and_clamp_month(self):
+        from ducklab.ops_state import OpsState
+
+        class State(OpsState):
+            pass
+
+        state = State()
+        with mock.patch("ducklab.ops_shared_state.kpi.kl_today",
+                        return_value=date(2026, 11, 16)):
+            state._sync_month_selector_options()
+            self.assertEqual(state.year_options,
+                             ["2026", "2025", "2024", "2023", "2022", "2021"])
+            state.select_year("2021")
+            self.assertEqual(state.selected_month_label, "December 2021")
+            self.assertEqual(state._selected_month(), "2021-12")
+            state.select_month_name("November")
+            self.assertEqual(state.selected_month_label, "December 2021")
+
+    def test_raw_year_payload_preserves_combined_label(self):
+        from ducklab.ops_overview_state import OverviewState
+
+        class State(OverviewState):
+            pass
+
+        state = State()
+        with mock.patch("ducklab.ops_shared_state.kpi.kl_today",
+                        return_value=date(2026, 11, 16)):
+            state._sync_month_selector_options()
+        state.year_options = ["2026", "2021"]
+        state.select_year("2021")
+        with mock.patch.object(OverviewState, "load_overview_data") as load:
+            list(state.select_month("2021"))
+        self.assertEqual(state.selected_month_label, "December 2021")
+        load.assert_called_once_with()
 
 
 class ActionRuleTests(unittest.TestCase):

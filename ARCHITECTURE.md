@@ -92,7 +92,11 @@ Each layer only calls the one below it.
 6. **Page states are flat.** Every `/ops` page state inherits
    `SharedOpsState` directly; siblings share one instance for selectors and
    the status surface and wire cross-page refreshes by yielding each other's
-   events.
+   events. `SharedOpsState` owns the rolling 60-month selector (current month
+   plus the previous 59), validates and clamps Month/Year combinations, and
+   keeps the canonical `selected_month_label`; page handlers preserve that
+   label when Reflex supplies a raw month or year event payload before their
+   normal reloads.
 
 ### Data flow: daily entry to report
 

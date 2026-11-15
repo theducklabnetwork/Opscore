@@ -14,7 +14,8 @@ that tracks, per store and per month:
 
 Each installation keeps its own database on its own machine. There is no
 shared server and no cloud component; the app works fully offline after
-installation.
+installation. Separate **Month** and **Year** selectors provide a rolling
+60-month history—the current month and the previous 59 months.
 
 The product name is **Opscore**. The Python package, repository and
 environment-variable prefix remain `ducklab` / `DUCKLAB_` — internal naming

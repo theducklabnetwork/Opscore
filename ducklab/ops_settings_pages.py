@@ -321,9 +321,7 @@ class SettingsState(SharedOpsState):
                 self.selected_store_label = self.stores[0]["label"]
         # Populate the shared month selector so the global header control
         # shows the month list even on the settings page.
-        self.month_options = [label for _, label in self._month_choices()]
-        if self._selected_month() is None:
-            self.selected_month_label = self.month_options[0]
+        self._sync_month_selector_options()
         self.ref_store_label = self.selected_store_label
         self.ref_error = self.ref_notice = ""
         self.dsc_error = ""

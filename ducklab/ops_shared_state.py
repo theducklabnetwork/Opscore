@@ -76,8 +76,10 @@ class SharedOpsState(AuthState):
     store_options: list[str] = []       # display labels "CODE — Name"
     dashboard_store_options: list[str] = []
     selected_store_label: str = ""
-    month_options: list[str] = []       # labels
+    month_options: list[str] = []       # full labels, e.g. "November 2026"
+    year_options: list[str] = []
     selected_month_label: str = ""
+    month_names: list[str] = list(calendar.month_name[1:])
     has_stores: bool = True
     selected_store_active: bool = True
 
@@ -104,17 +106,79 @@ class SharedOpsState(AuthState):
                 return m[0]
         return None
 
+    @rx.var
+    def selected_month_name(self) -> str:
+        return self.selected_month_label.rsplit(" ", 1)[0]
+
+    @rx.var
+    def selected_year(self) -> str:
+        return self.selected_month_label.rsplit(" ", 1)[-1]
+
     def _month_choices(self) -> list[tuple[str, str]]:
-        # Past 12 months including the current one, newest first.
+        # Past 60 months including the current one, newest first.
         today = kpi.kl_today()
         out = []
         y, m = today.year, today.month
-        for _ in range(12):
+        for _ in range(60):
             out.append((f"{y:04d}-{m:02d}", f"{calendar.month_name[m]} {y}"))
             m -= 1
             if m == 0:
                 m, y = 12, y - 1
         return out
+
+    def _month_choice_labels(self) -> list[str]:
+        return [label for _, label in self._month_choices()]
+
+    def _sync_month_selector_options(self) -> None:
+        labels = self._month_choice_labels()
+        self.month_options = labels
+        self.year_options = list(dict.fromkeys(
+            label.rsplit(" ", 1)[-1] for label in labels))
+        if self.selected_month_label not in labels:
+            self.selected_month_label = labels[0]
+
+    def select_month_name(self, month_name: str):
+        if month_name not in self.month_names:
+            return
+        self._apply_month_parts(
+            month_name, self.selected_month_label.rsplit(" ", 1)[-1])
+
+    def select_year(self, year: str):
+        if year not in self.year_options:
+            return
+        self._apply_month_parts(
+            self.selected_month_label.rsplit(" ", 1)[0], year)
+
+    @rx.event
+    def select_month_from_month(self, month_name: str):
+        self.select_month_name(month_name)
+
+    @rx.event
+    def select_month_from_year(self, year: str):
+        self.select_year(year)
+
+    def _is_month_part(self, label: str) -> bool:
+        """Whether an event payload is a raw split-selector month or year."""
+        return label in self.month_names or label in self.year_options
+
+    def _valid_month_label(self, month_name: str, year: str) -> str | None:
+        """Clamp partial first/last years to the rolling-window boundary."""
+        choices = self._month_choices()
+        label = f"{month_name} {year}"
+        if label in {item[1] for item in choices}:
+            return label
+        matching_year = [item for item in choices
+                         if item[1].endswith(f" {year}")]
+        if not matching_year:
+            return None
+        return (matching_year[0]
+                if year == choices[0][1].rsplit(" ", 1)[-1]
+                else matching_year[-1])[1]
+
+    def _apply_month_parts(self, month_name: str, year: str) -> None:
+        label = self._valid_month_label(month_name, year)
+        if label is not None:
+            self.selected_month_label = label
 
     def _clear_shared_status(self) -> None:
         self.report_status = "idle"
@@ -130,11 +194,9 @@ class SharedOpsState(AuthState):
         self.dashboard_store_options = ["All Stores", *self.store_options]
         self.has_stores = bool(stores)
         self._sync_store_active()
-        self.month_options = [label for _, label in self._month_choices()]
+        self._sync_month_selector_options()
         if stores and self._selected_store_id() is None:
             self.selected_store_label = stores[0]["label"]
-        if self._selected_month() is None:
-            self.selected_month_label = self.month_options[0]
 
     # --- tours --------------------------------------------------------------
     @rx.event

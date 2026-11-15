@@ -41,6 +41,14 @@ def choose(page, trigger: str, option_text: str, wait_selector: str,
            timeout: int = 25000) -> None:
     """Click a select trigger, pick an option, retry once if the app missed
     the event (flaky Radix select under rapid event bursts)."""
+    if trigger == "#month-selector":
+        month_name, year = option_text.rsplit(" ", 1)
+        if year not in page.locator("#year-selector").inner_text():
+            choose(page, "#year-selector", year, wait_selector,
+                   timeout=timeout)
+        choose(page, "#month-selector", month_name, wait_selector,
+               timeout=timeout)
+        return
     for _ in range(2):
         page.click(trigger)
         page.wait_for_selector(

@@ -98,9 +98,11 @@ question appears on the first launch after installing or upgrading.
 
 ### Top of each page
 
-- **Store** and **Month** selectors: choose which store and month you are
-  looking at. The month list offers the current month and the previous 11
-  months.
+- **Store**, **Month** and **Year** selectors: choose which store and month
+  you are looking at. The Month and Year controls cover a rolling window of
+  60 months: the current month and the previous 59 months. If changing the
+  year produces a month outside that window, the selection moves to the
+  nearest available month.
 - **?**: replay the page tour.
 - **Sun/moon**: switch between light and dark mode.
 - **Profile menu**: sign out.
@@ -128,7 +130,7 @@ so daily targets stay blank until both are set.
 
 ### Monthly Setup
 
-Pick the store and month, then fill in:
+Pick the store, month and year, then fill in:
 
 | Group | Fields |
 |---|---|
@@ -531,8 +533,17 @@ Administrator.
 **My store is read-only.** It is deactivated. A Super Admin can reactivate it
 on **Store Management**.
 
-**The month I want isn't in the selector.** The month list covers the current
-month and the previous 11 months.
+**The month I want isn't in the selector.** The Month and Year controls cover
+the current month and the previous 59 months. Months outside that rolling
+window, including future months, are unavailable. A month inside the window
+can still show **No Report Available** until an administrator completes its
+Monthly Setup.
+
+**I selected an older year and the month changed.** The earliest and latest
+years in the rolling window contain only part of the calendar year. If your
+chosen month is outside the window, Opscore selects the nearest available
+month. For example, in November 2026 the window starts at December 2021, so
+selecting 2021 while viewing November selects December 2021.
 
 **Where is the log?** `opscore.log` in your data directory
 (`~/.local/share/opscore` on Linux, `%LOCALAPPDATA%\Opscore` on Windows).

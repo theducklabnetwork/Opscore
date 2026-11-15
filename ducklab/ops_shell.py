@@ -144,13 +144,26 @@ def store_selector(on_store=None, include_all: bool = False) -> rx.Component:
 
 
 def month_selector(on_month=None) -> rx.Component:
-    return rx.select(
-        SharedOpsState.month_options,
-        value=SharedOpsState.selected_month_label,
-        on_change=on_month if on_month is not None
-        else SharedOpsState.select_month,
-        size="2", id="month-selector",
-        width=["100%", "100%", "200px"],
+    """Month-first controls for the rolling 60-month reporting window."""
+    on_month = on_month if on_month is not None else SharedOpsState.select_month
+    return rx.hstack(
+        rx.text("Month:", size="2", color=ds.TEXT_MUTED),
+        rx.select(
+            SharedOpsState.month_names,
+            value=SharedOpsState.selected_month_name,
+            on_change=[SharedOpsState.select_month_from_month, on_month],
+            size="2", id="month-selector", aria_label="Month",
+            width=["100%", "100%", "145px"],
+        ),
+        rx.text("Year:", size="2", color=ds.TEXT_MUTED),
+        rx.select(
+            SharedOpsState.year_options,
+            value=SharedOpsState.selected_year,
+            on_change=[SharedOpsState.select_month_from_year, on_month],
+            size="2", id="year-selector", aria_label="Year",
+            width=["100%", "100%", "105px"],
+        ),
+        spacing="2", align="center", wrap="wrap",
     )
 
 

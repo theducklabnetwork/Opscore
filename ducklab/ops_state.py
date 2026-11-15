@@ -170,7 +170,10 @@ class OpsState(SharedOpsState):
 
     @rx.event
     def select_month(self, label: str) -> None:
-        if label == self.selected_month_label:
+        split_change = self._is_month_part(label)
+        if split_change:
+            label = self.selected_month_label
+        if not split_change and label == self.selected_month_label:
             return
         self.selected_month_label = label
         self._clear_report()

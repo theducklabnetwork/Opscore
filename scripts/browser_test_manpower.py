@@ -46,6 +46,12 @@ def login(page, email, password) -> None:
 
 
 def choose(page, trigger, option_text, timeout=25000):
+    if trigger == "#month-selector":
+        month_name, year = option_text.rsplit(" ", 1)
+        if year not in page.locator("#year-selector").inner_text():
+            choose(page, "#year-selector", year, timeout=timeout)
+        choose(page, "#month-selector", month_name, timeout=timeout)
+        return
     for _ in range(3):
         try:
             page.click(trigger)

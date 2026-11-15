@@ -358,10 +358,12 @@ class CategoryStateTests(CategoryFixture):
         self.assertFalse(st.can_manage_reference)
 
     def test_month_selector_populated_on_load(self):
-        """Global month selector must have options after settings loads."""
+        """Global month/year selectors have options after settings loads."""
         st = self.bound(lambda s: s.load_settings())
-        self.assertEqual(len(st.month_options), 12)
+        self.assertEqual(len(st.month_options), 60)
         self.assertIn(st.selected_month_label, st.month_options)
+        self.assertIn(st.selected_year, st.year_options)
+        self.assertIn(st.selected_month_name, st.month_names)
 
     def test_global_store_change_reloads_categories(self):
         """Changing the global store selector reloads the category list."""
