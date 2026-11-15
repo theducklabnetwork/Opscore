@@ -136,8 +136,12 @@ class BackupFile:
     created_at: datetime
 
 
-def _connect(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path))
+def _connect(path: Path, *, immutable: bool = False) -> sqlite3.Connection:
+    target = f"{path.resolve().as_uri()}?immutable=1" if immutable else str(path)
+    conn = sqlite3.connect(
+        target, uri=immutable,
+        timeout=store_ops_db.SQLITE_BUSY_TIMEOUT_MS / 1000)
+    conn.execute(f"PRAGMA busy_timeout = {store_ops_db.SQLITE_BUSY_TIMEOUT_MS}")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
@@ -149,6 +153,9 @@ def create_backup(db_path: Path | str, dest: Path | str) -> Path:
         raise BackupError(f"Database not found: {db_path}")
     src = _connect(db_path)
     try:
+        current = src.execute("PRAGMA user_version").fetchone()[0]
+        store_ops_db.require_compatible_schema(current)
+        store_ops_db.require_consistent_schema(src, current)
         dst = _connect(dest)
         try:
             src.backup(dst)
@@ -209,8 +216,10 @@ def validate_restore(path: Path | str) -> int:
         raise BackupError(f"Cannot read the uploaded file: {exc}")
     if header != b"SQLite format 3\x00":
         raise BackupError("Not a SQLite database file.")
+    # Never replay an uploaded or stale WAL sidecar. The online backup API
+    # already folds committed WAL content into every downloaded database.
     try:
-        conn = _connect(path)
+        conn = _connect(path, immutable=True)
     except sqlite3.Error as exc:
         raise BackupError(f"Cannot open the file as SQLite: {exc}")
     try:
@@ -231,8 +240,12 @@ def validate_restore(path: Path | str) -> int:
         try:
             _validate_schema(conn)
             version = conn.execute("PRAGMA user_version").fetchone()[0]
+            store_ops_db.require_compatible_schema(version)
+            store_ops_db.require_consistent_schema(conn, version)
         except sqlite3.Error as exc:
             raise BackupError(f"Schema validation failed: {exc}")
+        except store_ops_db.SchemaVersionError as exc:
+            raise BackupError(str(exc)) from exc
     finally:
         conn.close()
     if version > store_ops_db.SCHEMA_VERSION:
@@ -295,6 +308,30 @@ def save_pre_migration_backup(db_path: Path | str, from_version: int,
         f"{now.strftime('%Y%m%d-%H%M%S')}")
 
 
+def _replace_database(db_path: Path, staged_path: Path) -> None:
+    """Quiesce WAL connections and atomically install a standalone database.
+
+    EXCLUSIVE prevents new readers/writers while old WAL sidecars are removed.
+    Existing connections must close when their current operation finishes; any
+    attempt to continue on the replaced inode fails rather than writing into
+    the restored database's sidecars.
+    """
+    live = _connect(db_path)
+    try:
+        live.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        live.execute("PRAGMA journal_mode = DELETE")
+        live.execute("BEGIN EXCLUSIVE")
+        os.replace(staged_path, db_path)
+        for suffix in ("-wal", "-shm"):
+            db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
+        live.rollback()
+    except (OSError, sqlite3.Error) as exc:
+        live.rollback()
+        raise BackupError(f"Could not replace the database safely: {exc}") from exc
+    finally:
+        live.close()
+
+
 def restore(db_path: Path | str, upload_path: Path | str) -> int:
     """Validate and migrate a temporary copy, then atomically replace db_path.
 
@@ -317,6 +354,22 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
         except (OSError, shutil.SameFileError) as exc:
             raise BackupError(f"Cannot copy the uploaded file: {exc}")
 
+        # Normalize the upload through SQLite itself: committed WAL content is
+        # included, while stale uploaded -wal/-shm siblings are never replayed.
+        try:
+            # Never trust uploaded sidecars. Uploaded databases are expected
+            # to be self-contained files produced by create_backup().
+            source = _connect(upload_path, immutable=True)
+            try:
+                destination = _connect(temp_path)
+                try:
+                    source.backup(destination)
+                finally:
+                    destination.close()
+            finally:
+                source.close()
+        except (OSError, sqlite3.Error, store_ops_db.SchemaVersionError) as exc:
+            raise BackupError(f"Cannot read the uploaded database: {exc}") from exc
         version = validate_restore(temp_path)
         try:
             store_ops_db.init_db(temp_path, backup_before_migration=False)
@@ -328,15 +381,16 @@ def restore(db_path: Path | str, upload_path: Path | str) -> int:
             validate_restore(temp_path)
         except (sqlite3.Error, store_ops_db.SchemaVersionError) as exc:
             raise BackupError(f"Database migration failed: {exc}")
-        os.replace(temp_path, db_path)
+        _replace_database(db_path, temp_path)
         temp_path = None
         return version
     finally:
         if temp_path is not None:
-            try:
-                temp_path.unlink()
-            except FileNotFoundError:
-                pass
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    temp_path.with_name(temp_path.name + suffix).unlink()
+                except FileNotFoundError:
+                    pass
 
 
 _SAFE_NAME = re.compile(

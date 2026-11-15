@@ -84,7 +84,7 @@ class MonthRangeTests(unittest.TestCase):
         conn.execute("PRAGMA user_version = 8")
         conn.executescript("""
             CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY);
-            INSERT INTO schema_migrations VALUES (8);
+            INSERT INTO schema_migrations VALUES (1), (2), (3), (4), (5), (6), (7), (8);
             CREATE TABLE actions (
                 id INTEGER PRIMARY KEY, store_id INTEGER, raised_date TEXT);
             CREATE TABLE reference_data_info (
@@ -93,7 +93,7 @@ class MonthRangeTests(unittest.TestCase):
         conn.close()
         store_ops_db.init_db(legacy)
         self.conn = store_ops_db.connect(legacy)
-        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], 14)
+        self.assertEqual(self.conn.execute("PRAGMA user_version").fetchone()[0], store_ops_db.SCHEMA_VERSION)
         self.assertEqual(self.conn.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' "
             "AND name = 'idx_actions_store_raised_date'").fetchone()[0], 1)

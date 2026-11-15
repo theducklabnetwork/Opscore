@@ -131,6 +131,7 @@ class BackupModuleTest(unittest.TestCase):
         older = self.dir / "older.db"
         shutil.copy(self.db, older)
         conn = sqlite3.connect(older)
+        conn.execute("DELETE FROM schema_migrations WHERE version > 3")
         conn.execute("PRAGMA user_version = 3")
         conn.commit()
         conn.close()
@@ -176,6 +177,7 @@ class BackupModuleTest(unittest.TestCase):
         older = self.dir / "migration-failure.db"
         shutil.copy(self.db, older)
         conn = sqlite3.connect(older)
+        conn.execute("DELETE FROM schema_migrations WHERE version > 4")
         conn.execute("PRAGMA user_version = 4")
         conn.commit()
         conn.close()
@@ -187,6 +189,79 @@ class BackupModuleTest(unittest.TestCase):
                 backup.restore(self.db, older)
         self.assertIn("Database migration failed", str(ctx.exception))
         self.assertEqual(self.db.read_bytes(), before)
+
+    def test_restore_rejects_inconsistent_audit_without_touching_live_db(self):
+        incoming = self.dir / "inconsistent.db"
+        backup.create_backup(self.db, incoming)
+        conn = sqlite3.connect(incoming)
+        conn.execute("DELETE FROM schema_migrations WHERE version = 7")
+        conn.commit()
+        conn.close()
+        before = self.db.read_bytes()
+        with self.assertRaisesRegex(backup.BackupError, "migration audit"):
+            backup.restore(self.db, incoming)
+        self.assertEqual(self.db.read_bytes(), before)
+        self.assertFalse(list(self.dir.glob(".store_ops.db.restore-*")))
+
+    def test_backup_captures_committed_wal_content(self):
+        conn = store_ops_db.connect(self.db)
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("INSERT INTO stores (code, name) VALUES ('WAL', 'WAL committed')")
+        conn.commit()
+        self.assertGreater((self.dir / "store_ops.db-wal").stat().st_size, 0)
+        copy = self.dir / "wal-copy.db"
+        backup.create_backup(self.db, copy)
+        copied = sqlite3.connect(copy)
+        self.assertEqual(copied.execute(
+            "SELECT name FROM stores WHERE code = 'WAL'").fetchone()[0], "WAL committed")
+        copied.close()
+        conn.close()
+
+    def test_restore_wal_database_is_consistent_and_leaves_no_stale_sidecars(self):
+        conn = store_ops_db.connect(self.db)
+        conn.execute("INSERT INTO stores (code, name) VALUES ('LIVE', 'Live WAL')")
+        conn.commit()
+        self.assertTrue((self.dir / "store_ops.db-wal").exists())
+        incoming = self.dir / "incoming-wal.db"
+        backup.create_backup(self.db, incoming)
+        source = store_ops_db.connect(incoming)
+        source.execute("UPDATE stores SET name = 'Restored WAL' WHERE code = 'LIVE'")
+        source.commit()
+        # Simulate receiving the main database plus stale/mismatched sidecars.
+        incoming_main = self.dir / "received.db"
+        shutil.copyfile(incoming, incoming_main)
+        source.close()
+        incoming.unlink()
+        incoming_main.rename(incoming)
+        # A stale uploaded sidecar must not be applied to the main file.
+        (self.dir / "incoming-wal.db-wal").write_bytes(b"stale")
+        (self.dir / "incoming-wal.db-shm").write_bytes(b"stale")
+        conn.close()
+        backup.restore(self.db, incoming)
+        restored = store_ops_db.connect(self.db)
+        # The main file was copied before the WAL commit; stale sidecars must
+        # not be replayed, so the self-contained main file's value is restored.
+        self.assertEqual(restored.execute(
+            "SELECT name FROM stores WHERE code = 'LIVE'").fetchone()[0], "Live WAL")
+        self.assertEqual(restored.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+        self.assertEqual(restored.execute("PRAGMA foreign_key_check").fetchall(), [])
+        restored.close()
+        self.assertFalse(list(self.dir.glob(".store_ops.db.restore-*")))
+
+    def test_restore_refuses_open_wal_connections_without_replacing(self):
+        incoming = self.dir / "locked-restore.db"
+        backup.create_backup(self.db, incoming)
+        conn = store_ops_db.connect(self.db)
+        conn.execute("INSERT INTO stores (code, name) VALUES ('KEEP', 'Current')")
+        conn.commit()
+        with self.assertRaisesRegex(backup.BackupError, "replace the database safely"):
+            backup.restore(self.db, incoming)
+        check = sqlite3.connect(self.db)
+        self.assertEqual(check.execute(
+            "SELECT name FROM stores WHERE code = 'KEEP'").fetchone()[0], "Current")
+        check.close()
+        conn.close()
+        self.assertFalse(list(self.dir.glob(".store_ops.db.restore-*")))
 
     def test_pre_restore_copy_created(self):
         saved = backup.save_pre_restore_backup(

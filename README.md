@@ -83,9 +83,12 @@ is in the [User Guide](USER_GUIDE.md).
 | Database | `~/.local/share/opscore/store_ops.db` | `%LOCALAPPDATA%\Opscore\store_ops.db` |
 | Log | `~/.local/share/opscore/opscore.log` | `%LOCALAPPDATA%\Opscore\opscore.log` |
 | Automatic migration/restore backups (newest 10) | `~/.local/share/opscore/backups/` | `%LOCALAPPDATA%\Opscore\backups\` |
-| Schedule CSV exports | `~/Documents/Opscore Schedules/` | `%USERPROFILE%\Documents\Opscore Schedules\` |
+| Fresh-start database copies (newest 10) | `~/.local/share/opscore/store_ops.db.backup-N` | `%LOCALAPPDATA%\Opscore\store_ops.db.backup-N` |
+| Schedule PDF and CSV exports | `~/Documents/Opscore Schedules/` | `%USERPROFILE%\Documents\Opscore Schedules\` |
 
-Uninstalling the package preserves all of the above.
+The log rotates at 5 MiB during startup and while the app runs, retaining three
+archives. Downloaded backups are never deleted automatically; keep an off-device
+copy for recovery. Uninstalling the package preserves all of the above.
 
 ## Documentation
 
@@ -114,7 +117,7 @@ Architecture document.
 ## Project status
 
 Current development release line: **v1.3** (see the [Changelog](CHANGELOG.md)).
-Database schema version: **13**.
+Database schema version: **15**.
 
 - Ubuntu/Debian desktop package: released and in use.
 - Windows desktop package and installer: released from v1.1 onward; see the

@@ -33,6 +33,8 @@ class TestSourceBackend(unittest.TestCase):
         self.app_root = Path(self.tmp.name)
         (self.app_root / "packaging").mkdir()
         self.backend = mock.Mock()
+        self.backend.stdout = mock.MagicMock()
+        self.backend.stdout.readline.side_effect = [b""]
         self.patches = [
             mock.patch.object(self.desktop, "APP_ROOT", self.app_root),
             mock.patch.object(self.desktop, "LOG_PATH", self.app_root / "opscore.log"),
@@ -133,6 +135,25 @@ class TestWebviewProfileUpgrade(unittest.TestCase):
         self.assertEqual(list(self.data_dir.glob("webview.old-*")), [])
         self.assert_protected_data_unchanged()
 
+    def test_old_profiles_keep_newest_three_and_ignore_unrelated_paths(self):
+        for timestamp in ("20261101-000000", "20261102-000000",
+                          "20261103-000000", "20261104-000000"):
+            path = self.data_dir / f"webview.old-{timestamp}"
+            path.mkdir()
+            (path / "marker").write_text(timestamp)
+        outside = self.data_dir / "outside"
+        outside.mkdir()
+        (outside / "keep").write_text("yes")
+        (self.data_dir / "webview.old-20200101-000000").symlink_to(
+            outside, target_is_directory=True)
+        unrelated = self.data_dir / "webview.old-not-a-timestamp"
+        unrelated.mkdir()
+        self.desktop.prune_webview_profiles()
+        self.assertFalse((self.data_dir / "webview.old-20261101-000000").exists())
+        self.assertTrue((self.data_dir / "webview.old-20261104-000000").exists())
+        self.assertTrue((outside / "keep").exists())
+        self.assertTrue(unrelated.exists())
+
     def test_windows_launch_prepares_profile_before_window(self):
         process = mock.Mock()
         with mock.patch.object(self.desktop.sys, "platform", "win32"), \
@@ -185,6 +206,50 @@ class TestDatabaseChoice(unittest.TestCase):
         self.assertFalse(self.db.exists())
         self.assertEqual(backup.name, "store_ops.db.backup-1")
         self.assertEqual(backup.read_text(), "database")
+
+    def test_archive_checkpoints_wal_into_self_contained_backup(self):
+        import sqlite3
+        from ducklab import store_ops_db
+        store_ops_db.init_db(self.db)
+        conn = store_ops_db.connect(self.db)
+        conn.execute("INSERT INTO stores (code, name) VALUES ('WAL', 'Preserved')")
+        conn.commit()
+        conn.close()
+        backup = self.desktop.archive_existing_database()
+        copied = sqlite3.connect(f"{backup.resolve().as_uri()}?immutable=1", uri=True)
+        self.assertEqual(copied.execute(
+            "SELECT name FROM stores WHERE code = 'WAL'").fetchone()[0], "Preserved")
+        copied.close()
+        self.assertFalse(self.db.with_name(self.db.name + "-wal").exists())
+        self.assertFalse(self.db.with_name(self.db.name + "-shm").exists())
+
+    def test_fresh_start_backups_keep_ten_and_ignore_manual_files(self):
+        for number in range(1, 13):
+            (self.data_dir / f"store_ops.db.backup-{number}").write_text(str(number))
+        unrelated = self.data_dir / "opscore-backup-2026-10-25-0915.db"
+        unrelated.write_text("manual")
+        external = self.data_dir / "external"
+        external.mkdir()
+        link = self.data_dir / "store_ops.db.backup-99"
+        link.symlink_to(external / "outside")
+        self.db.write_text("new")
+        self.desktop.archive_existing_database()
+        remaining = sorted(path.name for path in self.data_dir.glob("store_ops.db.backup-*")
+                           if not path.is_symlink())
+        self.assertEqual(len(remaining), 10)
+        self.assertNotIn("store_ops.db.backup-1", remaining)
+        self.assertNotIn("store_ops.db.backup-2", remaining)
+        self.assertIn("store_ops.db.backup-12", remaining)
+        self.assertEqual(unrelated.read_text(), "manual")
+        self.assertTrue(link.is_symlink())
+
+    def test_fresh_start_prune_failure_does_not_block_archive(self):
+        self.db.write_text("new")
+        (self.data_dir / "store_ops.db.backup-1").write_text("old")
+        with mock.patch.object(self.desktop, "FRESH_START_BACKUP_RETENTION", 0), \
+                mock.patch.object(self.desktop.Path, "unlink", side_effect=OSError("locked")):
+            backup = self.desktop.archive_existing_database()
+        self.assertEqual(backup.read_text(), "new")
 
     def test_no_database_never_prompts(self):
         with mock.patch.object(self.desktop, "ask_use_existing_database") as ask:
@@ -368,6 +433,118 @@ class TestLogRotation(unittest.TestCase):
     def test_rotation_failure_does_not_block_startup(self):
         with mock.patch.object(self.desktop.Path, "stat", side_effect=OSError("locked")):
             self.desktop.rotate_log_at_startup()
+
+
+class TestLiveLogRotation(unittest.TestCase):
+    def setUp(self):
+        self.desktop = load_desktop_module()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.log = Path(self.tmp.name) / "opscore.log"
+        self.desktop.LOG_SINK = None
+        self.desktop.DATA_DIR = Path(self.tmp.name)
+        self.patches = [
+            mock.patch.object(self.desktop, "LOG_PATH", self.log),
+            mock.patch.object(self.desktop, "LOG_MAX_BYTES", 64),
+        ]
+        for patcher in self.patches:
+            patcher.start()
+
+    def tearDown(self):
+        self.desktop.stop_backend()
+        if self.desktop.LOG_SINK is not None:
+            self.desktop.LOG_SINK.close()
+        self.desktop.LOG_SINK = None
+        self.desktop.LOG_READER = None
+        self.desktop.LOG_READER_PROCESS = None
+        for patcher in reversed(self.patches):
+            patcher.stop()
+        self.tmp.cleanup()
+
+    def test_writes_rotate_while_sink_stays_open_and_keep_three_archives(self):
+        sink = self.desktop._log_sink()
+        for number in range(6):
+            sink.write(f"launcher-{number}\n".ljust(24, "x"))
+            sink.write(f"backend-{number}\n".ljust(24, "x"))
+        sink.close()
+        self.assertLessEqual(self.log.stat().st_size, 64)
+        archives = [self.log.with_name(f"opscore.log.{n}") for n in range(1, 4)]
+        self.assertTrue(all(path.exists() for path in archives))
+        self.assertFalse(self.log.with_name("opscore.log.4").exists())
+        content = b"".join(path.read_bytes() for path in [self.log, *archives])
+        self.assertIn(b"launcher-5", content)
+        self.assertIn(b"backend-5", content)
+        self.assertIn(b"backend-2", archives[2].read_bytes())
+        self.assertNotIn(b"launcher-0", content)
+
+    def test_small_writes_do_not_rotate(self):
+        sink = self.desktop._log_sink()
+        sink.write("launcher\n")
+        sink.write("backend\n")
+        sink.close()
+        self.assertEqual(self.log.read_text(), "launcher\nbackend\n")
+        self.assertFalse(self.log.with_name("opscore.log.1").exists())
+
+    def test_real_backend_sustained_output_is_drained_and_rotated(self):
+        process = self.desktop.platform_utils.start_backend(
+            [sys.executable, "-u", "-c",
+             "import sys\n"
+             "for i in range(500):\n"
+             " print(f'backend-{i}-' + 'x' * 100, flush=True)\n"
+             "print('worker-child-diagnostic', file=sys.stderr, flush=True)"],
+            cwd=Path(self.tmp.name), env={}, log=subprocess.PIPE,
+        )
+        self.desktop.BACKEND = process
+        self.desktop._start_log_reader(process)
+        self.assertEqual(process.wait(timeout=15), 0)
+        self.desktop.LOG_READER.join(timeout=5)
+        self.desktop.LOG_SINK.close()
+        self.assertFalse(self.desktop.LOG_READER.is_alive())
+        self.assertEqual(process.returncode, 0)
+        self.assertTrue(self.log.with_name("opscore.log.1").exists())
+        paths = [self.log, *(self.log.with_name(f"opscore.log.{n}") for n in range(1, 4))]
+        content = b"".join(path.read_bytes() for path in paths)
+        self.assertIn(b"backend-499", content)
+        self.assertIn(b"worker-child-diagnostic", content)
+
+    def test_stdout_and_stderr_share_live_sink(self):
+        self.desktop.redirect_output_to_log()
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        try:
+            print("launcher-line", flush=True)
+            print("diagnostic", file=sys.stderr, flush=True)
+        finally:
+            sys.stdout, sys.stderr = old_stdout, old_stderr
+        self.desktop.LOG_SINK.close()
+        self.assertEqual(self.log.read_text(), "launcher-line\ndiagnostic\n")
+
+
+class TestZenityDatabaseChoice(unittest.TestCase):
+    def setUp(self):
+        self.desktop = load_desktop_module()
+
+    def ask(self, returncode):
+        import builtins
+        with mock.patch.object(builtins, "__import__", side_effect=ImportError("no GTK")), \
+                mock.patch.object(self.desktop.shutil, "which", return_value="/usr/bin/zenity") as which, \
+                mock.patch.object(self.desktop.subprocess, "run", return_value=mock.Mock(returncode=returncode)) as run:
+            response = self.desktop.ask_use_existing_database()
+        which.assert_called_once_with("zenity")
+        self.assertEqual(run.call_args.args[0][0], "/usr/bin/zenity")
+        return response
+
+    def test_zenity_ok_keeps_database(self):
+        self.assertTrue(self.ask(0))
+
+    def test_zenity_cancel_starts_fresh(self):
+        self.assertFalse(self.ask(1))
+
+    def test_no_gtk_or_zenity_keeps_database(self):
+        import builtins
+        with mock.patch.object(builtins, "__import__", side_effect=ImportError("no GTK")), \
+                mock.patch.object(self.desktop.shutil, "which", return_value=None), \
+                mock.patch.object(self.desktop.subprocess, "run") as run:
+            self.assertTrue(self.desktop.ask_use_existing_database())
+        run.assert_not_called()
 
 
 class TestSchemaPreflight(unittest.TestCase):

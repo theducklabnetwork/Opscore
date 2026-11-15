@@ -7,5 +7,7 @@
 pillow==13.0.0
 pystray==0.19.5
 pytest==9.1.1
+# Starlette 1.10's TestClient backend; avoids the legacy httpx fallback.
+httpx2==2.16.0
 playwright==1.64.0
 openpyxl==3.1.5

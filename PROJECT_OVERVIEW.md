@@ -92,7 +92,7 @@ routed features are marked experimental or "coming soon".
 | **Daily Operations** | Per-day entry of sales, transactions, units, FT/PT staffing, hires, resignations, five leave inputs, and all stock-loss codes. New entries auto-fill planned FT/PT/AL/RPL/UPL from the schedule; saved actuals are preserved. MC/EL are manual, with MC included in paid-leave reporting. Explicit clearing stores NULL. |
 | **Sales Performance** | Levels 1–4 achievement, actual and projected sales, Level Reached, average daily sales, BV/UPT/ASP against imported state benchmarks, Sales Trend, Daily Sales vs Target, Sales by Day, Sales Calendar, target ladder and daily table. The daily table's **Contribution** column shows each day's normalized share of the monthly target (1 decimal), matching the HQ workbook's S.Ctrb. Editing is done in Daily Operations. |
 | **Expenses Management** | Paid/Incurred/Pending/Budget/Utilization/Variance KPIs, percentage budgets calculated against the active sales target, Needs Review filtering, Budget vs Paid and Expense Mix charts, and a transaction register with filtering and sorting. Incomplete drafts are allowed and flagged. |
-| **Manpower Efficiency** | Overview of FT-only headcount, productivity, salary, turnover and leave; PT Workforce Mix indicators derived from daily attendance (no separate PT roster), attendance guidance and non-blocking roster-consistency review warnings. Incomplete-month salary ratios remain numeric with neutral status colors. Payroll editing is restricted to configuration managers. The **Schedule** tab adds a weekly Planner (autosaving shift cells and target manpower), Staff roster, ordered shift-code Config with RPL, printable View, and store holiday markers with safe automatic OPH for ABM staff only. |
+| **Manpower Efficiency** | Overview of FT-only headcount, productivity, salary, turnover and leave; PT Workforce Mix indicators derived from daily attendance (no separate PT roster), attendance guidance and non-blocking roster-consistency review warnings. Incomplete-month salary ratios remain numeric with neutral status colors. Payroll editing is restricted to configuration managers. The **Schedule** tab adds a weekly Planner (autosaving shift cells and target manpower), Staff roster, ordered shift-code Config with RPL, direct A4-landscape PDF output, individual and combined MyESS CSV export, and store holiday markers with automatic OPH for every ABM assignment. |
 | **Stock Management** | Read-only analytics: Total Loss, Loss Ratio, Missing and Extra, daily loss and category charts, and previous-month comparison. All editing happens in Daily Operations. |
 | **Action Tracker** | Open/Overdue/Completed tracking with filters, carried-over actions from earlier months, and full add/edit dialogs. |
 | **Store Management** | New Store, Edit, Activate/Deactivate (never delete), user-to-store assignment, and Monthly Setup (targets, holidays, manpower, stock, percentage expense budgets, month-end inputs) with HQ defaults and Copy From Last Month. |
@@ -155,14 +155,14 @@ work-in-progress:
 
 ## 10. Current implementation status
 
-Current development release line: **v1.3**. Database schema version: **13**.
+Current development release line: **v1.3**. Database schema version: **15**.
 
 | Area | Status |
 |---|---|
 | All operational modules | Implemented |
 | KPI engine and daily-target logic | Implemented |
 | Monthly Report finalization and corrections | Implemented |
-| Weekly scheduling, printing and individual/MyESS CSV export | Implemented (v1.3) |
+| Weekly scheduling, direct PDF and individual/MyESS CSV export | Implemented (v1.3) |
 | First-launch account creation and guided tours | Implemented |
 | Single-use recovery keys | Implemented (v1.2) |
 | Ubuntu/Debian desktop package | Released |
@@ -178,26 +178,21 @@ In addition to the scope boundaries above, the following are verified
 limitations in the current implementation. They are documented so users and
 maintainers know the boundaries; they are not fixed by this documentation.
 
-- **Startup-only log rotation.** Logs of at least 5 MiB rotate on startup,
-  with three archives retained. The active log can grow beyond 5 MiB during a
-  continuously running session.
-- **Bounded automatic-backup retention.** Only the newest 10 pre-migration and
-  pre-restore copies are retained. Numbered fresh-start copies, downloaded
-  backups, recovery-script backups and old WebView profiles are not pruned.
+- **Bounded logs and generated artifacts.** `opscore.log` rotates at 5 MiB
+  during startup and runtime, with three archives retained. The newest 10
+  pre-migration/pre-restore and numbered fresh-start copies, and newest three
+  old WebView profiles, are retained. Downloaded and recovery-script backups
+  are never pruned automatically.
 - **No automatic off-device backup.** Pre-migration and pre-restore copies are
   stored beside the live database. Download a backup from **Settings → Data**
   and keep it separately before major upgrades. See [Migrations](MIGRATIONS.md).
 - **Windows real-machine validation** is not confirmed by in-repository
   evidence; see the [Changelog](CHANGELOG.md) note.
-- **A Linux launcher fallback bug**: when GTK is unavailable and the system
-  falls back to a zenity prompt for the keep/fresh database choice, a
-  `NameError` can abort startup (`packaging/opscore_desktop.py`). Standard
-  GTK and Windows paths are unaffected.
 
 ## 12. Future development considerations
 
 The v1.3 development scope is MyESS batch schedule export, pre-migration
-backups, a newer-schema startup guard, automatic-backup retention and startup
+backups, a newer-schema startup guard, bounded generated artifacts and live
 log rotation. A possible **Users tab in Settings** remains a future item,
 not part of v1.3. Opscore schedule CSV import is not planned in this release.
 

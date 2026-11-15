@@ -40,6 +40,90 @@ LOG_BACKUP_COUNT = 3
 APP_URL = "http://127.0.0.1:47811/"
 HEALTH_URL = APP_URL + "api/health"
 BACKEND: subprocess.Popen | None = None
+LOG_SINK: RotatingLogSink | None = None
+LOG_READER: threading.Thread | None = None
+LOG_READER_PROCESS: subprocess.Popen | None = None
+
+
+class RotatingLogSink:
+    """One launcher-owned writer; rotation never moves the backend's pipe."""
+
+    def __init__(self, path: Path, max_bytes: int | None = None,
+                 backups: int = LOG_BACKUP_COUNT):
+        self.path = path
+        self.max_bytes = LOG_MAX_BYTES if max_bytes is None else max_bytes
+        self.backups = backups
+        self._lock = threading.Lock()
+        self._file = None
+
+    def _open(self):
+        if self._file is None:
+            self._file = self.path.open("ab", buffering=0)
+        return self._file
+
+    def _rotate_open_file(self) -> None:
+        log = self._open()
+        if log.tell() <= self.max_bytes:
+            return
+        log.close()
+        self._file = None
+        oldest = self.path.with_name(f"{self.path.name}.{self.backups}")
+        oldest.unlink(missing_ok=True)
+        for number in range(self.backups - 1, 0, -1):
+            source = self.path.with_name(f"{self.path.name}.{number}")
+            if source.exists():
+                os.replace(source, self.path.with_name(
+                    f"{self.path.name}.{number + 1}"))
+        os.replace(self.path, self.path.with_name(f"{self.path.name}.1"))
+        self._open()
+
+    def write(self, data: str | bytes) -> None:
+        raw = data.encode("utf-8", errors="replace") if isinstance(data, str) else data
+        with self._lock:
+            try:
+                self._open().write(raw)
+                self._rotate_open_file()
+            except OSError as error:
+                # A disk/rotation problem must not take down Opscore.
+                print(f"Could not write or rotate {self.path}: {error}", file=sys.stderr)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._file is not None:
+                self._file.close()
+                self._file = None
+
+
+def _log_sink() -> RotatingLogSink:
+    global LOG_SINK
+    if LOG_SINK is None:
+        LOG_SINK = RotatingLogSink(LOG_PATH)
+    return LOG_SINK
+
+
+def _drain_backend_output(process: subprocess.Popen, sink: RotatingLogSink) -> None:
+    global LOG_READER_PROCESS
+    try:
+        with process.stdout:
+            for line in iter(process.stdout.readline, b""):
+                sink.write(line)
+    except (OSError, ValueError) as error:
+        sink.write(f"Could not read backend output: {error}\n")
+    finally:
+        if LOG_READER_PROCESS is process:
+            LOG_READER_PROCESS = None
+
+
+def _start_log_reader(process: subprocess.Popen) -> None:
+    global LOG_READER, LOG_READER_PROCESS
+    LOG_READER_PROCESS = process
+    LOG_READER = threading.Thread(
+        target=_drain_backend_output,
+        args=(process, _log_sink()),
+        name="opscore-backend-log",
+        daemon=True,
+    )
+    LOG_READER.start()
 
 
 def stop_backend() -> None:
@@ -47,9 +131,11 @@ def stop_backend() -> None:
     global BACKEND
     process = BACKEND
     BACKEND = None
-    if process is None or process.poll() is not None:
-        return
-    platform_utils.stop_process_tree(process)
+    if process is not None and process.poll() is None:
+        platform_utils.stop_process_tree(process)
+    reader = LOG_READER
+    if reader is not None and reader is not threading.current_thread():
+        reader.join(timeout=5)
 
 
 def acquire_lock():
@@ -118,6 +204,10 @@ def installed_version() -> str:
     return release_file.read_text().strip() if release_file.exists() else "source"
 
 
+FRESH_START_BACKUP_RETENTION = 10
+WEBVIEW_PROFILE_RETENTION = 3
+
+
 def next_backup_path(db_path: Path) -> Path:
     """Return store_ops.db.backup-N with the lowest free positive N."""
     number = 1
@@ -126,12 +216,80 @@ def next_backup_path(db_path: Path) -> Path:
     return candidate
 
 
+def _fresh_start_backups() -> list[Path]:
+    import re
+
+    pattern = re.compile(rf"^{re.escape(DB_PATH.name)}\.backup-(\d+)$")
+    backups = []
+    try:
+        candidates = list(DATA_DIR.iterdir())
+    except OSError:
+        return []
+    for path in candidates:
+        match = pattern.fullmatch(path.name)
+        if match and not path.is_symlink() and path.is_file():
+            backups.append((int(match[1]), path))
+    return [path for _, path in sorted(backups, reverse=True)]
+
+
+def prune_fresh_start_backups() -> None:
+    """Best-effort newest-10 retention after a successful fresh-start rename."""
+    for path in _fresh_start_backups()[FRESH_START_BACKUP_RETENTION:]:
+        try:
+            path.unlink()
+            for suffix in ("-wal", "-shm"):
+                sidecar = path.with_name(path.name + suffix)
+                if not sidecar.is_symlink():
+                    sidecar.unlink(missing_ok=True)
+        except OSError as error:
+            print(f"Could not remove old fresh-start backup {path}: {error}", file=sys.stderr)
+
+
 def archive_existing_database() -> Path:
-    """Rename the existing database to a numbered backup, preserving its data."""
+    """Make a self-contained numbered copy before starting with a fresh DB."""
     backup = next_backup_path(DB_PATH)
-    DB_PATH.rename(backup)
+    try:
+        conn = store_ops_db.connect(DB_PATH)
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        finally:
+            conn.close()
+    except Exception as error:
+        # The normal path has no backend running. If checkpointing is not
+        # possible, preserve every file rather than silently discarding WAL.
+        print(f"Could not checkpoint the old database ({error}); preserving sidecars.", file=sys.stderr)
+        DB_PATH.rename(backup)
+        for suffix in ("-wal", "-shm"):
+            sidecar = DB_PATH.with_name(DB_PATH.name + suffix)
+            if sidecar.exists() and not sidecar.is_symlink():
+                sidecar.replace(backup.with_name(backup.name + suffix))
+    else:
+        DB_PATH.rename(backup)
+        for suffix in ("-wal", "-shm"):
+            DB_PATH.with_name(DB_PATH.name + suffix).unlink(missing_ok=True)
+    prune_fresh_start_backups()
     print(f"Existing database backed up to {backup}")
     return backup
+
+
+def prune_webview_profiles() -> None:
+    """Keep only three recognized, non-link old profiles in the data directory."""
+    import re
+
+    pattern = re.compile(r"webview\.old-\d{8}-\d{6}(?:-\d+)?")
+    try:
+        candidates = list(DATA_DIR.iterdir())
+    except OSError:
+        return
+    profiles = [
+        path for path in candidates
+        if pattern.fullmatch(path.name) and not path.is_symlink() and path.is_dir()
+    ]
+    for path in sorted(profiles, key=lambda item: item.name, reverse=True)[WEBVIEW_PROFILE_RETENTION:]:
+        try:
+            shutil.rmtree(path)
+        except OSError as error:
+            print(f"Could not remove old webview profile {path}: {error}", file=sys.stderr)
 
 
 def consume_installer_db_choice() -> str | None:
@@ -184,7 +342,7 @@ def ask_use_existing_database() -> bool:
         return keep
     except Exception:
         pass
-    if shutil.which("zenity"):
+    if opener := shutil.which("zenity"):
         result = subprocess.run(
             [
                 opener,
@@ -240,7 +398,15 @@ def prepare_webview_profile() -> None:
     profile = DATA_DIR / "webview"
     if previous_version != version and profile.exists():
         timestamp = time.strftime("%Y%m%d-%H%M%S")
-        profile.rename(DATA_DIR / f"webview.old-{timestamp}")
+        old_profile = DATA_DIR / f"webview.old-{timestamp}"
+        number = 0
+        while old_profile.exists():
+            number += 1
+            old_profile = DATA_DIR / f"webview.old-{timestamp}-{number}"
+        profile.rename(old_profile)
+    # pywebview will now establish the replacement profile; old profiles are
+    # bounded independently of whether the installed version just changed.
+    prune_webview_profiles()
     if previous_version != version:
         version_path.write_text(version + "\n")
 
@@ -271,16 +437,20 @@ def start_backend() -> tuple[subprocess.Popen, str]:
             str(APP_ROOT / "packaging" / "opscore_backend.py"),
         ]
     )
-    with LOG_PATH.open("ab") as log:
-        process = platform_utils.start_backend(
-            backend_command,
-            cwd=APP_ROOT,
-            env=environment,
-            log=log,
-        )
+    process = platform_utils.start_backend(
+        backend_command,
+        cwd=APP_ROOT,
+        env=environment,
+        log=subprocess.PIPE,
+    )
+    _start_log_reader(process)
     global BACKEND
     BACKEND = process
-    wait_until_ready(process, url)
+    try:
+        wait_until_ready(process, url)
+    except BaseException:
+        stop_backend()
+        raise
     URL_PATH.write_text(json.dumps({"pid": os.getpid(), "url": url}) + "\n")
     return process, url
 
@@ -573,25 +743,48 @@ def require_compatible_database() -> None:
     conn = store_ops_db.connect(DB_PATH)
     try:
         current = conn.execute("PRAGMA user_version").fetchone()[0]
+        store_ops_db.require_compatible_schema(current)
+        store_ops_db.require_consistent_schema(conn, current)
     finally:
         conn.close()
-    store_ops_db.require_compatible_schema(current)
+
+
+class _LogTextWriter(io.TextIOBase):
+    """Line-buffered UTF-8 adapter over the launcher's rotating sink."""
+
+    def __init__(self, sink: RotatingLogSink):
+        self._sink = sink
+        self._buffer = ""
+
+    @property
+    def encoding(self):
+        return "utf-8"
+
+    def writable(self):
+        return True
+
+    def write(self, text: str) -> int:
+        text = str(text)
+        self._buffer += text
+        lines = self._buffer.splitlines(keepends=True)
+        self._buffer = ""
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            self._buffer = lines.pop()
+        if lines:
+            self._sink.write("".join(lines))
+        return len(text)
+
+    def flush(self) -> None:
+        if self._buffer:
+            self._sink.write(self._buffer)
+            self._buffer = ""
 
 
 def redirect_output_to_log() -> None:
-    """Send stdout and stderr to opscore.log (append mode, line-buffered)."""
+    """Send text output through the sink without sharing rotating descriptors."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    log_fd = os.open(LOG_PATH, os.O_WRONLY | os.O_CREAT | os.O_APPEND)
-    os.dup2(log_fd, 1)
-    os.dup2(log_fd, 2)
-    if log_fd > 2:
-        os.close(log_fd)
-    sys.stdout = io.open(
-        1, "w", encoding="utf-8", errors="replace", buffering=1, closefd=False
-    )
-    sys.stderr = io.open(
-        2, "w", encoding="utf-8", errors="replace", buffering=1, closefd=False
-    )
+    sys.stdout = _LogTextWriter(_log_sink())
+    sys.stderr = _LogTextWriter(_log_sink())
 
 
 def run_worker_child() -> None:
@@ -600,7 +793,8 @@ def run_worker_child() -> None:
     import traceback
 
     try:
-        redirect_output_to_log()
+        # The inherited pipe is drained by the launcher, including output from
+        # spawned worker children; never open a competing rotating file here.
         print(f"Opscore worker child started (pid {os.getpid()})", flush=True)
         # Hands the child to multiprocessing; never returns for a worker.
         multiprocessing.freeze_support()
@@ -683,8 +877,8 @@ def run_frozen_backend() -> int:
     """Run the backend from the windowed executable with persistent diagnostics."""
     import traceback
 
-    redirect_output_to_log()
     try:
+        # stdout/stderr are the launcher-owned pipes, drained continuously.
         print("Starting Opscore backend", flush=True)
         prepare_frozen_backend_env()
         backend_path = APP_ROOT / "packaging" / "opscore_backend.py"
@@ -783,6 +977,8 @@ def main() -> int:
         return 1
     finally:
         stop_backend()
+        if LOG_SINK is not None:
+            LOG_SINK.close()
         lock.close()
         try:
             if json.loads(URL_PATH.read_text()).get("pid") == os.getpid():

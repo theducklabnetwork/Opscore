@@ -7,7 +7,7 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **14**.
+Schema version: **15**.
 
 ### Added
 
@@ -44,6 +44,15 @@ Schema version: **14**.
   Manpower count excludes ABM. **Save PDF** writes a fitted A4-landscape PDF
   directly without browser print dialogs or popups.
 
+### Fixed
+
+- **Linux zenity startup fallback.** GTK initialization failure now uses the
+  discovered zenity executable directly for keep/fresh responses instead of
+  referencing an undefined variable.
+- **Windows build controls.** Removed the unused folder-build `-AllowOverwrite`
+  parameter. Folder publication remains controlled by `-AllowReleaseOutput`;
+  deliberate installer replacement uses `/DOPSCORE_ALLOW_OVERWRITE=1`.
+
 ### Changed
 
 - **Five-year month selection.** The combined month dropdown is now separate
@@ -64,11 +73,17 @@ Schema version: **14**.
   fractional cents and explains its staffed-day/effective-staff-day basis.
   Incomplete-month salary ratios keep their numeric values but use neutral
   status colors until the month is complete.
-- **Bounded automatic backups and logs.** The newest 10 pre-migration and
-  pre-restore backups are retained and listed together in Settings → Data.
-  Manual downloads, fresh-start copies and recovery-script backups are not
-  pruned. At startup, `opscore.log` rotates at 5 MiB with three archives;
-  the active file may grow during a continuously running session.
+- **Bounded generated artifacts and live logs.** The newest 10 pre-migration,
+  pre-restore and fresh-start copies are retained; old WebView profiles retain
+  the newest three. Manual downloads and recovery-script backups are never
+  pruned. `opscore.log` rotates at 5 MiB with three archives during startup and
+  runtime through a launcher-owned sink that drains backend output continuously.
+- **Versioned authentication and SQLite hardening.** Schema v15 transactionally
+  creates the complete auth schema, including persistent login throttling.
+  Migration audit history is cross-checked before backup, migration and restore.
+  WAL is enabled during controlled initialization, with a 10-second busy
+  timeout on app and backup connections. WAL-safe backup/restore includes
+  committed content and never replays stale sidecar files.
 - **Working-shift default colours.** M900–A121 default to white; existing
   custom colours, labels and times are preserved by the v12 migration.
 

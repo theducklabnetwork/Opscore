@@ -162,7 +162,7 @@ class ActionFixture(unittest.TestCase):
         from ducklab import store_ops_db
         v1db = Path(self._tmp.name) / "v1.db"
         conn = sqlite3.connect(v1db)
-        conn.executescript(store_ops_db._SCHEMA_V1)
+        store_ops_db._apply_v1(conn)
         conn.execute("PRAGMA user_version = 1")
         conn.execute(
             "INSERT INTO stores (code, name) VALUES ('X9', 'Legacy')")

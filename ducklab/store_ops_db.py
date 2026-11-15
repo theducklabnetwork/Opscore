@@ -19,7 +19,9 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
+
+SQLITE_BUSY_TIMEOUT_MS = 10_000
 
 
 class SchemaVersionError(RuntimeError):
@@ -32,6 +34,32 @@ def require_compatible_schema(current: int) -> None:
             f"Database schema v{current} is newer than this app "
             f"(v{SCHEMA_VERSION}). Upgrade Opscore or restore a compatible "
             "backup; no changes were made.")
+
+
+def require_consistent_schema(conn: sqlite3.Connection, current: int) -> None:
+    """Require the audit trail to contain exactly versions 1 through current."""
+    if current == 0:
+        return
+    audit_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'schema_migrations'"
+    ).fetchone()
+    if audit_table is None:
+        raise SchemaVersionError(
+            f"Database schema v{current} has no schema_migrations audit table. "
+            "Restore a consistent Opscore backup; no changes were made."
+        )
+    versions = [
+        row[0] for row in conn.execute(
+            "SELECT version FROM schema_migrations ORDER BY version")
+    ]
+    expected = list(range(1, current + 1))
+    if versions != expected:
+        raise SchemaVersionError(
+            f"Database schema v{current} does not match its migration audit "
+            f"(expected versions 1–{current}, found {versions or 'none'}). "
+            "Restore a consistent Opscore backup; no changes were made."
+        )
 
 # Reference data defined by the workbook (Store_Operations_Monitoring_v4.xlsx,
 # Daily sheet columns T-AF and Guide definitions). contribution_sign:
@@ -248,8 +276,9 @@ def connect(db_path: Path | str | sqlite3.Connection = DB_PATH) -> sqlite3.Conne
     """Open a foreign-key-enabled connection, or share a transaction's one."""
     if isinstance(db_path, sqlite3.Connection):
         return _SharedConnection(db_path, _TRANSACTION_STATES.get(db_path))
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
@@ -283,6 +312,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
     try:
         current = conn.execute("PRAGMA user_version").fetchone()[0]
         require_compatible_schema(current)
+        require_consistent_schema(conn, current)
         if existed and current < SCHEMA_VERSION and backup_before_migration:
             # Local import avoids backup.py's module-level store_ops_db import.
             from ducklab import backup
@@ -303,6 +333,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (12, _apply_v12),
             (13, _apply_v13),
             (14, _apply_v14),
+            (15, _apply_v15),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -316,6 +347,9 @@ def init_db(db_path: Path | str = DB_PATH, *,
                 conn.rollback()
                 raise
             current = version
+        # Journal mode cannot change inside a migration transaction. Enable
+        # WAL only after compatibility/audit checks and successful migrations.
+        conn.execute("PRAGMA journal_mode = WAL").fetchone()
     finally:
         conn.close()
 
@@ -670,3 +704,103 @@ def _apply_v14(conn: sqlite3.Connection) -> None:
         "code = 'OPH', assignment_source = 'auto_holiday'"
     )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (14)")
+
+
+_AUTH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS auth_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    password_changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS auth_roles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS auth_user_roles (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id),
+    role_id INTEGER NOT NULL REFERENCES auth_roles(id),
+    assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth_user_store_assignments (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id),
+    store_id INTEGER NOT NULL REFERENCES stores(id),
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    revoked_at TEXT,
+    PRIMARY KEY (user_id, store_id)
+);
+
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL REFERENCES auth_users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS auth_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES auth_users(id),
+    event_type TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_auth_audit_user ON auth_audit_events(user_id);
+
+CREATE TABLE IF NOT EXISTS auth_page_tours (
+    user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+    page_key TEXT NOT NULL,
+    completed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, page_key)
+);
+
+CREATE TABLE IF NOT EXISTS auth_recovery_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE REFERENCES auth_users(id) ON DELETE CASCADE,
+    key_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    used_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS auth_login_failures (
+    key TEXT NOT NULL,
+    failed_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_login_failures_key
+    ON auth_login_failures(key, failed_at);
+"""
+
+AUTH_ROLES = (
+    "super_admin", "administrator", "zone_manager", "branch_manager", "viewer",
+)
+
+
+def _apply_v15(conn: sqlite3.Connection) -> None:
+    """Bring all authentication tables and additive columns under migration."""
+    _execute_schema(conn, _AUTH_SCHEMA)
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(auth_users)")
+    }
+    if "tour_done" not in columns:
+        conn.execute(
+            "ALTER TABLE auth_users ADD COLUMN tour_done "
+            "INTEGER NOT NULL DEFAULT 0 CHECK (tour_done IN (0, 1))"
+        )
+    conn.executemany(
+        "INSERT OR IGNORE INTO auth_roles (name) VALUES (?)",
+        ((role,) for role in AUTH_ROLES),
+    )
+    conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (15)")

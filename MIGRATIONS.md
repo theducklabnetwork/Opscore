@@ -38,7 +38,7 @@ data. There is no separate auth database.
 
 ## 3. Current schema version
 
-**Schema version: 14** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
+**Schema version: 15** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
 
 You can see the schema version of a running installation in **Settings →
 About**.
@@ -53,24 +53,30 @@ Two mechanisms track the schema version:
   **source of truth** the migration runner reads to decide which steps to
   apply.
 - **`schema_migrations`** — an audit table with one row per applied version
-  (`version`, `applied_at`). It is written but never read for decisions.
+  (`version`, `applied_at`). It does not choose which migrations run, but is
+  cross-checked before changes: version N must have exactly rows 1 through N.
 
-The two are written together inside each migration's transaction, so they
-cannot drift under normal operation.
+Missing versions, unexpected/future versions and a missing audit table for a
+nonzero version are rejected with an actionable consistency error before a
+backup, migration or restore. A version-zero database initializes normally.
 
 ### The runner
 
 `init_db(db_path)`:
 
-1. Reads `PRAGMA user_version` and refuses a version newer than the app.
+1. Reads `PRAGMA user_version`, refuses a version newer than the app, then
+   validates that `schema_migrations` contains exactly versions `1…N`.
 2. If an existing database has pending migrations, saves a consistent
    pre-migration copy before the first transaction. Backup failure aborts
    migration without changing the live database.
-3. Iterates a static, ordered list `(1, _apply_v1) … (14, _apply_v14)`.
+3. Iterates a static, ordered list `(1, _apply_v1) … (15, _apply_v15)`.
 4. Skips versions `<= current`.
 5. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
    COMMIT`, rolling back the whole step on any error.
 6. Re-running after success is a no-op and creates no additional backup.
+7. After successful checks/migrations, controlled initialization enables WAL.
+   Application and backup connections use a 10-second busy timeout and always
+   enforce foreign keys. WAL is not enabled by the generic desktop preflight.
 
 Migrations are **strictly linear and forward-only**. There are no down
 migrations and no branching.
@@ -90,15 +96,17 @@ initialization is idempotent and non-destructive.
 
 ### Authentication schema
 
-`auth_db.init_auth(db_path)` runs **after** `store_ops_db.init_db()`. It
-creates the `auth_*` tables with `CREATE TABLE IF NOT EXISTS`, seeds the five
-roles, and applies additive column migrations (for example `tour_done`) via
-column-existence probes. This is **additive and idempotent but unversioned**:
-there is no auth-specific version counter. The `auth_login_failures`
-rate-limiting table is created lazily on first use.
+Schema **v15** is the authentication baseline. The shared migration runner
+creates all `auth_*` tables and indexes, seeds the five roles, adds
+`auth_users.tour_done` when absent, and creates `auth_login_failures` with its
+index in the same transaction. Existing accounts, roles, store assignments,
+sessions, recovery keys, completed tours and login-failure records survive the
+v14 → v15 upgrade. Initialization remains additive and idempotent.
 
-`AuthService.__init__` calls `init_auth`, and every `AppService` construction
-ensures both base and auth schema exist.
+`auth_db.init_auth()` is a thin compatibility wrapper around `init_db()`; there
+is no second schema definition. `AuthService.__init__` calls it, and persistent
+rate limiting assumes the initialized v15 schema. Isolated unit tests can still
+use the in-memory limiter backend.
 
 ## 5. Migration naming and ordering conventions
 
@@ -112,7 +120,7 @@ ensures both base and auth schema exist.
 
 ## 6. Schema history
 
-The complete v1–v14 history, from the migration functions in
+The complete v1–v15 history, from the migration functions in
 `ducklab/store_ops_db.py`:
 
 | Version | Change | Type |
@@ -131,13 +139,14 @@ The complete v1–v14 history, from the migration functions in
 | **v12** | `daily_records.leave_emergency` stores actual Emergency Leave. `schedule_entries.assignment_source` distinguishes manual assignments from automatic ABM public-holiday OPH. Seeds RPL and changes only known default M900–A121 colours to white, preserving custom labels/times/colours. | Additive + safe data update |
 | **v13** | `shift_codes.show_in_legend` controls inclusion in the generated View legend. Existing codes default to included. | Additive |
 | **v14** | Configured public holidays replace all ABM assignments with automatic OPH, including existing manual shifts. Other staff and non-holiday assignments are unchanged. | Safe data update |
+| **v15** | Versioned authentication baseline: all auth tables/indexes, five roles, additive `tour_done`, and persistent `auth_login_failures`. Existing auth records are preserved. | Additive baseline |
 
 ## 7. Migration execution process
 
 Migrations run automatically; no operator action is required.
 
-1. On app start, importing the application constructs `AuthService`, which
-   calls `init_auth`, which calls `init_db`. Pending base migrations apply
+1. On app start, importing the application constructs `AuthService`, whose
+   compatibility `init_auth` calls `init_db`. Pending base/auth migrations apply
    **at import/startup time**, before any request is served.
 2. Two Reflex lifespan tasks then run:
    - `seed_default_expense_categories` — inserts the ten default categories
@@ -198,10 +207,17 @@ consistent copy while the app is running. The UI downloads it as
    - `PRAGMA foreign_key_check` must return no violations.
    - Required tables and columns must be present.
    - `user_version` must not exceed the app's `SCHEMA_VERSION` (newer
-     databases are rejected with "upgrade the app first").
+     databases are rejected with "upgrade the app first"), and the audit table
+     must exactly match versions 1 through that version.
 3. Run `init_db(..., backup_before_migration=False)` on the copy to migrate
    it forward without a redundant temporary-copy backup, then re-validate.
-4. `os.replace` atomically swaps the live database for the validated copy.
+4. SQLite's online backup API normalizes the self-contained upload into a
+   private copy without trusting uploaded sidecars. Backups created by Opscore
+   already include all committed WAL content.
+   The live database is checkpointed and quiesced, old WAL/SHM state is removed,
+   and `os.replace` atomically swaps in the validated copy. Open connections
+   must finish and close; otherwise replacement fails without mixing old WAL
+   state into the restored database.
 
 Before the replace, `save_pre_restore_backup` copies the current database to
 `backups/pre-restore-<timestamp>.db` next to it. Pre-migration and pre-restore
@@ -233,7 +249,8 @@ current session is signed out.
 | Manual backup | **Settings → Data → Download Backup** | Downloaded file you keep; never pruned |
 | Pre-migration backup | Pending startup migration | `backups/pre-migration-vN-to-vM-<timestamp>.db`; shared newest-10 retention |
 | Pre-restore backup | Restore flow | `backups/pre-restore-<timestamp>.db`; shared newest-10 retention |
-| Numbered fresh-start copy | Keep/fresh choice → Start fresh | `store_ops.db.backup-N` next to the database |
+| Numbered fresh-start copy | Keep/fresh choice → Start fresh | `store_ops.db.backup-N` next to the database; newest 10 retained after successful creation |
+| Old WebView profile | Desktop version/profile replacement | `webview.old-<timestamp>`; newest 3 retained during startup |
 | Recovery-script backup | `scripts/recover_admin_password.py` | `<db>.bak-<timestamp>` next to the database |
 
 To undo a restore, restore the relevant pre-restore backup through the same
@@ -250,16 +267,16 @@ work.
 - **Automatic backups are local.** The newest 10 pre-migration and
   pre-restore copies are retained beside the database; keep a separate
   downloaded backup for device-loss protection.
-- **Unversioned authentication schema.** `auth_db` uses idempotent,
-  additive-only initialization with column probes rather than a version
-  counter; `auth_login_failures` is created lazily outside any migration.
-- **Dual version bookkeeping is not cross-checked.** `user_version` drives
-  decisions; `schema_migrations` is audit metadata only.
 - **v4 and v11 are destructive** by design (reference-data rebuild; fixed-RM
   budgets cleared in favour of percentages) and are the sanctioned
   exceptions to the additive-only rule.
-- **No WAL or explicit busy-timeout tuning.** SQLite defaults are used, which
-  suits the single-user desktop model.
+- **WAL with bounded lock waiting.** Controlled initialization enables WAL and
+  connections wait up to 10 seconds for locks. Restore still requires active
+  connections to finish/close before the live file can be replaced safely.
+- **Generated-artifact cleanup is bounded and selective.** Exact-name,
+  non-symlink pre-migration/pre-restore and fresh-start backups retain 10;
+  replaced WebView profiles retain 3. Manual downloads and recovery-script
+  backups are never deleted automatically. Pruning failures are non-fatal.
 
 ## 13. Developer guide: adding a future migration
 
@@ -288,7 +305,5 @@ Follow these rules when raising `SCHEMA_VERSION`:
 
 ### Recommendations for future hardening
 
-These are recommendations, not current behavior:
-
-- Add a version counter for the authentication schema.
-- Cross-check `schema_migrations` against `user_version` at startup.
+Keep future migrations additive, transactional and covered by upgrade/failure
+fixtures, including WAL-enabled databases and realistic authentication records.
