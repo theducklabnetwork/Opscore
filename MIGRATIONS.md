@@ -215,9 +215,10 @@ consistent copy while the app is running. The UI downloads it as
    private copy without trusting uploaded sidecars. Backups created by Opscore
    already include all committed WAL content.
    The live database is checkpointed and quiesced, old WAL/SHM state is removed,
-   and `os.replace` atomically swaps in the validated copy. Open connections
-   must finish and close; otherwise replacement fails without mixing old WAL
-   state into the restored database.
+   and only then does `os.replace` atomically swap in the validated copy. A
+   sidecar cleanup failure therefore occurs before replacement and leaves the
+   live database unrestored. Open connections must finish and close; otherwise
+   replacement fails without mixing old WAL state into the restored database.
 
 Before the replace, `save_pre_restore_backup` copies the current database to
 `backups/pre-restore-<timestamp>.db` next to it. Pre-migration and pre-restore

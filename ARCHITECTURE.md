@@ -374,8 +374,9 @@ are seeded per store only when a store has no categories.
   required tables and columns, not be from a newer schema, and have exactly
   the migration audit rows `1…user_version`. Uploads are self-contained `.db`
   files; arbitrary uploaded `-wal`/`-shm` siblings are ignored. Older schemas
-  are migrated on the temporary copy, which atomically replaces the live
-  database only after all checks pass and live WAL connections are quiesced.
+  are migrated on the temporary copy. Once live WAL connections are quiesced,
+  stale WAL/SHM sidecars are removed before the atomic replacement, so cleanup
+  failure leaves the live database unrestored.
 - Before pending migrations and every restore, the current database is copied
   into `backups/` next to it. The newest 10 automatic copies are listed in
   Settings and retained; manual and recovery artifacts are never pruned.
@@ -635,9 +636,17 @@ there to stop Opscore.
   migrations. Application and backup connections enable foreign keys and a
   **10-second busy timeout**. Online backups include committed WAL content.
   Restore normalizes uploads through SQLite's backup API, validates the staged
-  copy, checkpoints/quiesces the live database, atomically replaces the main
-  file and removes stale sidecars. Existing live connections must finish and
-  close before WAL-enabled replacement can proceed.
+  copy, checkpoints/quiesces the live database, removes stale sidecars and
+  atomically replaces the main file. Sidecar cleanup precedes replacement, so
+  a cleanup error cannot be misreported as leaving an installed restore
+  untouched. Existing live connections must finish and close before
+  WAL-enabled replacement can proceed.
+- `AppService.transaction()` shares one connection across its fixed read,
+  write, authentication and snapshot participants. Repository commit/close
+  calls defer to the outer owner; rollback and SQL errors mark the scope
+  failed so a caught inner error cannot lead to an outer commit. Nested or
+  overlapping transactions on one `AppService` are rejected rather than
+  mutating the active shared-connection state.
 - Launcher and backend output share a continuously drained, launcher-owned
   logging sink. The active log rotates at **5 MiB** with **three archives**
   during runtime as well as at startup; worker-child output uses the inherited
