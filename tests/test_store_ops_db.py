@@ -428,7 +428,7 @@ class TestV12Migration(unittest.TestCase):
                     "manual",
                 )
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 14
+                    conn.execute("PRAGMA user_version").fetchone()[0], 15
                 )
             finally:
                 conn.close()
@@ -536,12 +536,179 @@ class TestV13Migration(unittest.TestCase):
             conn = store_ops_db.connect(db_path)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 14)
+                    conn.execute("PRAGMA user_version").fetchone()[0], 15)
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM shift_codes WHERE show_in_legend = 1"
                 ).fetchone()[0], len(store_ops_db.SHIFT_CODES))
             finally:
                 conn.close()
+
+
+class TestV15AuthenticationMigration(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "auth-migration.db"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def make_v14(self):
+        for version in range(1, 15):
+            conn = store_ops_db.connect(self.db_path)
+            getattr(store_ops_db, f"_apply_v{version}")(conn)
+            conn.execute(f"PRAGMA user_version = {version}")
+            conn.commit()
+            conn.close()
+
+    def test_v14_auth_records_upgrade_losslessly(self):
+        self.make_v14()
+        conn = store_ops_db.connect(self.db_path)
+        store_ops_db._apply_v15(conn)
+        conn.execute("INSERT INTO auth_users (email, display_name, password_hash) "
+                     "VALUES ('old@example.com', 'Old Account', 'hash')")
+        user_id = conn.execute("SELECT id FROM auth_users").fetchone()[0]
+        conn.execute("INSERT INTO auth_sessions (token_hash, user_id, expires_at) "
+                     "VALUES ('session', ?, '2099-01-01')", (user_id,))
+        conn.execute("INSERT INTO auth_recovery_keys (user_id, key_hash) "
+                     "VALUES (?, 'recovery')", (user_id,))
+        conn.execute("UPDATE auth_users SET tour_done = 1 WHERE id = ?", (user_id,))
+        conn.execute("INSERT INTO auth_page_tours (user_id, page_key) VALUES (?, 'dashboard')",
+                     (user_id,))
+        conn.execute("INSERT INTO auth_roles (name) VALUES ('custom_role')")
+        role_id = conn.execute("SELECT id FROM auth_roles WHERE name = 'custom_role'").fetchone()[0]
+        conn.execute("INSERT INTO auth_user_roles VALUES (?, ?, datetime('now'))", (user_id, role_id))
+        store_id = conn.execute("INSERT INTO stores (code, name) VALUES ('OLD', 'Old Store')").lastrowid
+        conn.execute("INSERT INTO auth_user_store_assignments (user_id, store_id) VALUES (?, ?)",
+                     (user_id, store_id))
+        conn.execute("INSERT INTO auth_login_failures VALUES ('old@example.com', 123)")
+        conn.execute("DELETE FROM schema_migrations WHERE version = 15")
+        conn.execute("PRAGMA user_version = 14")
+        conn.commit()
+        conn.close()
+        store_ops_db.init_db(self.db_path, backup_before_migration=False)
+        conn = store_ops_db.connect(self.db_path)
+        try:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 15)
+            self.assertEqual(conn.execute("SELECT email FROM auth_users").fetchone()[0],
+                             "old@example.com")
+            self.assertEqual(conn.execute("SELECT token_hash FROM auth_sessions").fetchone()[0],
+                             "session")
+            self.assertEqual(conn.execute("SELECT key_hash FROM auth_recovery_keys").fetchone()[0],
+                             "recovery")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_login_failures").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT tour_done FROM auth_users").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT page_key FROM auth_page_tours").fetchone()[0],
+                             "dashboard")
+            self.assertEqual(conn.execute("SELECT name FROM auth_roles WHERE name = 'custom_role'").fetchone()[0],
+                             "custom_role")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM auth_user_store_assignments").fetchone()[0], 1)
+            self.assertIn("tour_done", {
+                row[1] for row in conn.execute("PRAGMA table_info(auth_users)")})
+            before = list(conn.iterdump())
+        finally:
+            conn.close()
+        store_ops_db.init_db(self.db_path)
+        conn = store_ops_db.connect(self.db_path)
+        self.assertEqual(list(conn.iterdump()), before)
+        conn.close()
+
+
+class TestSchemaConsistency(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "consistent.db"
+        store_ops_db.init_db(self.db_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def assert_rejected_without_changes(self, setup):
+        conn = sqlite3.connect(self.db_path)
+        setup(conn)
+        conn.commit()
+        conn.close()
+        before = self.db_path.read_bytes()
+        with self.assertRaisesRegex(store_ops_db.SchemaVersionError, "no changes were made"):
+            store_ops_db.init_db(self.db_path)
+        self.assertEqual(self.db_path.read_bytes(), before)
+        self.assertFalse((self.db_path.parent / "backups").exists())
+
+    def test_missing_audit_row_is_rejected(self):
+        self.assert_rejected_without_changes(
+            lambda conn: conn.execute("DELETE FROM schema_migrations WHERE version = 2"))
+
+    def test_future_audit_row_is_rejected(self):
+        self.assert_rejected_without_changes(
+            lambda conn: conn.execute("INSERT INTO schema_migrations VALUES (999, datetime('now'))"))
+
+    def test_missing_audit_table_is_rejected(self):
+        self.assert_rejected_without_changes(
+            lambda conn: conn.execute("DROP TABLE schema_migrations"))
+
+    def test_version_zero_database_initializes_normally(self):
+        empty = self.db_path.with_name("empty.db")
+        sqlite3.connect(empty).close()
+        store_ops_db.init_db(empty)
+        conn = sqlite3.connect(empty)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 15)
+        conn.close()
+
+
+class TestSQLiteWALAndLockWaiting(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tmp.name) / "wal.db"
+        store_ops_db.init_db(self.db_path)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_wal_timeout_and_foreign_keys_are_active(self):
+        conn = store_ops_db.connect(self.db_path)
+        self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
+        self.assertEqual(conn.execute("PRAGMA busy_timeout").fetchone()[0], 10000)
+        self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        conn.close()
+
+    def test_competing_writer_waits_for_lock_instead_of_failing_immediately(self):
+        import threading
+        import time
+
+        writer = store_ops_db.connect(self.db_path)
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute("INSERT INTO stores (code, name) VALUES ('LOCK', 'Waiting')")
+        finished = []
+
+        def compete():
+            competing = store_ops_db.connect(self.db_path)
+            try:
+                competing.execute("INSERT INTO stores (code, name) VALUES ('NEXT', 'Next')")
+                competing.commit()
+                finished.append(time.monotonic())
+            finally:
+                competing.close()
+
+        started = time.monotonic()
+        thread = threading.Thread(target=compete)
+        thread.start()
+        time.sleep(0.2)
+        self.assertTrue(thread.is_alive())
+        writer.commit()
+        thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertGreaterEqual(finished[0] - started, 0.15)
+        writer.close()
+
+    def test_reader_can_read_while_writer_transaction_is_open(self):
+        writer = store_ops_db.connect(self.db_path)
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute("INSERT INTO stores (code, name) VALUES ('WAL', 'Writer')")
+        reader = store_ops_db.connect(self.db_path)
+        self.assertEqual(reader.execute("SELECT COUNT(*) FROM stores").fetchone()[0], 0)
+        writer.commit()
+        self.assertEqual(reader.execute("SELECT COUNT(*) FROM stores").fetchone()[0], 1)
+        writer.close()
+        reader.close()
 
 
 class TestMigrationAtomicity(unittest.TestCase):
@@ -630,7 +797,7 @@ class TestMigrationSafety(unittest.TestCase):
     def test_existing_database_is_backed_up_before_migration(self):
         store_ops_db.init_db(self.db_path)
         copies = list((self.db_path.parent / "backups").glob(
-            "pre-migration-v1-to-v14-*.db"))
+            "pre-migration-v1-to-v15-*.db"))
         self.assertEqual(len(copies), 1)
         conn = sqlite3.connect(copies[0])
         self.assertEqual(conn.execute("SELECT value FROM marker").fetchone()[0],
@@ -670,7 +837,7 @@ class TestMigrationSafety(unittest.TestCase):
         store_ops_db.connect(empty).close()
         store_ops_db.init_db(empty)
         self.assertEqual(len(list((self.db_path.parent / "backups").glob(
-            "pre-migration-v0-to-v14-*.db"))), 1)
+            "pre-migration-v0-to-v15-*.db"))), 1)
 
     def test_backup_can_be_disabled_for_temporary_restore_copy(self):
         store_ops_db.init_db(self.db_path, backup_before_migration=False)

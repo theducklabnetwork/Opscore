@@ -60,8 +60,10 @@ folder and double-click `Opscore.cmd`.
 
 When you install or upgrade and an existing database is found, Opscore asks
 whether to use the existing database (the default) or start fresh. Choosing
-**Start fresh** renames the existing file to `store_ops.db.backup-1` (or the
-next free number), so your old data is never deleted.
+**Start fresh** saves a self-contained copy of the existing database as
+`store_ops.db.backup-1` (or the next free number). The newest 10 fresh-start
+copies are retained; pruning happens only after a new copy succeeds.
+Downloaded backups are never pruned automatically.
 
 On Windows, the installer asks this question during setup. On Linux, the
 question appears on the first launch after installing or upgrading.
@@ -462,12 +464,17 @@ replaces the previous key immediately.
 - **Restore** saves the current database automatically, then validates and
   migrates a temporary copy of the uploaded backup. Checks include SQLite
   integrity, foreign keys, required tables and columns, and schema
-  compatibility. Only a valid temporary copy replaces the live database; the
-  pre-restore backup is kept so a restore can be undone.
+  compatibility and migration-audit consistency. Use the self-contained `.db`
+  file produced by **Download Backup**; do not upload separate `-wal` or `-shm`
+  files. Only a valid temporary copy replaces the live database; the
+  pre-restore backup is kept so a restore can be undone. If another database
+  operation is still active, Opscore waits for it; a restore that cannot safely
+  quiesce open connections is refused without mixing old and restored data.
 - **Automatic backups** are also created before pending startup migrations.
   **Settings → Data** lists pre-migration and pre-restore copies together.
-  Only the newest 10 recognized automatic copies are retained. Downloaded
-  backups, fresh-start copies and recovery-script copies are never pruned.
+  Only the newest 10 recognized automatic copies are retained. Fresh-start
+  copies have their own newest-10 policy. Downloaded backups and
+  recovery-script copies are never pruned automatically.
 - **Restore replaces everything, including logins and passwords** — they come
   from the restored file — and you are signed out afterwards.
 
@@ -547,9 +554,9 @@ selecting 2021 while viewing November selects December 2021.
 
 **Where is the log?** `opscore.log` in your data directory
 (`~/.local/share/opscore` on Linux, `%LOCALAPPDATA%\Opscore` on Windows).
-At startup, a log of 5 MiB or more rotates to `opscore.log.1`; three rotated
-archives are retained. A continuously running app's active log can exceed
-5 MiB until the next restart.
+At startup and while Opscore is running, a log larger than 5 MiB rotates to
+`opscore.log.1`; three rotated archives are retained. Launcher, backend and
+worker diagnostics continue to reach the log across rotation.
 
 **The app says my database schema is newer.** Install a current Opscore
 release, or restore a compatible backup. Older versions refuse to modify a

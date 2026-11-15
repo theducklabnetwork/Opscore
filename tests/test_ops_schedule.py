@@ -31,7 +31,7 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 14)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 15)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])
@@ -390,11 +390,7 @@ class ScheduleTests(unittest.TestCase):
     def test_employment_type_migration_preserves_staff_as_not_set(self):
         path = Path(self.tmp.name) / "migration.db"
         conn = store_ops_db.connect(path)
-        conn.executescript(store_ops_db._SCHEMA_V1)
-        conn.executemany(
-            "INSERT OR IGNORE INTO stock_loss_codes "
-            "(code, name, contribution_sign) VALUES (?, ?, ?)",
-            store_ops_db.STOCK_LOSS_CODES)
+        store_ops_db._apply_v1(conn)
         conn.execute("PRAGMA user_version = 1")
         for version, apply in ((2, store_ops_db._apply_v2),
                                (3, store_ops_db._apply_v3),
@@ -414,7 +410,7 @@ class ScheduleTests(unittest.TestCase):
         conn = store_ops_db.connect(path)
         row = conn.execute("SELECT employment_type FROM staff").fetchone()
         self.assertEqual(row["employment_type"], "Not Set")
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 14)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], store_ops_db.SCHEMA_VERSION)
         self.assertIn(8, [r["version"] for r in conn.execute(
             "SELECT version FROM schema_migrations")])
         conn.close()

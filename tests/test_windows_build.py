@@ -386,6 +386,14 @@ class TestBuildScriptStructure(unittest.TestCase):
         self.assertIn('"packaging\\opscore_tray.py"', self.lib)
         self.assertIn('import reflex, granian, argon2, openpyxl, reportlab, webview, pystray, PIL', self.build)
 
+    def test_folder_build_exposes_only_intended_parameters(self):
+        parameters = self.build[self.build.index("param("):self.build.index(")\n\nSet-StrictMode")]
+        for name in ("Version", "PythonVersion", "PythonBuildStandaloneTag",
+                     "OutputName", "AllowReleaseOutput"):
+            self.assertIn(f"${name}", parameters)
+        self.assertNotIn("AllowOverwrite", parameters)
+        self.assertEqual(parameters.count("[switch]"), 1)
+
     def test_default_output_is_a_candidate_folder(self):
         self.assertIn('$OutputName = if ($AllowReleaseOutput) { "Opscore" } else { "Opscore-candidate" }',
                       self.build)

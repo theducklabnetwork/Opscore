@@ -179,14 +179,9 @@ class _RateLimiter:
         self._lock = threading.Lock()
 
     def _conn(self) -> sqlite3.Connection:
-        conn = store_ops_db.connect(self._db_path)
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS auth_login_failures ("
-            "key TEXT NOT NULL, failed_at REAL NOT NULL)")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_auth_login_failures_key "
-            "ON auth_login_failures(key, failed_at)")
-        return conn
+        # Persistent limiters require the v15 schema; initialization owns all
+        # table creation so request paths never migrate the database lazily.
+        return store_ops_db.connect(self._db_path)
 
     def _now(self) -> float:
         # Persisted records use wall time (CLOCK_MONOTONIC differs across

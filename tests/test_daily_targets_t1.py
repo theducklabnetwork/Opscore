@@ -181,8 +181,8 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "v2.db"
             conn = sqlite3.connect(db)
-            conn.executescript(store_ops_db._SCHEMA_V1)
-            conn.executescript(store_ops_db._SCHEMA_V2)
+            store_ops_db._apply_v1(conn)
+            store_ops_db._apply_v2(conn)
             conn.execute("PRAGMA user_version = 2")
             conn.execute("INSERT INTO stores (code, name, concept) "
                          "VALUES ('X1', 'Legacy', 'Kiosk')")
@@ -220,9 +220,8 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "v3.db"
             conn = sqlite3.connect(db)
-            for script in (store_ops_db._SCHEMA_V1, store_ops_db._SCHEMA_V2,
-                           store_ops_db._SCHEMA_V3):
-                conn.executescript(script)
+            for version in (1, 2, 3):
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
             conn.execute("PRAGMA user_version = 3")
             conn.execute("INSERT INTO basket_benchmarks VALUES "
                          "('Mall', 'Johor', 25.5, 3.2)")

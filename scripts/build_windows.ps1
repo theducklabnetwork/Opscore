@@ -13,8 +13,7 @@ param(
     [string]$PythonVersion = "3.14.10",
     [string]$PythonBuildStandaloneTag = "20261026",
     [string]$OutputName = "",
-    [switch]$AllowReleaseOutput,
-    [switch]$AllowOverwrite
+    [switch]$AllowReleaseOutput
 )
 
 Set-StrictMode -Version Latest

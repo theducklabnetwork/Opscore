@@ -37,7 +37,7 @@ flowchart TB
         Services --> Repo --> DB
     end
     FE <-- "WebSocket (Reflex events) + POST /api/session" --> Pages
-    DB --> SQLite[("SQLite database<br/>schema v10")]
+    DB --> SQLite[("SQLite database<br/>schema v15")]
 ```
 
 ## 2. Technology
@@ -59,8 +59,9 @@ flowchart TB
 
 Direct dependencies are listed in `requirements.txt`. All transitive versions
 are pinned in `requirements.lock`, which is what builds use.
-`requirements-dev.txt` adds test-only tooling (pytest, Playwright) and is
-never installed in production.
+`requirements-dev.txt` adds test-only tooling (pytest, Playwright and the
+httpx2 backend used by Starlette's TestClient) and is never installed in
+production.
 
 ## 3. Layers and rules
 
@@ -133,7 +134,7 @@ Latest-version lookups and the Finalized version list include only rows with
 ## 4. Data model
 
 One SQLite file holds both operations data and accounts. Schema version is
-tracked in `schema_migrations` and `PRAGMA user_version` (currently **13**).
+tracked in `schema_migrations` and `PRAGMA user_version` (currently **15**).
 Initialization is idempotent and migrations are additive. Each migration runs
 in its own transaction, and its `PRAGMA user_version` update commits in that
 same transaction; a failure rolls back the whole step so it can be retried.
@@ -205,7 +206,7 @@ application checks.
 | `auth_audit_events` | Sign-in, password and admin events |
 | `auth_page_tours` | Which page tours each user has completed |
 | `auth_recovery_keys` | SHA-256 hashes of single-use recovery keys |
-| `auth_login_failures` | Rate-limiting counters, created lazily |
+| `auth_login_failures` | Persistent rate-limiting failure timestamps, created by v15 |
 
 ## 5. KPI engine (`kpi.py`)
 
@@ -213,12 +214,12 @@ Pure functions with no database or UI access. The main groups:
 
 | Area | Rules |
 |---|---|
-| Sales | Days entered, sales to date, projected month-end sales (actual if every day is entered, otherwise sales ÷ days entered × days in month) |
+| Sales | Days entered, sales to date, projected month-end sales (actual if every day is entered, otherwise sales ÷ days entered × days in month); daily Contribution is the imported share normalized by the month's total shares |
 | Target levels | Level 1 = base. Levels 2 to 4 = Level 1 × (1 + uplift). Level 4 is never below the minimum RTM target. Highest level reached. |
 | Basket | BV = sales ÷ transactions. UPT = units per transaction. ASP = sales ÷ units. Blank when the divisor is 0 or missing. |
 | Daily targets | Each day's target = Level 1 × that day's contribution share (weekday or public holiday, by State and Concept). A shortfall carries forward to the next *reported* day only. |
 | Expenses | Paid, incurred and pending totals, budget status, lines needing review |
-| Manpower | Salary ratio and status, salary budget, headcount variance, turnover |
+| Manpower | Salary ratio and status, salary budget, FT-only headcount variance and turnover, effective staff-days, PT active/average/peak attendance and PT contribution |
 | Stock | Total Loss from signed loss codes, loss ratio against target |
 | Actions | Month scope, open, overdue and completed counts |
 
@@ -254,8 +255,9 @@ lines. `schedule_pdf.py` writes fitted A4-landscape PDFs directly to the
 store/week schedule folder; no browser print dialog or popup is involved.
 
 Store/month public holidays appear as PH markers. `assignment_source` tracks
-automatic ABM-only OPH entries, added only to blank cells and removed only
-when their holiday disappears. Manual assignments and other staff are intact.
+automatic ABM-only OPH entries: on a holiday, every ABM assignment becomes OPH,
+including an existing manual shift; other staff and non-holiday assignments are
+unchanged. Removing a holiday clears only its automatic OPH assignments.
 
 ## 6. Security model
 
@@ -357,9 +359,11 @@ global configuration permission before reading the file and rejects uploads
 larger than 64 MiB.
 
 The Git-tracked default workbook `ducklab/data/DSCSPR_alias_2027.xlsx` is
-loaded by `reference_bootstrap.py` only when both reference tables are empty.
-It is bundled into `.deb` and Windows builds. Default expense categories are
-seeded per store only when a store has no categories.
+loaded by `reference_bootstrap.py` when both reference tables are empty. It is
+also refreshed when the stored copy came from the bundle but no longer matches
+the bundled workbook; user-uploaded reference data is never replaced. The
+workbook is bundled into `.deb` and Windows builds. Default expense categories
+are seeded per store only when a store has no categories.
 
 ## 8. Backup and restore (`backup.py`)
 
@@ -367,9 +371,11 @@ seeded per store only when a store has no categories.
   running.
 - **Restore** checks a temporary copy of the uploaded file: it must be a real
   SQLite database, pass integrity and foreign-key checks, contain the
-  required tables and columns, and not be from a newer schema. Older schemas
+  required tables and columns, not be from a newer schema, and have exactly
+  the migration audit rows `1…user_version`. Uploads are self-contained `.db`
+  files; arbitrary uploaded `-wal`/`-shm` siblings are ignored. Older schemas
   are migrated on the temporary copy, which atomically replaces the live
-  database only after all checks pass.
+  database only after all checks pass and live WAL connections are quiesced.
 - Before pending migrations and every restore, the current database is copied
   into `backups/` next to it. The newest 10 automatic copies are listed in
   Settings and retained; manual and recovery artifacts are never pruned.
@@ -409,11 +415,11 @@ sequenceDiagram
         L->>L: Focus existing window, exit
     end
     L->>L: Probe 127.0.0.1:47811 /api/health<br/>fail if port is owned by another app
-    L->>L: Rotate log at 5 MiB (three archives)
+    L->>L: Startup log rotation, then launch shared rotating sink
     L->>L: Keep/fresh database choice (first launch of a version)
-    L->>L: Reject a database schema newer than this app
-    L->>B: Spawn backend process group<br/>env: DUCKLAB_DB_PATH, RELEASE_ID, prod flags
-    B->>B: Backup if migration pending; init_db / init_auth, lifespan seeding
+    L->>L: Reject newer or audit-inconsistent database
+    L->>B: Spawn backend with piped output<br/>env: DUCKLAB_DB_PATH, RELEASE_ID, prod flags
+    B->>B: Backup if migration pending; versioned init, lifespan seeding
     L->>B: Wait up to 90 s for /api/health
     L->>W: Open GTK/WebKit (Linux) or WebView2 (Windows)<br/>fallback: Edge app mode / Chromium / default browser
     U->>W: Use the app
@@ -446,16 +452,19 @@ continues without a tray icon.
 |---|---|---|
 | Data directory | `~/.local/share/opscore` | `%LOCALAPPDATA%\Opscore` |
 | Database | `store_ops.db` in the data directory | same |
-| Log | `opscore.log`; rotate at startup at 5 MiB, keep 3 archives | same |
+| Log | `opscore.log`; live/startup rotation above 5 MiB, keep 3 archives | same |
 | Automatic backups | `backups/`; pre-migration/pre-restore, newest 10 | same |
+| Fresh-start copies | `store_ops.db.backup-N`; newest 10 after successful creation | same |
+| Old native profiles | `webview.old-<timestamp>`; newest 3 | same |
 | Reflex state / uploads | `states/`, `uploaded_files/` | same |
 | Version/profile markers | `app_version.txt`, `webview`, `db-choice.json` | same |
-| Schedule CSV exports | `~/Documents/Opscore Schedules/` | `%USERPROFILE%\Documents\Opscore Schedules\` |
+| Schedule PDF/CSV exports | `~/Documents/Opscore Schedules/` | `%USERPROFILE%\Documents\Opscore Schedules\` |
 
-Backend stdout/stderr and launcher diagnostics are appended to `opscore.log`.
-Rotation occurs only while the launcher owns startup, before backend/worker
-processes open the file; a long-running active log can exceed 5 MiB until the
-next restart. Fatal startup errors also surface via a GTK dialog or zenity.
+Backend stdout/stderr and launcher diagnostics go through a launcher-owned,
+line-buffered rotating sink. A reader thread continuously drains the backend
+pipe so sustained output cannot block it; spawned workers inherit that pipe.
+Rotation and write failures are reported without crashing Opscore. Fatal
+startup errors also surface via a GTK dialog or the discovered zenity binary.
 
 ## 10. Build and packaging architecture
 
@@ -500,7 +509,11 @@ locked dependency set changes, the bundled runtime's pip is upgraded first
 and then `requirements.lock` plus `requirements-windows.txt` are installed.
 The Inno Setup script (`packaging/windows/opscore.iss`) compiles a per-user
 installer that preserves user data and offers the keep/fresh database choice
-when an existing database is detected. The build scripts do not sign the
+when an existing database is detected. Existing installer output is protected
+by default. After an explicit `-AllowReleaseOutput` folder build, deliberate
+release-installer replacement uses
+`ISCC.exe /DOPSCORE_ALLOW_OVERWRITE=1 packaging\windows\opscore.iss`; candidate
+builds also pass their version and package-name defines. The build scripts do not sign the
 installer. The published v1.2 installer was signed afterwards with a
 self-signed `Opscore Development` Authenticode certificate and a DigiCert
 timestamp. The signature protects file integrity but does not establish
@@ -608,17 +621,34 @@ there to stop Opscore.
 | `scripts/seed_ui_*.py` | Seed disposable dev databases for screenshots and browser tests |
 | `scripts/browser_test_*.py` | Playwright browser checks |
 
-## 13. Architectural constraints and known limitations
+## 13. Operational database and desktop safeguards
 
-| Limitation | Evidence |
-|---|---|
-| Zenity database-choice fallback references an undefined `opener` variable and can raise `NameError`, aborting startup when GTK is unavailable and zenity is present | `packaging/opscore_desktop.py:187` |
-| `-AllowOverwrite` is declared but unused by the Windows folder-build script (the installer-overwrite guard lives in the `.iss` `/DOPSCORE_ALLOW_OVERWRITE`) | `scripts/build_windows.ps1:17` |
-| Log rotation occurs only at startup; a continuously running active log can exceed 5 MiB until restart | `packaging/opscore_desktop.py` |
-| Authentication schema initialization is additive but unversioned; `auth_login_failures` is created lazily outside any migration | `auth_db.py`, `auth_service.py` |
-| `PRAGMA user_version` drives migration decisions; `schema_migrations` is audit metadata and is not cross-checked against it | `store_ops_db.py` |
-| No WAL or explicit busy-timeout tuning is configured | `store_ops_db.py` |
-| Numbered `store_ops.db.backup-N` copies, downloaded backups and old WebView profiles are not cleaned up automatically | Desktop launcher and `backup.py` |
+- Schema **v15** is the versioned authentication baseline. All auth tables,
+  indexes, roles, additive columns and persistent login throttling are created
+  transactionally by the shared migration runner. `auth_db.init_auth()` remains
+  only as a compatibility entry point.
+- `PRAGMA user_version` drives migration decisions, but its audit trail must
+  contain exactly `1…N`. Missing or extra migration rows, and a missing audit
+  table for nonzero versions, are rejected before backup or modification.
+  Restore applies the same validation.
+- Controlled initialization enables **WAL** after compatibility checks and
+  migrations. Application and backup connections enable foreign keys and a
+  **10-second busy timeout**. Online backups include committed WAL content.
+  Restore normalizes uploads through SQLite's backup API, validates the staged
+  copy, checkpoints/quiesces the live database, atomically replaces the main
+  file and removes stale sidecars. Existing live connections must finish and
+  close before WAL-enabled replacement can proceed.
+- Launcher and backend output share a continuously drained, launcher-owned
+  logging sink. The active log rotates at **5 MiB** with **three archives**
+  during runtime as well as at startup; worker-child output uses the inherited
+  pipe and logging failures do not crash Opscore.
+- Pre-migration/pre-restore copies and successful fresh-start copies retain the
+  newest **10**; replaced WebView profiles retain the newest **3**. Pruning is
+  best-effort, exact-name and non-symlink only, inside the data directory.
+  Manually downloaded backups and recovery-script backups are never pruned.
+- The Windows folder build uses only `-AllowReleaseOutput` to authorize release
+  publication. Deliberate installer replacement remains a separate Inno Setup
+  decision: `ISCC.exe /DOPSCORE_ALLOW_OVERWRITE=1 packaging\windows\opscore.iss`.
 
 ## 14. Repository layout
 
