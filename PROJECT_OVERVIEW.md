@@ -143,7 +143,8 @@ work-in-progress:
   `Documents/Opscore Schedules/<store>/<week>/`. Legacy individual files use
   `date,shift_code`; one combined MyESS batch file uses
   `employee_no,date,shift_code`. These are not browser downloads.
-- **Month selectors** offer the current month and the previous 11 months.
+- **Month and Year selectors** offer a rolling 60-month window: the current
+  month and the previous 59 months.
 - **No general CSV/Excel import** for daily records, expenses, staff or
   actions. The only workbook import is the DSC/SPR reference workbook.
 - **Finalized snapshots preserve KPI outputs**, not a full history of source

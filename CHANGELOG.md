@@ -46,6 +46,11 @@ Schema version: **14**.
 
 ### Changed
 
+- **Five-year month selection.** The combined month dropdown is now separate
+  **Month** and **Year** controls covering a rolling 60-month window (the
+  current month and the previous 59 months). Historical months without Monthly
+  Setup still show the configuration prompt, and selections outside the window
+  clamp to its nearest boundary.
 - **Contribution column matches the HQ workbook.** Sales Performance's daily
   table now shows each day's **normalized** share of the monthly target
   (1 decimal, e.g. 4.4%) instead of the raw imported DSC share. It is the

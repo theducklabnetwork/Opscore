@@ -44,6 +44,14 @@ def choose(page, trigger, option_text, wait_selector, timeout=25000):
     """Click a select trigger, pick an option. Retries on the flaky
     Radix/Reflex event race; success = wait_selector appears OR the
     trigger itself shows the chosen value."""
+    if trigger == "#month-selector":
+        month_name, year = option_text.rsplit(" ", 1)
+        if year not in page.locator("#year-selector").inner_text():
+            choose(page, "#year-selector", year, wait_selector,
+                   timeout=timeout)
+        choose(page, "#month-selector", month_name, wait_selector,
+               timeout=timeout)
+        return
     for _ in range(3):
         try:
             page.click(trigger)

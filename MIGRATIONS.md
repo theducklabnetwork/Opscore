@@ -38,7 +38,7 @@ data. There is no separate auth database.
 
 ## 3. Current schema version
 
-**Schema version: 13** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
+**Schema version: 14** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
 
 You can see the schema version of a running installation in **Settings →
 About**.

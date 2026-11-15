@@ -65,7 +65,7 @@ server deployment pipeline.
   `packaging/windows/opscore.iss` builds its installer.
 - `requirements.txt` lists direct dependencies, `requirements.lock` is the
   pinned desktop build manifest, and `requirements-dev.txt` is test-only.
-- `docs/MIGRATIONS.md` records the schema history and desktop upgrade rules.
+- `MIGRATIONS.md` records the schema history and desktop upgrade rules.
 
 Run the full verification suite with `.venv/bin/python -m pytest tests/ -q` and
 compile the production frontend using a disposable database.

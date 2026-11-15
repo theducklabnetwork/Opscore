@@ -55,6 +55,12 @@ def login(page, email, password):
 
 
 def choose(page, trigger, option_text):
+    if trigger == "#month-selector":
+        month_name, year = option_text.rsplit(" ", 1)
+        if year not in page.locator("#year-selector").inner_text():
+            choose(page, "#year-selector", year)
+        choose(page, "#month-selector", month_name)
+        return
     key = option_text.split(" — ")[0]
     for _ in range(4):
         try:
