@@ -112,6 +112,19 @@ question appears on the first launch after installing or upgrading.
 Dashboard and Monthly Report also offer **All Stores** in the Store selector,
 an aggregate across your assigned stores.
 
+### Accessibility and small-screen use
+
+Use **Tab** and **Shift+Tab** to move through controls; focused items have a
+visible outline. Hover over or focus underlined metric abbreviations such as
+**BV**, **UPT**, **ASP** and **SSSG** for their meaning. On a touchscreen, tap
+the abbreviation to open the same explanation, then tap elsewhere to close it.
+
+Charts include a short written explanation, and exact figures remain available
+in the page's detail tables. Where a value is shortened, hover over it or move
+keyboard focus to it to see the exact figure. Wider tables can be scrolled
+horizontally without moving the page itself. Opscore respects the device's
+reduced-motion preference and enlarges common controls for touch input.
+
 ### Deactivated stores
 
 A deactivated store becomes read-only and shows a banner: *"This store is

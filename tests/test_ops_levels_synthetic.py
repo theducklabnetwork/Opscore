@@ -170,6 +170,7 @@ class Fixture(unittest.TestCase):
         import ducklab.ops_sales_state as mod
         from ducklab.ops_sales_state import SalesState
         state = SalesState()
+        state.is_dark = True  # fixture asserts the dark-theme chart payload
         state.sp_compare = compare
         self.bound(mod, SalesState, state.load_sales_data, month=month)
         return state

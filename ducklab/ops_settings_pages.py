@@ -758,7 +758,7 @@ def _recovery_key_dialog() -> rx.Component:
                     rx.button(
                         rx.cond(S.rk_saving, rx.spinner(size="1"),
                                 rx.icon("key-round", size=14)),
-                        "Regenerate", color_scheme="indigo",
+                        "Regenerate", color_scheme="blue",
                         on_click=S.regenerate_recovery_key,
                         disabled=S.rk_saving, id="rk-confirm"),
                     spacing="3", justify="end", width="100%"),
@@ -787,14 +787,12 @@ def _account_tab() -> rx.Component:
                             S.set_pw_confirm, "pw-confirm"),
             rx.cond(S.pw_error != "", ds.error_callout(S.pw_error)),
             rx.cond(S.pw_notice != "",
-                    rx.callout(S.pw_notice, icon="circle-check",
-                               color_scheme="green", variant="soft",
-                               width="100%", id="pw-notice")),
+                    ui.success_callout(S.pw_notice, id="pw-notice")),
             rx.hstack(
                 rx.button(
                     rx.cond(S.pw_saving, rx.spinner(size="1"),
                             rx.icon("key-round", size=14)),
-                    "Change Password", color_scheme="indigo",
+                    "Change Password", color_scheme="blue",
                     on_click=S.change_password, disabled=S.pw_saving,
                     id="pw-save"),
                 spacing="3", align="center"),
@@ -820,7 +818,7 @@ def _account_tab() -> rx.Component:
                     rx.hstack(
                         rx.button("Download Kit",
                                   on_click=S.download_recovery_key,
-                                  color_scheme="indigo", size="2",
+                                  color_scheme="blue", size="2",
                                   id="rk-download"),
                         rx.button("I Saved It",
                                   on_click=S.clear_recovery_key,
@@ -831,16 +829,14 @@ def _account_tab() -> rx.Component:
             ),
             rx.cond(S.rk_error != "", ds.error_callout(S.rk_error)),
             rx.cond(S.rk_notice != "",
-                    rx.callout(S.rk_notice, icon="circle-check",
-                               color_scheme="green", variant="soft",
-                               width="100%", id="rk-notice")),
+                    ui.success_callout(S.rk_notice, id="rk-notice")),
             rx.hstack(
                 rx.button(
                     rx.cond(S.rk_saving, rx.spinner(size="1"),
                             rx.icon("key-round", size=14)),
                     rx.cond(S.rk_has_key, "Regenerate Recovery Key",
                             "Generate Recovery Key"),
-                    color_scheme="indigo", variant="soft",
+                    color_scheme="blue", variant="soft",
                     on_click=S.open_recovery_key_regen,
                     disabled=S.rk_saving, id="rk-regenerate"),
                 spacing="3", align="center"),
@@ -852,7 +848,7 @@ def _account_tab() -> rx.Component:
             rx.hstack(
                 rx.button(
                     rx.icon("route", size=14),
-                    "Replay Tour", color_scheme="indigo", variant="soft",
+                    "Replay Tour", color_scheme="blue", variant="soft",
                     on_click=S.replay_tour, id="tour-replay"),
                 spacing="3", align="center"),
             hint="Replay the welcome tour. It starts on the Dashboard.",
@@ -933,7 +929,7 @@ def _categories_section() -> rx.Component:
                      value=S.cat_new_name, on_change=S.set_cat_new_name,
                      id="cat-new-name"),
             rx.button(rx.icon("plus", size=14), "Add Category",
-                      color_scheme="indigo", on_click=S.add_category,
+                      color_scheme="blue", on_click=S.add_category,
                       disabled=S.cat_new_name.strip() == "",
                       id="cat-add"),
             spacing="3", align="center", width="100%"),
@@ -980,7 +976,7 @@ def _dsc_section() -> rx.Component:
             rx.button(
                 rx.cond(S.dsc_importing, rx.spinner(size="1"),
                         rx.icon("upload", size=14)),
-                "Import Workbook", color_scheme="indigo",
+                "Import Workbook", color_scheme="blue",
                 on_click=S.handle_dsc_upload(
                     rx.upload_files(upload_id=DSC_UPLOAD_ID)),
                 disabled=S.dsc_importing, id="dsc-import"),
@@ -1034,7 +1030,7 @@ def _rename_dialog() -> rx.Component:
             rx.dialog.close(rx.button("Cancel", variant="soft",
                                       color_scheme="gray",
                                       id="rename-cancel")),
-            rx.button("Save", color_scheme="indigo",
+            rx.button("Save", color_scheme="blue",
                       on_click=S.save_rename,
                       disabled=S.rename_name.strip() == "",
                       id="rename-save"),
@@ -1066,14 +1062,12 @@ def _data_tab() -> rx.Component:
                            width="100%", id="data-error",
                            white_space="pre-wrap")),
         rx.cond(S.data_notice != "",
-                rx.callout(S.data_notice, icon="circle-check",
-                           color_scheme="green", variant="soft",
-                           width="100%", id="data-notice")),
+                ui.success_callout(S.data_notice, id="data-notice")),
         ui.form_stack(
             ui.form_section(
                 "Backup",
                 rx.button(rx.icon("download", size=14), "Download Backup",
-                          color_scheme="indigo", on_click=S.download_backup,
+                          color_scheme="blue", on_click=S.download_backup,
                           id="data-backup"),
                 hint="A consistent copy of the database taken with the "
                      "SQLite backup API, safe while the app is running.",
@@ -1158,9 +1152,7 @@ def _reference_tab() -> rx.Component:
     return ui.section_card(
         rx.cond(S.ref_error != "", ds.error_callout(S.ref_error)),
         rx.cond(S.ref_notice != "",
-                rx.callout(S.ref_notice, icon="circle-check",
-                           color_scheme="green", variant="soft",
-                           width="100%", id="ref-notice")),
+                ui.success_callout(S.ref_notice, id="ref-notice")),
         ui.form_stack(
             _categories_section(),
             rx.vstack(

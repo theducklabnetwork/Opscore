@@ -37,12 +37,16 @@ def _nav_item(label: str, href: str, icon: str, enabled: bool) -> rx.Component:
             width="100%", spacing="2", padding="0.35em 0.6em",
             title="Coming soon",
         )
+    active = rx.State.router.page.path == rx.Var.create(href)
     return rx.link(
         rx.hstack(rx.icon(icon, size=16), rx.text(label, size="2"),
                   width="100%", spacing="2", padding="0.35em 0.6em"),
         href=href, color=ds.TEXT, width="100%", underline="none",
         border_radius="8px",
         id="nav-" + href.strip("/").replace("/", "-"),
+        aria_current=rx.cond(active, "page", rx.Var.create(None)),
+        background=rx.cond(active, ds.SURFACE_HOVER, "transparent"),
+        color_scheme=rx.cond(active, "blue", "gray"),
         _hover={"background": ds.SURFACE_HOVER},
     )
 
@@ -58,7 +62,9 @@ def _sidebar_nav() -> rx.Component:
                 spacing="1", align="start", width="100%",
             )
         )
-    return rx.vstack(*blocks, spacing="5", width="100%", align="start")
+    return rx.el.nav(rx.vstack(*blocks, spacing="5", width="100%",
+                               align="start"),
+                     aria_label="Main navigation", width="100%")
 
 
 def _wordmark() -> rx.Component:
@@ -96,7 +102,7 @@ def mobile_drawer() -> rx.Component:
     return rx.drawer.root(
         rx.drawer.trigger(
             rx.icon_button(rx.icon("menu", size=18), variant="ghost",
-                           id="mobile-nav-button",
+                           aria_label="Open navigation", id="mobile-nav-button",
                            display=["flex", "flex", "flex", "none"]),
         ),
         rx.drawer.overlay(),
@@ -111,8 +117,9 @@ def mobile_drawer() -> rx.Component:
                             width="75%",
                         ),
                         rx.spacer(),
-                        rx.drawer.close(rx.icon_button(rx.icon("x", size=16),
-                                                       variant="ghost")),
+                        rx.drawer.close(rx.icon_button(
+                            rx.icon("x", size=16), variant="ghost",
+                            aria_label="Close navigation")),
                         width="100%", align="center",
                     ),
                     _sidebar_nav(),
@@ -131,13 +138,15 @@ def store_selector(on_store=None, include_all: bool = False) -> rx.Component:
         options = SharedOpsState.dashboard_store_options
     return rx.cond(
         SharedOpsState.has_stores,
-        rx.select(
-            options,
+        rx.select.root(
+            rx.select.trigger(id="store-selector", aria_label="Store",
+                              width=["100%", "100%", "240px"]),
+            rx.select.content(rx.foreach(
+                options, lambda item: rx.select.item(item, value=item))),
             value=SharedOpsState.selected_store_label,
             on_change=on_store if on_store is not None
             else SharedOpsState.select_store,
-            size="2", id="store-selector",
-            width=["100%", "100%", "240px"],
+            size="2",
         ),
         rx.text("No stores assigned", size="2", color=ds.TEXT_FAINT),
     )
@@ -182,13 +191,16 @@ def header(title: str, on_store=None, on_month=None,
                 on_click=SharedOpsState.replay_page_tour(tour_key),
             )] if tour_key is not None else []),
             rx.box(  # wrapper: click bubbles to sync theme into state
-                rx.color_mode.button(variant="ghost", id="theme-toggle"),
-                on_click=AuthState.toggle_is_dark,
+                rx.color_mode.button(variant="ghost", id="theme-toggle",
+                                     aria_label="Toggle color theme"),
+                on_click=AuthState.sync_browser_theme,
+                on_mount=AuthState.sync_browser_theme,
             ),
             rx.menu.root(
                 rx.menu.trigger(
                     rx.icon_button(rx.icon("circle-user-round", size=22),
-                                   variant="ghost", id="account-menu"),
+                                   variant="ghost", aria_label="Account menu",
+                                   id="account-menu"),
                 ),
                 rx.menu.content(
                     rx.menu.item(AuthState.display_name, disabled=True),

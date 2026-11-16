@@ -19,8 +19,8 @@ app = rx.App(
         # driver.js on demand from /driver.js.
         rx.el.script(src="/tour.js", defer=True),
     ],
-    stylesheets=["/drawer_fixes.css", "/driver.css", "/tour.css",
-                 "/schedule_print.css"],
+    stylesheets=["/drawer_fixes.css", "/accessibility.css", "/driver.css",
+                 "/tour.css", "/schedule_print.css"],
     # page language: screen readers, and CSS hyphenation of long words in
     # narrow phone table columns
     html_lang="en",

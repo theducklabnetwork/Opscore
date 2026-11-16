@@ -28,7 +28,7 @@ def dashboard_page() -> rx.Component:
                             "administrator to assign you a store to see the "
                             "overview.", size="2", color=ds.TEXT_MUTED),
                     rx.link(rx.button("Open Monthly Report",
-                                      color_scheme="indigo"),
+                                      color_scheme="blue"),
                             href="/ops/report"),
                     title="Welcome to Opscore Operations",
                 ),
@@ -317,6 +317,7 @@ def _main_row() -> rx.Component:
         "Sales Trend",
         ops_charts.chart(O.active_pace_fig, height="340px"),
         ready=O.pace_has_data,
+        summary="Cumulative actual sales compared with monthly target levels.",
         id="overview-pace",
     )
     targets = ui.section_card(
@@ -434,7 +435,7 @@ def _mode_controls() -> rx.Component:
             R.can_finalize & (R.report_mode == "live"),
             rx.button(
                 rx.icon("lock", size=14), "Finalize Month",
-                color_scheme="indigo", on_click=R.open_finalize,
+                color_scheme="blue", on_click=R.open_finalize,
                 disabled=(~R.selected_store_active) | (~R.live_preflight_ok),
                 id="finalize-month",
             ),
@@ -443,7 +444,7 @@ def _mode_controls() -> rx.Component:
             R.can_finalize & (R.report_mode == "finalized"),
             rx.button(
                 rx.icon("file-pen-line", size=14), "Correct Month",
-                color_scheme="indigo", on_click=R.open_correct,
+                color_scheme="blue", on_click=R.open_correct,
                 disabled=(~R.selected_store_active) | (~R.live_preflight_ok),
                 id="correct-month",
             ),
@@ -652,7 +653,7 @@ def _finalize_dialog() -> rx.Component:
                     rx.cond(R.finalize_saving, rx.spinner(size="1"),
                             rx.icon("save", size=14)),
                     "Finalize Version " + R.finalize_next_version.to(str),
-                    color_scheme="indigo", on_click=R.save_finalization,
+                    color_scheme="blue", on_click=R.save_finalization,
                     disabled=R.finalize_saving | (R.finalize_error != ""),
                     id="finalize-confirm",
                 ),

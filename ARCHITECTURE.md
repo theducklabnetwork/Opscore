@@ -78,6 +78,24 @@ Each layer only calls the one below it.
 | Repositories | `operations_repository.py`, `operations_write_repository.py` | Parameterized SQL, store-scoped, explicit transactions. |
 | Database | `store_ops_db.py`, `auth_db.py` | Schema, migrations, connections. |
 
+**Presentation and accessibility:**
+
+- `ui.py` is the shared component kit. Reuse `metric_label`,
+  `labelled_select`, `success_callout`, `empty_state` and `chart_card` rather
+  than implementing these behaviors independently on each page.
+- `assets/accessibility.css`, registered by `ducklab.py`, supplies global
+  `:focus-visible` outlines, 44px coarse-pointer targets and reduced-motion
+  handling. Desktop controls remain compact.
+- Radix select labels belong on the focusable trigger. Metric definitions use
+  a tooltip for mouse/keyboard input and a popover for touch. Plotly chart
+  roles/names live on a stable Reflex wrapper because Plotly replaces its own
+  rendered container; concise summaries and existing detail tables provide the
+  nonvisual data alternative.
+- Permission-dependent component branches must use `rx.cond`, not Python
+  truth-value tests on Reflex state vars. Success feedback uses a polite live
+  region without moving focus, and status meanings are not conveyed by colour
+  alone.
+
 **Hard rules:**
 
 1. **All KPI logic lives in `kpi.py`** (assembled by `operations_service.py`).
@@ -621,6 +639,14 @@ there to stop Opscore.
 | `scripts/recover_admin_password.py` | Offline admin password recovery (backs up the DB, revokes sessions) |
 | `scripts/seed_ui_*.py` | Seed disposable dev databases for screenshots and browser tests |
 | `scripts/browser_test_*.py` | Playwright browser checks |
+| `scripts/cloud_screenshots.py` | Seeded disposable-database screenshots across desktop/mobile and light/dark modes |
+
+`tests/test_ui_accessibility.py` covers the shared interaction rules without a
+database. Run it with `.venv/bin/python -m pytest tests/test_ui_accessibility.py -q`;
+run the complete suite and production frontend export before opening a PR.
+Browser QA must use a disposable database, complete or dismiss first-run tours,
+and check keyboard focus, touch disclosures, chart names/summaries, horizontal
+overflow and tooltip/popover viewport bounds.
 
 ## 13. Operational database and desktop safeguards
 

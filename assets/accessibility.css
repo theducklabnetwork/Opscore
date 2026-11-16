@@ -1,0 +1,58 @@
+/* Shared interaction accessibility. Keep component styling in Reflex/Radix;
+   this file contains only global behaviour that must work across portaled UI. */
+
+:root :is(a, button, input, select, textarea, [role="button"], [role="link"],
+          [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--blue-9);
+  outline-offset: 3px;
+}
+
+/* Tooltips handle mouse/keyboard; popovers make the same definitions tappable. */
+.metric-definition-touch {
+  display: none;
+}
+
+/* Small desktop controls remain compact; touch/coarse pointers get a larger
+   hit area. Padding may extend into existing layout gaps, not obscure text. */
+@media (pointer: coarse) {
+  .metric-definition {
+    display: none;
+  }
+
+  .metric-definition-touch {
+    display: inline-block;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  :where(.rt-IconButton, .rt-Button, .rt-SelectTrigger, .rt-CheckboxRoot) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  :where(.rt-IconButton, .rt-Button) {
+    position: relative;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Screen-reader-only text remains available to assistive technology. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

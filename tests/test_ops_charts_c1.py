@@ -171,6 +171,7 @@ class SalesChartsStateTests(Fixture):
         import ducklab.ops_sales_state as mod
         from ducklab.ops_sales_state import SalesState
         st = SalesState()
+        st.is_dark = True  # fixture asserts the dark-theme chart payload
         self.bound(mod, SalesState, st.load_sales_data)
         self.assertEqual(st.sp_error, "")
         return st

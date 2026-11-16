@@ -55,6 +55,8 @@ class Fixture(unittest.TestCase):
         cls = getattr(mod, clsname)
         sid, actor, month = self.sid, user or self.admin, self.month
         st = cls()
+        if modname == "ops_sales_state":
+            st.is_dark = True  # sales fixture asserts the dark chart payload
         st.selected_store_active = True
         with mock.patch.object(mod, "app_service", self.app), \
                 mock.patch.object(cls, "_actor", lambda s_: actor), \

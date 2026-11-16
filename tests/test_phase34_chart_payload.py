@@ -37,6 +37,7 @@ class ChartPayloadTests(Fixture):
 
     def sales(self, month="2026-07", user=None):
         state = SalesState()
+        state.is_dark = True  # these fixtures exercise the dark payload
         user = user or self.admin
         with mock.patch.object(sales_module, "app_service", self.app), \
              mock.patch.object(SalesState, "_actor", lambda _: user), \
@@ -164,6 +165,7 @@ class ChartPayloadTests(Fixture):
                               sales_cents=rm(9000))
         selected = {"store": self.sid, "month": "2026-07", "user": self.admin}
         state = SalesState()
+        state.is_dark = True
         with mock.patch.object(sales_module, "app_service", self.app), \
              mock.patch.object(SalesState, "_actor", lambda _: selected["user"]), \
              mock.patch.object(SalesState, "_selected_store_id",
@@ -199,7 +201,7 @@ class ChartPayloadTests(Fixture):
 
 
 class ThemeToggleTests(unittest.IsolatedAsyncioTestCase):
-    async def test_theme_button_toggles_both_directions_and_restyles_children(self):
+    async def test_resolved_browser_theme_syncs_charts_both_directions(self):
         children = {
             OverviewState: SimpleNamespace(calls=[], _apply_chart_theme=None),
             SalesState: SimpleNamespace(calls=[], _apply_chart_theme=None),
@@ -213,10 +215,12 @@ class ThemeToggleTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(AuthState, "get_state", get_state), \
              mock.patch.object(AuthState, "_mark_dirty"):
             auth = AuthState()
-            await auth.toggle_is_dark()
-            await auth.toggle_is_dark()
+            await auth.sync_is_dark("dark")
+            await auth.sync_is_dark("dark")  # unchanged: no redundant rebuild
+            await auth.sync_is_dark("light")
+        self.assertFalse(auth.is_dark)
         for child in children.values():
-            self.assertEqual(child.calls, [False, True])
+            self.assertEqual(child.calls, [True, False])
 
 
 if __name__ == "__main__":

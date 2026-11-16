@@ -38,20 +38,20 @@ _DARK = dict(
     grid="#272A2D",        # slate-4 (subtle)
     border="#363A3F",      # slate-6
     surface_hover="#212225",  # slate-3
-    accent="#6E6BD8",      # indigo-9
-    accent_fill="rgba(110,107,216,0.18)",
-    pace_fill="rgba(110,107,216,0.07)",
+    accent="#52A9FF",      # blue-9
+    accent_fill="rgba(82,169,255,0.18)",
+    pace_fill="rgba(82,169,255,0.07)",
     budget="#B0B4BA",
     green="#3DD68C",
     amber="#FFC53D",
     red="#E5484D",
-    info="#6E6BD8",        # info-only categories
+    info="#52A9FF",        # info-only categories
     # categorical (Expense Mix), fixed order; green/red stay status-only
     series=("#3987E5", "#D95926", "#199E70", "#C98500", "#D55181",
             "#9085E9"),
     other="#696E77",       # slate-9, the folded "Other" slice
     # sequential (Sales Calendar): one hue, low -> high
-    seq=("#2B2A5E", "#8D8BF0"),
+    seq=("#102A56", "#52A9FF"),
     seq_text=("#EDEEF0", "#111113"),
     surface="#18191B",     # slice / cell gaps
 )
@@ -63,18 +63,18 @@ _LIGHT = dict(
     grid="#E8E8EC",        # slate-5 (subtle)
     border="#B9BBC6",      # slate-6
     surface_hover="#F0F0F3",  # slate-3
-    accent="#5B5BD6",
-    accent_fill="rgba(91,91,214,0.14)",
-    pace_fill="rgba(91,91,214,0.06)",
+    accent="#0090FF",      # blue-9
+    accent_fill="rgba(0,144,255,0.14)",
+    pace_fill="rgba(0,144,255,0.06)",
     budget="#60646C",
     green="#18794E",
     amber="#B26A00",
     red="#CD2B31",
-    info="#5B5BD6",
+    info="#0090FF",
     series=("#2A78D6", "#EB6834", "#1BAF7A", "#EDA100", "#E87BA4",
             "#6250D6"),
     other="#8B8D98",
-    seq=("#E6E6FB", "#3E3EA8"),
+    seq=("#E1F0FF", "#0090FF"),
     seq_text=("#1C2024", "#FFFFFF"),
     surface="#FFFFFF",
 )
@@ -86,15 +86,18 @@ _CONFIG = dict(
 )
 
 
-def chart(fig_json, height: str = "340px"):
-    """Render a builder's figure dict (may be a State Var)."""
+def chart(fig_json, height: str = "340px", description: str = "Interactive chart"):
+    """Render a named chart; summaries/detail tables supply nonvisual values."""
     import reflex as rx
-    return rx.plotly(
-        data=fig_json,
-        config=_CONFIG,
-        use_resize_handler=True,
-        width="100%",
-        height=height,
+    return rx.box(
+        rx.plotly(
+            data=fig_json,
+            config=_CONFIG,
+            use_resize_handler=True,
+            width="100%",
+            height=height,
+        ),
+        role="img", aria_label=description, width="100%",
     )
 
 FONT_FAMILY = ("ui-sans-serif, system-ui, -apple-system, 'Segoe UI', "
@@ -220,12 +223,17 @@ def sparkline(days: Sequence[int],
 def sparkline_chart(fig_json):
     """Render a sparkline figure (no interactions)."""
     import reflex as rx
-    return rx.plotly(
-        data=fig_json,
-        config={"displayModeBar": False, "staticPlot": True,
-                "responsive": True},
+    return rx.box(
+        rx.plotly(
+            data=fig_json,
+            config={"displayModeBar": False, "staticPlot": True,
+                    "responsive": True},
+            width="100%",
+            height="56px",
+        ),
+        role="img",
+        aria_label="Recent trend; open the linked module for exact values",
         width="100%",
-        height="56px",
     )
 
 
@@ -565,7 +573,7 @@ def fmt_pct1(ratio: Optional[float]) -> str:
 
 
 # Chart-capable page states register here at import time so the theme
-# toggle (AuthState.toggle_is_dark) can restyle their open figures without
+# sync (AuthState.sync_is_dark) can restyle their open figures without
 # importing the page modules (Phase 3.6: no lazy cross-module imports).
 CHART_STATES: list = []
 

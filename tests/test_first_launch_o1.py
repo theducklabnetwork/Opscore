@@ -164,6 +164,10 @@ class TestTourAssets(unittest.TestCase):
         shell = (root / "ducklab" / "ops_shell.py").read_text()
         self.assertIn('id="nav-" + href.strip("/").replace("/", "-")',
                       shell)
+        self.assertIn('aria_current=rx.cond(active, "page"', shell)
+        self.assertIn('aria_label="Open navigation"', shell)
+        self.assertIn('aria_label="Account menu"', shell)
+        self.assertIn("AuthState.sync_browser_theme", shell)
 
     def test_replay_button_in_settings_account(self):
         root = Path(__file__).resolve().parent.parent

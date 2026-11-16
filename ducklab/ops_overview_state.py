@@ -485,7 +485,7 @@ def compute_overview(user, store_id: int, month: str, today: date,
         "over_label": (f"+{round((proj_pct - 1.0) * 100)}%" if over else ""),
         "progress_color": ("green" if complete
                            and l1_status == kpi.SALES_ACHIEVED
-                           else "indigo"),
+                           else "blue"),
         "status": sales_status_label,
         "status_color": sales_chip_color,
         "early_tag": early_tag,
@@ -550,7 +550,7 @@ def compute_overview(user, store_id: int, month: str, today: date,
             "title": "Restricted",
             "progress": 0.0,
             "marker": 0.0,
-            "progress_color": "indigo",
+            "progress_color": "blue",
             "status": "Restricted",
             "status_color": "gray",
             "early_tag": "", "early_tip": "",
@@ -598,7 +598,7 @@ def compute_overview(user, store_id: int, month: str, today: date,
                           ("gray" if s.status_by_level.get(name, "Awaiting data")
                            in ("Awaiting data", "No target") else "amber")),
          "progress_color": ("green" if complete and s.status_by_level.get(name)
-                            == kpi.SALES_ACHIEVED else "indigo")}
+                            == kpi.SALES_ACHIEVED else "blue")}
         for i, name in enumerate(level_names, 1)
         for t in [s.targets.get(name)]
     ]

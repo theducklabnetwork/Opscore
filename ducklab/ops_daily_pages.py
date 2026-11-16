@@ -263,7 +263,7 @@ def _stock_input(code: dict) -> rx.Component:
     # the code is the label; its description is a tooltip on the code
     return ui.form_field(
         rx.tooltip(rx.text(code["label"], size="2", weight="medium",
-                           color=ds.TEXT, cursor="help",
+                           color=ds.TEXT, cursor="help", tab_index=0,
                            id=f"stock-label-{code['code']}"),
                    content=code["name"]),
         rx.input(
@@ -348,9 +348,7 @@ def daily_page() -> rx.Component:
         rx.vstack(
             rx.cond(
                 DailyState.save_notice != "",
-                rx.callout(DailyState.save_notice, icon="circle-check",
-                           color_scheme="green", variant="soft",
-                           width="100%", id="save-notice"),
+                ui.success_callout(DailyState.save_notice, id="save-notice"),
             ),
             # errors raised while the entry dialog is closed (bad date,
             # session/access) and data-load failures

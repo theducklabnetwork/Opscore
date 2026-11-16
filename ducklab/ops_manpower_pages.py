@@ -279,9 +279,7 @@ def manpower_page() -> rx.Component:
         rx.vstack(
             rx.cond(
                 M.mp_notice != "",
-                rx.callout(M.mp_notice, icon="circle-check",
-                           color_scheme="green", variant="soft",
-                           width="100%", id="mp-notice"),
+                ui.success_callout(M.mp_notice, id="mp-notice"),
             ),
             rx.cond(
                 ~M.cfg_open & (M.cfg_error != ""),

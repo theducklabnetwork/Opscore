@@ -343,6 +343,17 @@ class ScheduleTests(unittest.TestCase):
         self.assertIn('["whiteSpace"] : "nowrap"', str(pages._generated()))
         self.assertIn("Save PDF", str(pages._generated()))
 
+    def test_builder_wraps_and_uses_adaptive_theme_colors(self):
+        from ducklab import ops_schedule_pages as pages
+
+        out = str(pages._builder())
+        self.assertIn('["flexWrap"] : "wrap"', out)
+        self.assertIn("var(--slate-4)", out)
+        self.assertIn("var(--red-3)", out)
+        self.assertIn("var(--violet-3)", out)
+        for light_only in ("#d4d4d8", "#e4e4e7", "#fee2e2", "#ddd6fe"):
+            self.assertNotIn(light_only, out)
+
     def test_save_pdf_writes_a4_landscape_file_without_print_dialog(self):
         import ducklab.ops_schedule_state as mod
         from ducklab import platform_utils
