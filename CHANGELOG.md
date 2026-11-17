@@ -39,7 +39,7 @@ Schema version: **18**.
 - **BD Target field.** Monthly Setup gains an optional BD Target (RM), stored
   per store per month. It is a reference figure only: it does not affect Level
   1–4, achievement percentages, expense budgets or daily targets.
-- **Sales History chart.** Sales Performance gains a Sales History (Imported)
+- **Sales History chart.** Sales Performance gains a Sales History
   card with a **Timeline / Year vs Year** toggle, drawn from the directory. It
   works for stores with no daily entries yet, and unreported months are gaps
   rather than zero.

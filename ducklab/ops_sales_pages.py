@@ -212,7 +212,7 @@ def _sales_history() -> rx.Component:
                 "overlays each year on one Jan–Dec axis. Months the workbook "
                 "left blank or zero are gaps, not zero sales.",
                 size="1", color=ds.TEXT_FAINT),
-        title="Sales History (Imported)", id="history-section"))
+        title="Sales History", id="history-section"))
 
 
 def _day_charts() -> rx.Component:

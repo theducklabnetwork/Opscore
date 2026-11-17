@@ -427,7 +427,7 @@ Consumers:
   fills Sales Last Month / Last Year from the directory for the selected store
   and month, plus the imported BD Target. Nothing is saved until Save Setup;
   missing months fill blank.
-- **Sales History (Imported)** (`ops_charts.history_timeline` /
+- **Sales History** (`ops_charts.history_timeline` /
   `history_year_compare`) draws the imported months on the Sales page with a
   Timeline / Year vs Year toggle, following the same gap rule as the daily
   charts. It is independent of the daily records.

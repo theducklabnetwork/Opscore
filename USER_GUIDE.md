@@ -261,10 +261,10 @@ expenses for each day, including an entered RM0 expense.
 | Basket | **BV**, **UPT**, **ASP**, compared with the **State Average** |
 | Sales Trend | Chart of daily and cumulative sales against target levels |
 | Sales Calendar | The month at a glance, colour-coded by result |
-| Sales History (Imported) | Monthly sales from the imported store directory, as a **Timeline** or as **Year vs Year** (each year overlaid on one Jan–Dec axis) |
+| Sales History | Monthly sales from the imported store directory, as a **Timeline** or as **Year vs Year** (each year overlaid on one Jan–Dec axis) |
 | Daily Sales | Each day's **Contribution**, **Daily Target**, **Adjusted Target**, **Sales** and **Result** |
 
-**Sales History (Imported)** is separate from the daily records: it comes
+**Sales History** is separate from the daily records: it comes
 from the store directory, so a store with no daily entries yet still has a
 history. Months the source workbook left blank or zero appear as gaps, not
 as zero sales. Use the toggle at the top right of the card to switch between
