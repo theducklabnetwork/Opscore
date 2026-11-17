@@ -42,7 +42,7 @@ Opscore supports **64-bit Windows 10 and 11**.
 3. Open **Opscore** from the Start Menu. The app uses WebView2, with
    Microsoft Edge app mode and the default browser as fallbacks.
 
-The v1.2 installer has an Authenticode signature from the self-signed
+The v1.2 and v1.3 installers have Authenticode signatures from the self-signed
 **Opscore Development** certificate, with a DigiCert timestamp. Windows may
 show **Unknown publisher** or a SmartScreen warning because this certificate
 is not issued by a publicly trusted certificate authority. Only continue with

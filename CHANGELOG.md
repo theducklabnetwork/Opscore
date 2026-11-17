@@ -5,8 +5,9 @@ tags and published releases; see the provenance note at the end.
 
 ---
 
-## v1.3 — in development
+## v1.3 — 2026-11-18
 
+This entry covers the work merged after v1.2 (pull requests #77–#87).
 Schema version: **19**.
 
 ### Added
@@ -49,9 +50,6 @@ Schema version: **19**.
   card with a **Timeline / Year vs Year** toggle, drawn from the directory. It
   works for stores with no daily entries yet, and unreported months are gaps
   rather than zero.
-
-### Added
-
 - **PT Workforce Mix.** Manpower Efficiency now reports PT Active Days,
   Average/Peak PT Working and PT Contribution from daily attendance, without a
   separate PT roster. FT headcount and turnover formulas remain unchanged.
@@ -304,8 +302,13 @@ GitHub release and the commit range. Schema version: **5**.
 
 ## Provenance
 
-- **Version anchors** are the git tags `v0.1.0`, `v0.1.1`, `v1.0`, `v1.1`
-  and `v1.2` and their published GitHub releases. Tag dates are in UTC+08:00.
+- **Version anchors** are the git tags `v0.1.0`, `v0.1.1`, `v1.0`, `v1.1`,
+  `v1.2` and `v1.3` and their published GitHub releases. Tag dates are in
+  UTC+08:00.
+- **v1.3** covers the merged pull requests #77–#87 and this release
+  preparation. Its Windows installer is signed with the self-signed **Opscore
+  Development** Authenticode certificate, with a DigiCert timestamp; Windows
+  does not trust that publisher by default.
 - **v1.2** is tagged at `50f999b`; its content includes the merged pull
   requests #67–#76, with subsequent documentation on `main`.
 - **v1.0 and v0.1.0** entries are reconstructed from tag messages, release

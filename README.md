@@ -118,7 +118,7 @@ Architecture document.
 
 ## Project status
 
-Current development release line: **v1.3** (see the [Changelog](CHANGELOG.md)).
+Current release: **v1.3** (see the [Changelog](CHANGELOG.md)).
 Database schema version: **19**.
 
 - Ubuntu/Debian desktop package: released and in use.

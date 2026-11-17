@@ -536,6 +536,11 @@ class TestReleaseWorkflowConsistency(unittest.TestCase):
     def test_ci_does_not_upload_a_candidate_installer(self):
         self.assertNotIn("-candidate.exe", self.workflow)
 
+    def test_ci_never_overwrites_the_signed_release_installer(self):
+        self.assertNotIn("gh release upload", self.workflow)
+        self.assertNotIn("--clobber", self.workflow)
+        self.assertIn("name: Opscore-Setup-unsigned-${{ github.run_id }}", self.workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
