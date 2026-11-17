@@ -23,6 +23,7 @@ from ducklab import authz
 from ducklab import backup
 from ducklab import design as ds
 from ducklab import dsc_import
+from ducklab import store_directory_import
 from ducklab import store_ops_db, ui
 from ducklab.auth_pages import app_service
 from ducklab.auth_service import (
@@ -54,6 +55,13 @@ PASSWORD_RULES = ("At least 10 characters, with letters and digits. "
                   "Changing your password signs out all other sessions.")
 
 DSC_UPLOAD_ID = "dsc-upload"
+DIRECTORY_UPLOAD_ID = "directory-upload"
+DIRECTORY_DESCRIPTION = (
+    "One row per store, one column per month. The workbook replaces the "
+    "store directory used to pre-fill New Store details and to load Last "
+    "Month / Last Year into Monthly Setup, and powers the Sales History "
+    "chart. It never creates stores or daily records. Concept and BD "
+    "Target are not imported; blank and zero months stay blank.")
 DB_UPLOAD_ID = "db-upload"
 DB_MAX_BYTES = 512 * 1024 * 1024  # generous cap; a store-ops DB is small
 DSC_MAX_BYTES = 64 * 1024 * 1024  # generous cap; a DSC workbook is small
@@ -136,6 +144,19 @@ class SettingsState(SharedOpsState):
     dsc_result: list[str] = []       # summary + warnings after import
     dsc_importing: bool = False
     _dsc_pending_path: str = ""      # server-side temp file (never client)
+
+    # --- Reference Data: store directory (monthly sales workbook) -------
+    dir_stores: int = 0
+    dir_history: int = 0
+    dir_range: str = ""
+    dir_imported_at: str = ""
+    dir_has_data: bool = False
+    dir_pending_name: str = ""
+    dir_confirm_open: bool = False
+    dir_error: str = ""
+    dir_result: list[str] = []
+    dir_importing: bool = False
+    _dir_pending_path: str = ""      # server-side temp file (never client)
 
     # --- Data: backup & restore (Super Admin only) ----------------------
     data_error: str = ""
@@ -358,6 +379,19 @@ class SettingsState(SharedOpsState):
             else "")
         self.ref_has_data = bool(info["pairs"] or info["benchmark_months"])
         self.ref_bundled_data = info["bundled"]
+        try:
+            directory = app_service.store_directory_info(user)
+        except (AuthenticationError, AuthorizationError):
+            return
+        self.dir_stores = directory["stores"]
+        self.dir_history = directory["history"]
+        self.dir_range = (
+            f"{directory['first_month']} to {directory['last_month']}"
+            if directory["first_month"] else "")
+        self.dir_has_data = bool(directory["stores"])
+        self.dir_imported_at = (
+            ds.fmt_kl_datetime(directory["imported_at"])
+            if directory["imported_at"] else "")
 
     def _auth_fail(self, exc: Exception) -> None:
         self.ref_error = SESSION_EXPIRED if isinstance(
@@ -586,6 +620,92 @@ class SettingsState(SharedOpsState):
             self.dsc_importing = False
             self._discard_pending()
             self.dsc_pending_name = ""
+
+    # --- Store directory import (monthly sales workbook) -------------------
+    @rx.event
+    async def handle_directory_upload(self, files: list[rx.UploadFile]) -> None:
+        """Stage the monthly-sales workbook; replacing a loaded directory
+        asks for confirmation first. No stores are ever created."""
+        self.dir_error = ""
+        self.dir_result = []
+        if not files:
+            return
+        upload = files[0]
+        try:
+            user = self._actor()
+            authz.require_config_manager(user)
+        except (AuthenticationError, AuthorizationError) as exc:
+            self._auth_fail(exc)
+            self.dir_error = self.ref_error
+            self.ref_error = ""
+            return
+        self._discard_directory_pending()
+        data = await upload.read()
+        if len(data) > DSC_MAX_BYTES:
+            self.dir_error = "File is too large."
+            return
+        fd, path = tempfile.mkstemp(suffix=".xlsx", prefix="ducklab-dir-")
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        self._dir_pending_path = path
+        self.dir_pending_name = upload.filename or "workbook.xlsx"
+        if self.dir_has_data:
+            self.dir_confirm_open = True
+        else:
+            return SettingsState.confirm_directory_import
+
+    def _discard_directory_pending(self) -> None:
+        if self._dir_pending_path:
+            try:
+                os.unlink(self._dir_pending_path)
+            except OSError:
+                pass
+        self._dir_pending_path = ""
+
+    @rx.event
+    def cancel_directory_import(self) -> None:
+        self._discard_directory_pending()
+        self.dir_pending_name = ""
+        self.dir_confirm_open = False
+
+    @rx.event
+    def set_dir_confirm_open(self, v: bool) -> None:
+        if not v:
+            self.cancel_directory_import()
+
+    @rx.event
+    def confirm_directory_import(self) -> None:
+        self.dir_error = ""
+        self.dir_result = []
+        self.dir_confirm_open = False
+        path = self._dir_pending_path
+        name = self.dir_pending_name
+        if not path:
+            self.dir_error = "Choose a workbook first."
+            return
+        self.dir_importing = True
+        try:
+            user = self._actor()
+            result = app_service.import_store_directory(user, path)
+        except (AuthenticationError, AuthorizationError) as exc:
+            self._auth_fail(exc)
+            self.dir_error = self.ref_error
+            self.ref_error = ""
+        except (store_directory_import.DirectoryImportError, OSError) as exc:
+            self.dir_error = f"Import failed; nothing changed.\n{exc}"
+        else:
+            self.dir_result = [
+                f"Imported {result['stores']} stores and "
+                f"{result['history']} monthly figures "
+                f"({result['first_month']} to {result['last_month']}) "
+                f"from {name}. No stores were created.",
+                *[f"Warning: {w}" for w in result["warnings"]],
+            ]
+            self._load_dsc_info(user)
+        finally:
+            self.dir_importing = False
+            self._discard_directory_pending()
+            self.dir_pending_name = ""
 
     # --- Data: backup & restore -----------------------------------------
     def _load_data_tab(self) -> None:
@@ -989,6 +1109,71 @@ def _dsc_section() -> rx.Component:
     )
 
 
+def _directory_section() -> rx.Component:
+    return ui.form_section(
+        "Store Directory (Monthly Sales)",
+        rx.vstack(
+            _about_row("Stores", S.dir_stores.to_string(), "dir-stores"),
+            _about_row("Monthly Figures", S.dir_history.to_string(),
+                       "dir-history"),
+            _about_row("Coverage", rx.cond(S.dir_range != "", S.dir_range, "—"),
+                       "dir-range"),
+            _about_row("Last Import",
+                       rx.cond(S.dir_imported_at != "", S.dir_imported_at,
+                               "Never imported"), "dir-imported-at"),
+            spacing="0", width="100%"),
+        rx.upload(
+            rx.vstack(
+                rx.button("Choose Monthly Sales Workbook", variant="soft",
+                          color_scheme="gray", type="button",
+                          id="directory-choose"),
+                rx.text("… or drop it here", size="1", color=ds.TEXT_FAINT),
+                spacing="1", align="center"),
+            id=DIRECTORY_UPLOAD_ID, multiple=False,
+            accept={".xlsx": ["application/vnd.openxmlformats-"
+                              "officedocument.spreadsheetml.sheet"]},
+            max_files=1, no_keyboard=True,
+            border=f"1px dashed {ui.CARD_BORDER}", border_radius=ui.RADIUS,
+            padding="1em", width="100%"),
+        rx.hstack(
+            rx.button(
+                rx.cond(S.dir_importing, rx.spinner(size="1"),
+                        rx.icon("upload", size=14)),
+                "Import Workbook", color_scheme="blue",
+                on_click=S.handle_directory_upload(
+                    rx.upload_files(upload_id=DIRECTORY_UPLOAD_ID)),
+                disabled=S.dir_importing, id="directory-import"),
+            rx.cond(S.dir_pending_name != "",
+                    rx.text(S.dir_pending_name, size="2",
+                            color=ds.TEXT_MUTED)),
+            spacing="3", align="center"),
+        hint=DIRECTORY_DESCRIPTION,
+        id="ref-directory",
+    )
+
+
+def _directory_confirm_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title("Replace Store Directory?"),
+            rx.alert_dialog.description(
+                "The imported store directory and its monthly sales history "
+                "will be replaced. Existing stores, setups and daily records "
+                "are not changed."),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button("Cancel", variant="soft", color_scheme="gray",
+                              id="directory-cancel")),
+                rx.alert_dialog.action(
+                    rx.button("Replace Directory", color_scheme="red",
+                              on_click=S.confirm_directory_import,
+                              id="directory-confirm")),
+                justify="end", spacing="3"),
+        ),
+        open=S.dir_confirm_open, on_open_change=S.set_dir_confirm_open,
+    )
+
+
 def _dsc_confirm_dialog() -> rx.Component:
     return rx.alert_dialog.root(
         rx.alert_dialog.content(
@@ -1173,9 +1358,28 @@ def _reference_tab() -> rx.Component:
                         variant="soft", width="100%",
                         class_name="dsc-result")),
                 spacing="3", width="100%", align="stretch"),
+            rx.vstack(
+                _directory_section(),
+                rx.cond(S.dir_error != "",
+                        rx.callout(S.dir_error, icon="triangle-alert",
+                                   color_scheme="red", variant="soft",
+                                   width="100%", id="directory-error",
+                                   white_space="pre-wrap")),
+                rx.foreach(
+                    S.dir_result,
+                    lambda line: rx.callout(
+                        line,
+                        icon=rx.cond(line.contains("Warning"),
+                                     "triangle-alert", "circle-check"),
+                        color_scheme=rx.cond(line.contains("Warning"),
+                                             "amber", "green"),
+                        variant="soft", width="100%",
+                        class_name="directory-result")),
+                spacing="3", width="100%", align="stretch"),
         ),
         _rename_dialog(),
         _dsc_confirm_dialog(),
+        _directory_confirm_dialog(),
         title="Reference Data",
         id="settings-reference",
     )

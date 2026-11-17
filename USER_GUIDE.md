@@ -85,7 +85,13 @@ question appears on the first launch after installing or upgrading.
    bundle but no longer matches the bundled workbook (your own uploads are
    never replaced). Go to **Settings → Reference Data** to review it or
    upload a replacement. This gives each day its target.
-5. **Add your stores.** Go to **Store Management** (see section 4).
+5. **Store directory.** Opscore also loads the bundled monthly-sales workbook
+   automatically when the store directory is empty, and refreshes it on
+   upgrade when the stored copy still came from the bundle (your own uploads
+   are never replaced). This gives you the Sales History chart, New Store
+   auto-fill and the Monthly Setup history button without any import step.
+   See section 9 to review or replace it.
+6. **Add your stores.** Go to **Store Management** (see section 4).
 
 ## 3. Getting around
 
@@ -143,13 +149,22 @@ Its history is kept, and reactivating it restores normal access.
 **State and Concept matter.** They pick the right daily contribution figures,
 so daily targets stay blank until both are set.
 
+**The store directory can fill in the details for you.** If a store
+directory has been imported (Settings → Reference Data), type the store's
+**full code** in Code — or its **full name** in Name — and leave the field.
+The Name, State and Zone are filled in for you and the form shows
+"Matched the store directory". A partial code does nothing: the match must
+be exact. Concept is never filled in, because it belongs to Opscore's own
+list and drives the daily contribution figures. Editing a store that already
+exists never overwrites your corrections.
+
 ### Monthly Setup
 
 Pick the store, month and year, then fill in:
 
 | Group | Fields |
 |---|---|
-| Sales Targets | Minimum RTM target, Level 1 base target, Level 2, 3 and 4 uplift. Use **Use HQ Defaults** to fill Minimum RTM (RM 200,000) and +10%, +20% and +30% uplifts. Sales same month last year, sales last month. |
+| Sales Targets | Minimum RTM target, Level 1 base target, Level 2, 3 and 4 uplift. Use **Use HQ Defaults** to fill Minimum RTM (RM 200,000) and +10%, +20% and +30% uplifts. Sales same month last year, sales last month, BD Target. |
 | Daily Sales | Target Transactions, Target BV, Target UPT, Public Holidays. If Target Transactions is blank, the form suggests Level 1 ÷ Target BV, rounded to a whole transaction. |
 | Manpower | Salary ratio target, budget headcount, opening headcount, turnover threshold, part-timer factor, payroll figures |
 | Stock | Stock loss target |
@@ -158,6 +173,22 @@ Pick the store, month and year, then fill in:
 Click **Save Setup**. Use **Copy From Last Month** to pre-fill the form and
 expense budgets from the previous month; review the values and click
 **Save Setup** to apply them.
+
+**Load History From Directory.** When a store directory has been imported,
+the **history icon** (a circular arrow, tooltip "Load History From Directory")
+beside the Sales Targets fields fills **Sales Last Month**, **Sales Last Year**
+and the imported **BD Target** from the imported monthly figures for the
+selected store and month. It only ever fills the form — nothing is saved until
+you click **Save Setup** — and a month the workbook left blank or zero fills
+the field blank, never RM 0.00. The icon is disabled when the directory has no
+figures for that store and month.
+
+**BD Target** is a reference figure for your own records. It is displayed on
+the form and stored per store per month, but it does not change Level 1–4,
+the achievement percentages, the expense budgets or the daily targets. When
+the imported directory carries a BD Target for the store, Monthly Setup shows
+it as a note (the imported figure is for October 2026) and the history icon
+fills the field with it.
 
 **Budget percentages.** Each category's budget is a percentage of the store's
 active sales target. The target starts at **Minimum RTM**; once cumulative
@@ -231,7 +262,15 @@ expenses for each day, including an entered RM0 expense.
 | Basket | **BV**, **UPT**, **ASP**, compared with the **State Average** |
 | Sales Trend | Chart of daily and cumulative sales against target levels |
 | Sales Calendar | The month at a glance, colour-coded by result |
+| Sales History | Monthly sales from the imported store directory, as a **Timeline** or as **Year vs Year** (each year overlaid on one Jan–Dec axis) |
 | Daily Sales | Each day's **Contribution**, **Daily Target**, **Adjusted Target**, **Sales** and **Result** |
+
+**Sales History** is separate from the daily records: it comes
+from the store directory, so a store with no daily entries yet still has a
+history. Months the source workbook left blank or zero appear as gaps, not
+as zero sales. Use the toggle at the top right of the card to switch between
+the two views. The card is hidden when the directory has no figures for the
+selected store.
 
 ### How daily targets work
 
@@ -469,6 +508,21 @@ replaces the previous key immediately.
   you upload yourself is never overwritten by the bundled data; a copy that
   came from the bundle is refreshed automatically when the bundled workbook
   changes on upgrade.
+- **Store Directory (Monthly Sales)**: Opscore loads the bundled monthly-sales
+  workbook automatically on first launch, so the Sales History chart, New Store
+  auto-fill and the Monthly Setup history button work straight away. You can
+  upload a monthly-sales workbook here — one row per store, one column per
+  month — to replace the store directory. It **never creates stores or daily
+  records**: your store list and every operational record stay exactly as they
+  are. Concept is not imported (it belongs to Opscore's own list). The
+  workbook's **BD Target** column is imported for October 2026 as a reference
+  figure: Monthly Setup shows it as a note, and the **Load History From
+  Directory** history icon fills the BD Target field with it. It never changes
+  Level 1–4, achievement, budgets or daily targets. Months the workbook left
+  blank or zero stay blank. The import is all-or-nothing and can be re-run to replace
+  the directory. A workbook you upload yourself is never
+  overwritten by the bundled data; a copy that came from the bundle is
+  refreshed automatically when the bundled workbook changes on upgrade.
 
 ### Backup and restore (Super Admin)
 

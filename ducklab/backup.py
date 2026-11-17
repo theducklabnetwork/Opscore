@@ -76,7 +76,16 @@ EXPECTED_COLUMNS = {
         "stock_loss_target", "opening_headcount_ft", "part_timer_factor",
         "salary_basic_allowance_cents", "overtime_cents",
         "support_team_cost_cents", "target_transactions",
-        "target_spr_cents", "target_ipr",
+        "target_spr_cents", "target_ipr", "bd_target_cents",
+    ),
+    "store_directory": (
+        "code", "name", "state", "zone", "display_area",
+    ),
+    "store_directory_history": (
+        "code", "month", "sales_cents",
+    ),
+    "store_directory_info": (
+        "id", "imported_at", "source_name",
     ),
     "monthly_expense_budgets": (
         "id", "store_id", "monthly_config_id", "category_id",
@@ -121,6 +130,10 @@ POST_MIGRATION_COLUMNS = {
     "daily_records": ("leave_emergency",),
     "schedule_entries": ("assignment_source",),
     "shift_codes": ("show_in_legend",),
+    # v17: store-directory provenance
+    "store_directory_info": ("bundled",),
+    # v18: the workbook's BD Target figure
+    "store_directory": ("bd_target_cents",),
 }
 
 

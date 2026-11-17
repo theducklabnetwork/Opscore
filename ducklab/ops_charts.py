@@ -582,3 +582,57 @@ def register_chart_state(cls) -> None:
     """Register a state class exposing _apply_chart_theme(dark)."""
     if cls not in CHART_STATES:
         CHART_STATES.append(cls)
+
+
+# ---------------------------------------------------------------------------
+# 13. imported sales history (store directory, monthly totals)
+# ---------------------------------------------------------------------------
+MONTH_ABBR = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def history_timeline(months: Sequence[str],
+                     values_cents: Sequence[Optional[int]],
+                     dark: bool) -> go.Figure:
+    """One point per imported month, chronological. None -> gap, never
+    interpolated (the workbook's 0/blank months are absent, not zero)."""
+    pal = _pal(dark)
+    labels = [f"{MONTH_ABBR[int(m[5:7]) - 1]} {m[2:4]}" for m in months]
+    hover = [f"{label}<br>{fmt_rm(v)}"
+             for label, v in zip(labels, values_cents)]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=list(labels), y=[None if v is None else v / 100
+                           for v in values_cents],
+        mode="lines+markers", connectgaps=False, name="Monthly sales",
+        line=dict(color=pal["accent"], width=2),
+        marker=dict(size=5, color=pal["accent"]),
+        hovertemplate="%{customdata}<extra></extra>", customdata=hover,
+    ))
+    layout = _base_layout(pal, "RM")
+    layout["showlegend"] = False
+    fig.update_layout(**layout)
+    return fig
+
+
+def history_year_compare(years: Sequence[int],
+                         series_cents: Sequence[Sequence[Optional[int]]],
+                         dark: bool) -> go.Figure:
+    """Year vs year on one Jan-Dec axis; one line per year, same order as
+    ``years``. None -> gap, so an unopened month never reads as zero."""
+    pal = _pal(dark)
+    colors = (pal["muted"], pal["accent"], pal["green"], pal["amber"])
+    fig = go.Figure()
+    for i, (year, values) in enumerate(zip(years, series_cents)):
+        hover = [f"{MONTH_ABBR[m]} {year}<br>{fmt_rm(v)}"
+                 for m, v in enumerate(values)]
+        fig.add_trace(go.Scatter(
+            x=list(MONTH_ABBR),
+            y=[None if v is None else v / 100 for v in values],
+            mode="lines+markers", connectgaps=False, name=str(year),
+            line=dict(color=colors[i % len(colors)], width=2),
+            marker=dict(size=5),
+            hovertemplate="%{customdata}<extra></extra>", customdata=hover,
+        ))
+    fig.update_layout(**_base_layout(pal, "RM"))
+    return fig

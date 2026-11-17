@@ -227,6 +227,7 @@ class OperationsRepository:
             target_transactions=r["target_transactions"],
             target_spr_cents=r["target_spr_cents"],
             target_ipr=to_decimal(r["target_ipr"]),
+            bd_target_cents=r["bd_target_cents"],
         )
 
     def get_public_holidays(self, store_id: int, month: str) -> list[date]:

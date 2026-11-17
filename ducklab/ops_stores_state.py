@@ -52,6 +52,8 @@ class StoresState(SharedOpsState):
     sf_branch_manager: str = ""
     sf_error: str = ""
     sf_saving: bool = False
+    # New Store: the last exact directory match, for the "found" hint.
+    sf_directory_match: str = ""
 
     # ------------------------------------------------------------------
     # clearing
@@ -65,6 +67,7 @@ class StoresState(SharedOpsState):
         self.sf_zone = self.sf_zone_pic = self.sf_branch_manager = ""
         self.sf_error = ""
         self.sf_saving = False
+        self.sf_directory_match = ""
 
     # ------------------------------------------------------------------
     # selectors: clear prior-store form data on switch
@@ -180,7 +183,39 @@ class StoresState(SharedOpsState):
         else:
             self.sf_code = self.sf_name = self.sf_concept = self.sf_state = ""
             self.sf_zone = self.sf_zone_pic = self.sf_branch_manager = ""
+        self.sf_directory_match = ""
 
+    # ------------------------------------------------------------------
+    # New Store: pre-fill from the imported store directory
+    # ------------------------------------------------------------------
+    @rx.event
+    def autofill_from_directory(self) -> None:
+        """Exact full Code OR full Name match, fired on leaving the field.
+
+        Only on the New Store form (never while editing), and only when
+        the typed value actually matches — partial input does nothing.
+        Concept is deliberately never filled: it is an Opscore dropdown
+        tied to the DSC reference data, not a directory column.
+        """
+        if self.sf_editing or not self.sf_open:
+            return
+        code, name = self.sf_code.strip(), self.sf_name.strip()
+        if not code and not name:
+            return
+        try:
+            user = self._actor()
+            match = app_service.lookup_store_directory(
+                user, code=code, name=name)
+        except (AuthenticationError, AuthorizationError, RepositoryError):
+            return                          # a lookup failure never blocks typing
+        if match is None:
+            self.sf_directory_match = ""
+            return
+        self.sf_code = match["code"]
+        self.sf_name = match["name"]
+        self.sf_state = match["state"]
+        self.sf_zone = match["zone"]
+        self.sf_directory_match = match["code"]
     @rx.var
     def sf_concept_hint(self) -> str:
         """A saved concept that is no longer an option stays until the
@@ -219,6 +254,7 @@ class StoresState(SharedOpsState):
                     user, self.sf_code.strip(), self.sf_name.strip(),
                     **details)
             self.sf_open = False
+            self.sf_directory_match = ""
             self.stores_notice = "Store saved."
         except DuplicateRecordError:
             self.sf_error = f"Store code '{self.sf_code.strip()}' already exists."

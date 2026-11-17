@@ -195,7 +195,10 @@ application checks.
 | Table | Holds |
 |---|---|
 | `stores` | Code (unique), name, Concept, State, zone, zone PIC, branch manager, active flag |
-| `monthly_configs` | One row per store and month: targets, uplifts, comparisons, salary ratio target, headcount, stock loss target, BV/UPT targets, payroll figures |
+| `monthly_configs` | One row per store and month: targets, uplifts, comparisons, BD Target, salary ratio target, headcount, stock loss target, BV/UPT targets, payroll figures |
+| `store_directory` | Imported store directory: code (unique), name, State, zone, display area, BD Target (October 2026). Reference data only; no stores are created from it |
+| `store_directory_history` | Imported monthly sales per store code and month (integer cents). Feeds the Sales History chart and the Monthly Setup history button |
+| `store_directory_info` | Singleton: last directory import timestamp, source filename and `bundled` provenance flag (v17) |
 | `public_holidays` | Holiday dates per store |
 | `daily_records` | One row per store and date: sales, transactions, units, staffing and leave counts |
 | `daily_stock_losses` | Stock loss amount per daily record and loss code |
@@ -382,6 +385,53 @@ also refreshed when the stored copy came from the bundle but no longer matches
 the bundled workbook; user-uploaded reference data is never replaced. The
 workbook is bundled into `.deb` and Windows builds. Default expense categories
 are seeded per store only when a store has no categories.
+
+#### Store directory (monthly sales workbook)
+
+`store_directory_import.py` reads a monthly-sales workbook (one row per store,
+one dated column per month) and replaces `store_directory` and
+`store_directory_history` in one transaction. It reuses the stdlib `.xlsx`
+reader from `dsc_import.py`; month headers arrive as Excel serial numbers and
+are converted to `YYYY-MM`. Only Code, Name, Display Area, State, Zone and the
+monthly sales are read — **Concept is never imported**, because Concept is an
+Opscore dropdown tied to the DSC reference data. Blank and zero months are
+skipped, so the directory never records a zero-sales month, and amounts are
+stored as integer cents rounded half-up. No stores, monthly configs or daily
+records are written by the import. The same function powers **Settings →
+Reference Data** and `scripts/import_store_directory.py`.
+
+The workbook's **BD Target** column is imported as reference data into
+`store_directory.bd_target_cents` (v18). The file does not say which month it
+covers, so the month is declared in code as `BD_TARGET_MONTH = "2026-10"`
+(October 2026) on the business's instruction. A blank cell, the workbook's
+"NIL" text and a numeric 0 all mean "no target" and import as None, never as
+RM 0. The figure feeds no KPI, target level, budget or achievement number:
+`monthly_configs.bd_target_cents` (v16) remains the per-store, per-month value
+the user types in Monthly Setup.
+
+The Git-tracked workbook `ducklab/data/store_directory_2025_2026.xlsx` is
+loaded by `reference_bootstrap.load_bundled_store_directory` at startup when
+the directory is empty, and refreshed when the stored copy came from the
+bundle but no longer matches the bundled workbook (an upgrade). A directory
+the user uploaded is never replaced: `store_directory_info.bundled` (v17)
+records the provenance. The workbook is bundled into `.deb` and Windows
+builds alongside the DSC workbook. Seeding failures are logged and non-fatal.
+
+Consumers:
+
+- **New Store** (`StoresState.autofill_from_directory`, on field blur) matches
+  an exact full code or full name (case-insensitive) and fills Name, State and
+  Zone. Editing an existing store never auto-fills, and Concept is left to the
+  user.
+- **Monthly Setup** (`SetupState.load_history_from_directory`, explicit history
+  icon with a tooltip and `aria-label="Load History From Directory"`, element id
+  `setup-load-history`) fills Sales Last Month / Last Year from the directory for
+  the selected store and month, plus the imported BD Target. Nothing is saved
+  until Save Setup; missing months fill blank.
+- **Sales History** (`ops_charts.history_timeline` /
+  `history_year_compare`) draws the imported months on the Sales page with a
+  Timeline / Year vs Year toggle, following the same gap rule as the daily
+  charts. It is independent of the daily records.
 
 ## 8. Backup and restore (`backup.py`)
 
@@ -634,6 +684,7 @@ there to stop Opscore.
 | `scripts/build_windows.ps1` | Build the self-contained Windows folder |
 | `scripts/import_demo.py` | Import the AB01 demo CSVs into a given database |
 | `scripts/import_dsc.py` | Import the Daily Sales Contribution workbook (requires `DUCKLAB_DB_PATH`) |
+| `scripts/import_store_directory.py` | Import the monthly-sales workbook into the store directory (requires `DUCKLAB_DB_PATH`; creates no stores) |
 | `scripts/import_workbook_dev.py` | Import a workbook into a dev database, with a `--verify` parity check |
 | `scripts/bootstrap_admin.py` | Create the first admin from the terminal |
 | `scripts/recover_admin_password.py` | Offline admin password recovery (backs up the DB, revokes sessions) |
@@ -702,6 +753,7 @@ ducklab/
   dsc_import.py               Daily Sales Contribution import
   reference_bootstrap.py      Bundled reference data and expense-category seeds
   data/DSCSPR_alias_2027.xlsx Git-tracked default reference workbook
+  data/store_directory_2025_2026.xlsx Git-tracked bundled store directory
   backup.py                   Backup and restore
   report_export.py            Excel export
   ops_*_pages.py / _state.py  Pages and their state
@@ -717,7 +769,7 @@ assets/                       Logo, icons, favicon
 | Path | Responsibility |
 |---|---|
 | `ducklab/` | Application: app object, pages, states, services, repositories, KPI engine, DB layer |
-| `ducklab/data/` | Git-tracked bundled DSC/SPR reference workbook |
+| `ducklab/data/` | Git-tracked bundled DSC/SPR and store-directory reference workbooks |
 | `packaging/` | Launchers, Linux package config, Windows Inno/PyInstaller specs |
 | `scripts/` | Build, import, bootstrap, recovery, development and QA utilities |
 | `tests/` | Disposable-database unit, integration, migration, security and workflow tests |

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from ducklab import dsc_import, store_ops_db
+from ducklab import dsc_import, store_directory_import, store_ops_db
 from ducklab.expense_category_defaults import (
     DEFAULT_BUDGET_PCT, DEFAULT_EXPENSE_CATEGORIES,
 )
@@ -13,10 +13,16 @@ from ducklab.expense_category_defaults import (
 log = logging.getLogger("ducklab.reference_bootstrap")
 
 WORKBOOK = Path(__file__).parent / "data" / "DSCSPR_alias_2027.xlsx"
+# The shipped monthly-sales workbook. Seeded into the store directory on
+# first launch, and refreshed on upgrade when the stored copy still comes
+# from this bundle.
+DIRECTORY_WORKBOOK = (Path(__file__).parent / "data"
+                      / "store_directory_2025_2026.xlsx")
 
 # Re-exported for callers that already import it from this module.
 __all__ = ["DEFAULT_EXPENSE_CATEGORIES", "seed_default_expense_categories",
-           "backfill_default_budget_pct", "load_bundled_reference_data"]
+           "backfill_default_budget_pct", "load_bundled_reference_data",
+           "load_bundled_store_directory"]
 
 
 def _seed_store_categories(conn, store_id: int) -> None:
@@ -218,4 +224,109 @@ def _bundled_data_differs(workbook: Path, db_path: Path) -> bool:
         if ipr is not None and stored_ipr is not None:
             if abs(float(stored_ipr) - float(ipr)) > 1e-9:
                 return True
+    return False
+
+
+def load_bundled_store_directory(
+        db_path: Path | str = store_ops_db.DB_PATH,
+        workbook: Path = DIRECTORY_WORKBOOK) -> bool:
+    """Load the shipped monthly-sales workbook into the store directory.
+
+    Mirrors :func:`load_bundled_reference_data`:
+
+    * the directory is empty -> import the bundled workbook;
+    * the directory holds BUNDLED data that differs from the bundled
+      workbook -> import it again (an upgrade, not a user-intent violation);
+    * the directory holds user-imported data -> leave it alone.
+
+    The directory is reference data only: no stores, monthly configs or
+    daily records are created. Import failures are deliberately non-fatal to
+    application startup. Returns True when the bundled workbook was imported.
+    """
+    try:
+        store_ops_db.init_db(db_path)
+        conn = store_ops_db.connect(db_path)
+        try:
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            if version < 16:
+                return False        # schema too old: nothing to seed into
+            empty = bool(conn.execute(
+                "SELECT NOT EXISTS (SELECT 1 FROM store_directory)"
+            ).fetchone()[0])
+            if empty:
+                bundled = True
+            else:
+                columns = {r[1] for r in conn.execute(
+                    "PRAGMA table_info(store_directory_info)")}
+                if "bundled" not in columns:
+                    return False    # pre-v17 database: leave it alone
+                row = conn.execute(
+                    "SELECT bundled FROM store_directory_info WHERE id = 1"
+                ).fetchone()
+                if row is None or not row[0]:
+                    return False    # user-imported data: never replaced
+                bundled = True
+        finally:
+            conn.close()
+        if not bundled:
+            return False
+        if not Path(workbook).is_file():
+            log.error("Bundled store directory workbook is missing: %s",
+                      workbook)
+            return False
+        if not empty and not _bundled_directory_differs(
+                Path(workbook), db_path):
+            return False        # already the bundled content: nothing to do
+        store_directory_import.import_workbook(
+            Path(workbook), Path(db_path), bundled=True)
+    except Exception:
+        log.warning("Could not load the bundled store directory; continuing "
+                    "without it", exc_info=True)
+        return False
+    return True
+
+
+def _bundled_directory_differs(workbook: Path, db_path: Path) -> bool:
+    """True when the stored store directory is not the bundled workbook's.
+
+    Compares the store rows and their monthly figures. A workbook row the
+    database does not have (or a different amount) means the stored data is
+    an older bundled copy.
+    """
+    try:
+        stores, history, _ = store_directory_import.parse_workbook(
+            store_directory_import.dsc_import.read_sheet(
+                workbook, store_directory_import._first_sheet_name(workbook)))
+    except Exception:
+        log.warning("Could not read the bundled store directory workbook "
+                    "for comparison; leaving the stored data alone",
+                    exc_info=True)
+        return False
+    conn = store_ops_db.connect(db_path)
+    try:
+        stored_stores = {
+            r[0]: (r[1], r[2], r[3], r[4], r[5]) for r in conn.execute(
+                "SELECT code, name, state, zone, display_area, "
+                "bd_target_cents FROM store_directory")}
+        stored_history = {
+            (r[0], r[1]): r[2] for r in conn.execute(
+                "SELECT code, month, sales_cents FROM store_directory_history")}
+    finally:
+        conn.close()
+    if len(stored_stores) != len(stores):
+        return True                # a store was added or removed
+    for store in stores:
+        key = store["code"]
+        if key not in stored_stores:
+            return True
+        if stored_stores[key] != (store["name"], store["state"],
+                                  store["zone"], store["display_area"],
+                                  store["bd_target_cents"]):
+            return True
+    for row in history:
+        key = (row["code"], row["month"])
+        if key not in stored_history:
+            return True
+        if stored_history[key] != row["sales_cents"]:
+            return True
     return False

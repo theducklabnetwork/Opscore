@@ -395,6 +395,65 @@ class AppService:
         return dsc_import.import_workbook(Path(xlsx),
                                           Path(self.read_repo._db_path))
 
+    # -- store directory (imported monthly-sales reference data) ---------------
+    def _directory_path(self) -> Path:
+        return Path(self.read_repo._db_path)
+
+    def import_store_directory(self, user: User, xlsx: Path) -> dict:
+        """Replace the store directory from an uploaded monthly-sales
+        workbook. All-or-nothing; never creates stores or daily records.
+        Config managers only."""
+        authz.require_config_manager(user)
+        from ducklab import store_directory_import
+        return store_directory_import.import_workbook(
+            Path(xlsx), self._directory_path())
+
+    def store_directory_info(self, user: User) -> dict:
+        """Directory store/month counts and last import. Config managers."""
+        authz.require_config_manager(user)
+        from ducklab import store_directory_import
+        return store_directory_import.directory_info(self._directory_path())
+
+    def lookup_store_directory(self, user: User, code: str = "",
+                               name: str = "") -> Optional[dict]:
+        """Exact full code OR full name match for the New Store form.
+        Store management is Super Admin only, so the lookup is too."""
+        authz.require_store_manager(user)
+        from ducklab import store_directory_import
+        return store_directory_import.lookup(
+            self._directory_path(), code=code, name=name)
+
+    def store_directory_comparison(self, user: User, store_id: int,
+                                   month: str) -> dict:
+        """Sales Last Month / Last Year from the directory for a store that
+        already exists. Store-scoped read; missing months come back None."""
+        authz.require_store_access(user, store_id)
+        store = self.read_repo.get_store(store_id)
+        from ducklab import store_directory_import
+        return store_directory_import.comparison_figures(
+            self._directory_path(), store.code, month)
+
+    def store_directory_bd_target(self, user: User,
+                                  store_id: int) -> Optional[int]:
+        """The imported BD Target (cents) for a store, or None.
+
+        Reference data for BD_TARGET_MONTH (October 2026). It feeds no KPI;
+        Monthly Setup's own BD Target field stays the user's to type.
+        Store-scoped read."""
+        authz.require_store_access(user, store_id)
+        store = self.read_repo.get_store(store_id)
+        from ducklab import store_directory_import
+        return store_directory_import.bd_target_for(
+            self._directory_path(), store.code)
+
+    def store_directory_history(self, user: User, store_id: int) -> dict:
+        """{'YYYY-MM': cents} for the sales-history charts. Store-scoped."""
+        authz.require_store_access(user, store_id)
+        store = self.read_repo.get_store(store_id)
+        from ducklab import store_directory_import
+        return store_directory_import.history_for(
+            self._directory_path(), store.code)
+
     # -- user administration ------------------------------------------------------
     def create_user(self, actor: User, email: str, display_name: str,
                     password: str) -> User:
