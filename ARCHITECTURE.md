@@ -152,7 +152,7 @@ Latest-version lookups and the Finalized version list include only rows with
 ## 4. Data model
 
 One SQLite file holds both operations data and accounts. Schema version is
-tracked in `schema_migrations` and `PRAGMA user_version` (currently **15**).
+tracked in `schema_migrations` and `PRAGMA user_version` (currently **19**).
 Initialization is idempotent and migrations are additive. Each migration runs
 in its own transaction, and its `PRAGMA user_version` update commits in that
 same transaction; a failure rolls back the whole step so it can be retried.
@@ -583,8 +583,8 @@ by default. After an explicit `-AllowReleaseOutput` folder build, deliberate
 release-installer replacement uses
 `ISCC.exe /DOPSCORE_ALLOW_OVERWRITE=1 packaging\windows\opscore.iss`; candidate
 builds also pass their version and package-name defines. The build scripts do not sign the
-installer. The published v1.2 installer was signed afterwards with a
-self-signed `Opscore Development` Authenticode certificate and a DigiCert
+installer. The published v1.2 and v1.3 installers were signed afterwards with
+a self-signed `Opscore Development` Authenticode certificate and a DigiCert
 timestamp. The signature protects file integrity but does not establish
 publisher trust on an ordinary Windows machine; no private CA needs to be
 installed to run the app. Signing keys and passwords are not stored in the
@@ -601,7 +601,7 @@ folder-plus-Inno path above.
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/release-windows.yml` | Release published / manual | Builds the Windows folder and installer and uploads the installer to the release |
+| `.github/workflows/release-windows.yml` | Release published / manual | Builds the Windows folder and unsigned installer as a workflow artifact for post-build signing; never replaces release assets |
 | `.github/workflows/windows-build.yml` | Manual | Frozen PyInstaller build + smoke test |
 | `.github/workflows/windows-check.yml` | Manual | Installs locked deps and runs the test suite on Windows |
 

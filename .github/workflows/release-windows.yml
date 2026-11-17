@@ -64,17 +64,11 @@ jobs:
           Write-Host "Built $installer"
           "OPSCORE_INSTALLER=$((Resolve-Path -LiteralPath $installer).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Attach installer to published release
-        if: github.event_name == 'release'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: pwsh
-        run: gh release upload $env:GITHUB_REF_NAME $env:OPSCORE_INSTALLER --clobber
-
-      - name: Upload installer artifact for manual builds
-        if: github.event_name == 'workflow_dispatch'
+      - name: Upload unsigned installer for signing
+        # Signing is a post-build release step. Never attach this unsigned CI
+        # output to a published release or overwrite its signed installer.
         uses: actions/upload-artifact@v4
         with:
-          name: Opscore-Setup-${{ github.run_id }}
+          name: Opscore-Setup-unsigned-${{ github.run_id }}
           path: ${{ env.OPSCORE_INSTALLER }}
           if-no-files-found: error
