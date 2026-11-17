@@ -260,7 +260,25 @@ class _SharedConnection:
             return None
         if statement.startswith(("BEGIN", "COMMIT")):
             return None
-        return self._conn.execute(sql, *args)
+        try:
+            return self._conn.execute(sql, *args)
+        except sqlite3.Error:
+            self.rollback()
+            raise
+
+    def executemany(self, sql: str, *args):
+        try:
+            return self._conn.executemany(sql, *args)
+        except sqlite3.Error:
+            self.rollback()
+            raise
+
+    def executescript(self, sql_script: str):
+        try:
+            return self._conn.executescript(sql_script)
+        except sqlite3.Error:
+            self.rollback()
+            raise
 
     def commit(self) -> None:
         pass

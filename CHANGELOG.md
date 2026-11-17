@@ -46,6 +46,14 @@ Schema version: **15**.
 
 ### Fixed
 
+- **Restore cleanup ordering.** Stale WAL/SHM sidecars are removed before the
+  atomic database replacement. Cleanup failure can no longer install a restore
+  while reporting that the database was not replaced.
+- **Shared transaction failure handling.** SQL errors poison the active
+  `AppService` transaction even when inner code catches them, preventing an
+  outer commit. Nested or overlapping transactions on the same service are
+  rejected before they can corrupt shared connection state.
+
 - **Linux zenity startup fallback.** GTK initialization failure now uses the
   discovered zenity executable directly for keep/fresh responses instead of
   referencing an undefined variable.

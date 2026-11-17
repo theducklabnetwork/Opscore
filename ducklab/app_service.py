@@ -29,12 +29,16 @@ class AppService:
         self.read_repo = OperationsRepository(db_path)
         self.write = OperationsWriteService(db_path)
         self.snapshots = SnapshotService(db_path)
+        self._transaction_active = False
 
     @contextmanager
     def transaction(self):
         """Share one all-or-nothing SQLite transaction across services."""
+        if self._transaction_active:
+            raise RuntimeError("Nested or overlapping AppService transactions are not supported")
         services = (self.read_repo, self.write.repo, self.auth,
                     self.snapshots, self.snapshots.repo)
+        self._transaction_active = True
         original_paths = [service._db_path for service in services]
         state = store_ops_db._TransactionState()
         conn = store_ops_db.connect(self.read_repo._db_path)
@@ -56,6 +60,7 @@ class AppService:
                 service._db_path = db_path
             store_ops_db._TRANSACTION_STATES.pop(conn, None)
             conn.close()
+            self._transaction_active = False
 
     # -- session helpers ---------------------------------------------------
     def authenticate(self, token: str) -> User:

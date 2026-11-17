@@ -263,6 +263,34 @@ class BackupModuleTest(unittest.TestCase):
         conn.close()
         self.assertFalse(list(self.dir.glob(".store_ops.db.restore-*")))
 
+    def test_sidecar_cleanup_failure_leaves_live_db_unchanged(self):
+        incoming = self.dir / "incoming-cleanup-failure.db"
+        backup.create_backup(self.db, incoming)
+        before = sqlite3.connect(self.db).execute(
+            "SELECT display_name FROM auth_users").fetchall()
+        original_replace = backup.os.replace
+
+        def fail_if_replaced(src, dst):
+            if Path(dst) == self.db:
+                self.fail("Database replacement must follow successful cleanup")
+            return original_replace(src, dst)
+
+        original_unlink = backup.Path.unlink
+
+        def fail_live_sidecar_unlink(path, *args, **kwargs):
+            if path.parent == self.dir and path.name.startswith(self.db.name + "-"):
+                raise OSError("locked")
+            return original_unlink(path, *args, **kwargs)
+
+        with mock.patch.object(backup.Path, "unlink", side_effect=fail_live_sidecar_unlink, autospec=True), \
+                mock.patch.object(backup.os, "replace", side_effect=fail_if_replaced):
+            with self.assertRaisesRegex(backup.BackupError, "replace the database safely"):
+                backup.restore(self.db, incoming)
+        check = sqlite3.connect(self.db)
+        self.assertEqual(check.execute(
+            "SELECT display_name FROM auth_users").fetchall(), before)
+        check.close()
+
     def test_pre_restore_copy_created(self):
         saved = backup.save_pre_restore_backup(
             self.db, now=datetime(2026, 10, 25, 9, 15, 0))

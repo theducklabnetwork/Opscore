@@ -321,9 +321,12 @@ def _replace_database(db_path: Path, staged_path: Path) -> None:
         live.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         live.execute("PRAGMA journal_mode = DELETE")
         live.execute("BEGIN EXCLUSIVE")
-        os.replace(staged_path, db_path)
+        # Finish all fallible cleanup before the irreversible replacement. A
+        # sidecar deletion failure must not leave the UI claiming that an
+        # already-installed database was not restored.
         for suffix in ("-wal", "-shm"):
             db_path.with_name(db_path.name + suffix).unlink(missing_ok=True)
+        os.replace(staged_path, db_path)
         live.rollback()
     except (OSError, sqlite3.Error) as exc:
         live.rollback()

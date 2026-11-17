@@ -195,6 +195,71 @@ class TestImportScript(unittest.TestCase):
                 app.read_repo.get_store_by_code("UNDO")
             self.assertIn("Unknown store code", str(ctx.exception))
 
+    def test_transaction_commits_on_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            with app.transaction():
+                app.register_store(admin, "COMMIT", "Committed together")
+            self.assertEqual(app.read_repo.get_store_by_code("COMMIT").name,
+                             "Committed together")
+
+    def test_nested_transaction_is_rejected_without_corrupting_outer_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            with app.transaction() as conn:
+                app.register_store(admin, "OUTER", "Outer transaction")
+                with self.assertRaisesRegex(RuntimeError, "Nested or overlapping"):
+                    with app.transaction():
+                        pass
+                self.assertIs(app.read_repo._db_path, conn)
+            self.assertEqual(app.read_repo._db_path, db)
+            self.assertFalse(app._transaction_active)
+            self.assertEqual(app.read_repo.get_store_by_code("OUTER").name,
+                             "Outer transaction")
+
+    def test_overlapping_transaction_is_rejected_and_original_scope_restored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            outer = app.transaction()
+            outer_conn = outer.__enter__()
+            overlapping = app.transaction()
+            try:
+                with self.assertRaisesRegex(RuntimeError, "Nested or overlapping"):
+                    overlapping.__enter__()
+            finally:
+                outer.__exit__(None, None, None)
+                overlapping.__exit__(None, None, None)
+            self.assertEqual(app.read_repo._db_path, db)
+            self.assertFalse(app._transaction_active)
+
+    def test_caught_sql_error_prevents_outer_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from ducklab.app_service import AppService
+            db = Path(tmp) / "disp.db"
+            app = AppService(db)
+            admin = app.auth.bootstrap_first_admin(
+                "a@x.dev", "A", "Sup3rSecure!x")
+            with app.transaction():
+                app.register_store(admin, "UNDO", "Must roll back")
+                try:
+                    app.write.repo._connect().execute(
+                        "INSERT INTO stores (code, name) VALUES (?, ?)",
+                        ("UNDO", "Duplicate"))
+                except sqlite3.IntegrityError:
+                    pass
+            with self.assertRaisesRegex(Exception, "Unknown store code"):
+                app.read_repo.get_store_by_code("UNDO")
+
     def test_blank_vs_zero_import_rule(self):
         """Typed 0 is stored as 0; a blank cell stays NULL."""
         with tempfile.TemporaryDirectory() as tmp:
