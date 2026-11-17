@@ -299,13 +299,17 @@ def _setup_section() -> rx.Component:
                 _levels_panel(),
                 _setup_grid(SETUP_SALES[5:]),
                 rx.hstack(
-                    rx.button(
-                        "Load History From Directory",
-                        on_click=Setup.load_history_from_directory,
-                        variant="soft", size="2", type="button",
-                        id="setup-load-history",
-                        disabled=~Setup.can_edit_setup
-                        | ~Setup.s_history_available),
+                    rx.tooltip(
+                        rx.icon_button(
+                            rx.icon("history", size=15),
+                            on_click=Setup.load_history_from_directory,
+                            variant="soft", size="2", type="button",
+                            id="setup-load-history",
+                            aria_label="Load History From Directory",
+                            disabled=~Setup.can_edit_setup
+                            | ~Setup.s_history_available),
+                        content="Load imported sales history (and BD Target) "
+                                "into this form"),
                     rx.cond(Setup.s_history_available,
                             ui.note("Imported monthly sales are available for "
                                     "this store and month."),

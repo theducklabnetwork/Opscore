@@ -423,10 +423,11 @@ Consumers:
   an exact full code or full name (case-insensitive) and fills Name, State and
   Zone. Editing an existing store never auto-fills, and Concept is left to the
   user.
-- **Monthly Setup** (`SetupState.load_history_from_directory`, explicit button)
-  fills Sales Last Month / Last Year from the directory for the selected store
-  and month, plus the imported BD Target. Nothing is saved until Save Setup;
-  missing months fill blank.
+- **Monthly Setup** (`SetupState.load_history_from_directory`, explicit history
+  icon with a tooltip and `aria-label="Load History From Directory"`, element id
+  `setup-load-history`) fills Sales Last Month / Last Year from the directory for
+  the selected store and month, plus the imported BD Target. Nothing is saved
+  until Save Setup; missing months fill blank.
 - **Sales History** (`ops_charts.history_timeline` /
   `history_year_compare`) draws the imported months on the Sales page with a
   Timeline / Year vs Year toggle, following the same gap rule as the daily
