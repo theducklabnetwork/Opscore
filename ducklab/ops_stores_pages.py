@@ -75,10 +75,11 @@ def _stores_table() -> rx.Component:
 
 
 def _sf_field(label, value, setter, fid, placeholder="",
-              required=False) -> rx.Component:
+              required=False, on_blur=None, hint=None) -> rx.Component:
     return ui.form_field(label, rx.input(value=value, on_change=setter,
+                                         on_blur=on_blur,
                                          placeholder=placeholder, id=fid),
-                         required=required)
+                         required=required, hint=hint)
 
 
 def _store_form_dialog() -> rx.Component:
@@ -87,9 +88,17 @@ def _store_form_dialog() -> rx.Component:
             "Store",
             ui.form_grid(
                 _sf_field("Code", Stores.sf_code, Stores.set_sf_code, "sf-code",
-                          "e.g. A01", required=True),
+                          "e.g. A01", required=True,
+                          on_blur=Stores.autofill_from_directory,
+                          hint=rx.cond(
+                              Stores.sf_directory_match != "",
+                              "Matched the store directory — Name, State and "
+                              "Zone were filled in. Pick a Concept, then save.",
+                              "Known store? Type its full code to fill in the "
+                              "details.")),
                 _sf_field("Name", Stores.sf_name, Stores.set_sf_name, "sf-name",
-                          required=True),
+                          required=True,
+                          on_blur=Stores.autofill_from_directory),
                 ui.form_field(
                     "Concept",
                     rx.select(list(CONCEPTS), value=Stores.sf_concept,
@@ -289,9 +298,25 @@ def _setup_section() -> rx.Component:
                     spacing="3", align="center", wrap="wrap"),
                 _levels_panel(),
                 _setup_grid(SETUP_SALES[5:]),
+                rx.hstack(
+                    rx.button(
+                        "Load History From Directory",
+                        on_click=Setup.load_history_from_directory,
+                        variant="soft", size="2", type="button",
+                        id="setup-load-history",
+                        disabled=~Setup.can_edit_setup
+                        | ~Setup.s_history_available),
+                    rx.cond(Setup.s_history_available,
+                            ui.note("Imported monthly sales are available for "
+                                    "this store and month."),
+                            ui.note("No imported history for this store and "
+                                    "month.")),
+                    spacing="3", align="center", wrap="wrap"),
                 hint="Set Levels 2–4 when Level 1 has a target. HQ Defaults "
                      "set Minimum RTM to RM 200,000 and add 10%, 20% and 30%. "
-                     "Last year and last month drive growth comparisons.",
+                     "Last year and last month drive growth comparisons. "
+                     "BD Target is for reference only and does not change "
+                     "the calculated levels.",
             ),
             ui.form_section(
                 "Daily Sales",

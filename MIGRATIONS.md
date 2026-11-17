@@ -38,7 +38,7 @@ data. There is no separate auth database.
 
 ## 3. Current schema version
 
-**Schema version: 15** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
+**Schema version: 16** (`SCHEMA_VERSION` in `ducklab/store_ops_db.py`).
 
 You can see the schema version of a running installation in **Settings →
 About**.
@@ -69,7 +69,7 @@ backup, migration or restore. A version-zero database initializes normally.
 2. If an existing database has pending migrations, saves a consistent
    pre-migration copy before the first transaction. Backup failure aborts
    migration without changing the live database.
-3. Iterates a static, ordered list `(1, _apply_v1) … (15, _apply_v15)`.
+3. Iterates a static, ordered list `(1, _apply_v1) … (16, _apply_v16)`.
 4. Skips versions `<= current`.
 5. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
    COMMIT`, rolling back the whole step on any error.
@@ -120,7 +120,7 @@ use the in-memory limiter backend.
 
 ## 6. Schema history
 
-The complete v1–v15 history, from the migration functions in
+The complete v1–v16 history, from the migration functions in
 `ducklab/store_ops_db.py`:
 
 | Version | Change | Type |
@@ -140,6 +140,7 @@ The complete v1–v15 history, from the migration functions in
 | **v13** | `shift_codes.show_in_legend` controls inclusion in the generated View legend. Existing codes default to included. | Additive |
 | **v14** | Configured public holidays replace all ABM assignments with automatic OPH, including existing manual shifts. Other staff and non-holiday assignments are unchanged. | Safe data update |
 | **v15** | Versioned authentication baseline: all auth tables/indexes, five roles, additive `tour_done`, and persistent `auth_login_failures`. Existing auth records are preserved. | Additive baseline |
+| **v16** | `monthly_configs.bd_target_cents` (informational Monthly Setup input; no KPI uses it). New reference tables `store_directory` (code, name, state, zone, display_area), `store_directory_history` (code, month, sales_cents) and `store_directory_info` (last import). The directory holds the monthly-sales workbook; no stores or daily records are created from it. | Additive |
 
 ## 7. Migration execution process
 

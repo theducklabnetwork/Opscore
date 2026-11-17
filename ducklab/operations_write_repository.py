@@ -95,6 +95,7 @@ _NON_NEGATIVE_CONFIG = (
     "min_rtm_target_cents", "level1_base_cents", "sales_last_year_cents",
     "sales_last_month_cents", "salary_basic_allowance_cents",
     "overtime_cents", "support_team_cost_cents", "budget_headcount",
+    "bd_target_cents",
     "opening_headcount_ft", "target_transactions", "target_spr_cents",
 )
 
@@ -248,6 +249,7 @@ class OperationsWriteRepository:
         "stock_loss_target", "opening_headcount_ft", "part_timer_factor",
         "salary_basic_allowance_cents", "overtime_cents", "support_team_cost_cents",
         "target_transactions", "target_spr_cents", "target_ipr",
+        "bd_target_cents",
     )
 
     def save_month_config(self, store_id: int, month: str, **fields) -> int:

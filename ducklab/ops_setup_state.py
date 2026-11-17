@@ -48,6 +48,7 @@ SETUP_SALES = [
      "Sales Last Year (RM)"),
     ("s_last_month", "sales_last_month_cents", "money",
      "Sales Last Month (RM)"),
+    ("s_bd_target", "bd_target_cents", "money", "BD Target (RM)"),
 ]
 SETUP_MANPOWER = [
     ("s_salary_ratio", "salary_ratio_target", "pct",
@@ -130,6 +131,8 @@ class SetupState(SharedOpsState):
     s_level4: str = ""
     s_last_year: str = ""
     s_last_month: str = ""
+    s_bd_target: str = ""
+    s_history_available: bool = False  # directory has figures for this month
     s_salary_ratio: str = ""
     s_budget_hc: str = ""
     s_turnover: str = ""
@@ -161,6 +164,7 @@ class SetupState(SharedOpsState):
         self.s_holidays = []
         self.s_holidays_original = []
         self.s_holiday_min = self.s_holiday_max = ""
+        self.s_history_available = False
         for attr, _, _, _ in SETUP_ALL:
             setattr(self, attr, "")
 
@@ -182,6 +186,13 @@ class SetupState(SharedOpsState):
             return
         store_id = self._selected_store_id()
         month = self._selected_month()
+        if store_id is None or month is None:
+            # This page state holds its own copy of the shared selectors;
+            # populate them here so a direct load (or a store save that
+            # refreshes only this state) never renders a disabled form.
+            self._populate_selectors(user)
+            store_id = self._selected_store_id()
+            month = self._selected_month()
         self.can_edit_setup = (
             self.selected_store_active and
             store_id is not None and authz.can_manage_config(user)
@@ -205,6 +216,10 @@ class SetupState(SharedOpsState):
             cats = app_service.get_expense_categories(user, store_id)
             budgets = app_service.get_expense_budgets(user, store_id, month)
             holidays = app_service.get_public_holidays(user, store_id, month)
+            figures = app_service.store_directory_comparison(
+                user, store_id, month)
+            self.s_history_available = any(
+                v is not None for v in figures.values())
         except (AuthenticationError, AuthorizationError,
                 StoreNotFoundError) as exc:
             # never show blank setup fields for an auth failure
@@ -232,6 +247,7 @@ class SetupState(SharedOpsState):
                 "s_level4": _pct_str(cfg.level4_pct),
                 "s_last_year": _money_str(cfg.sales_last_year_cents),
                 "s_last_month": _money_str(cfg.sales_last_month_cents),
+                "s_bd_target": _money_str(cfg.bd_target_cents),
                 "s_budget_hc": _count_str(cfg.budget_headcount),
                 "s_turnover": _pct_str(cfg.turnover_threshold),
                 "s_opening_hc": _count_str(cfg.opening_headcount_ft),
@@ -349,6 +365,10 @@ class SetupState(SharedOpsState):
     @rx.event
     def set_s_last_month(self, value: str) -> None:
         self.s_last_month = value
+
+    @rx.event
+    def set_s_bd_target(self, value: str) -> None:
+        self.s_bd_target = value
 
     @rx.event
     def set_s_salary_ratio(self, value: str) -> None:
@@ -477,6 +497,40 @@ class SetupState(SharedOpsState):
             self.setup_saving = False
         yield
         yield SetupState.load_setup_data()
+
+    @rx.event
+    def load_history_from_directory(self) -> None:
+        """Fill Sales Last Month / Last Year from the imported directory.
+
+        Explicit button only: nothing is written to the database, and the
+        figures stay editable until Save Setup. A month the workbook left
+        blank or 0 fills the field blank (never RM 0.00).
+        """
+        self.setup_error = ""
+        self.setup_notice = ""
+        try:
+            user = self._actor()
+            store_id = self._selected_store_id()
+            month = self._selected_month()
+            if store_id is None or month is None:
+                raise ValidationError("Select a store and month first.")
+            figures = app_service.store_directory_comparison(
+                user, store_id, month)
+        except (AuthenticationError, AuthorizationError,
+                StoreNotFoundError) as exc:
+            self.setup_error = auth_message(exc)
+            return
+        except ValidationError as exc:
+            self.setup_error = str(exc)
+            return
+        if all(v is None for v in figures.values()):
+            self.setup_notice = (
+                "No imported history for this store and month.")
+            return
+        self.s_last_month = _money_str(figures["sales_last_month_cents"])
+        self.s_last_year = _money_str(figures["sales_last_year_cents"])
+        self.setup_notice = (
+            "History loaded from the store directory. Save Setup to apply.")
 
     @rx.event
     def use_hq_defaults(self) -> None:

@@ -202,6 +202,9 @@ class MonthConfig:
     target_transactions: Optional[int] = None
     target_spr_cents: Optional[int] = None
     target_ipr: Optional[Decimal] = None
+    # Informational BD target (RM cents). Displayed in Monthly Setup only;
+    # never used by the sales target levels, budgets or KPIs.
+    bd_target_cents: Optional[int] = None
 
 
 # --------------------------------------------------------------------------

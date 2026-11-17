@@ -193,6 +193,28 @@ def _sales_calendar() -> rx.Component:
         id="calendar-section")
 
 
+def _sales_history() -> rx.Component:
+    """Imported monthly sales, independent of the daily records."""
+    return rx.cond(S.sp_hist_ready, ui.section_card(
+        rx.hstack(
+            rx.spacer(),
+            rx.radio_group.root(
+                rx.radio_group.item("Timeline", value="timeline",
+                                    id="history-mode-timeline"),
+                rx.radio_group.item("Year vs Year", value="yoy",
+                                    id="history-mode-yoy"),
+                value=S.sp_hist_mode, on_change=S.select_history_mode,
+                direction="row", id="history-mode"),
+            width="100%", align="center"),
+        _themed(S.active_hist_fig, "300px"),
+        rx.text(S.sp_hist_sub, size="1", color=ds.TEXT_FAINT),
+        rx.text("Timeline shows every imported month in order; Year vs Year "
+                "overlays each year on one Jan–Dec axis. Months the workbook "
+                "left blank or zero are gaps, not zero sales.",
+                size="1", color=ds.TEXT_FAINT),
+        title="Sales History (Imported)", id="history-section"))
+
+
 def _day_charts() -> rx.Component:
     # side by side from desktop up, stacked on phones / tablets
     return rx.grid(
@@ -331,6 +353,7 @@ def sales_page() -> rx.Component:
             _pace_chart(),
             _daily_vs_target(),
             _day_charts(),
+            _sales_history(),
             _target_ladder(),
             _daily_table(),
             spacing=ui.GAP, width="100%",

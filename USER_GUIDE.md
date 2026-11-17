@@ -143,13 +143,22 @@ Its history is kept, and reactivating it restores normal access.
 **State and Concept matter.** They pick the right daily contribution figures,
 so daily targets stay blank until both are set.
 
+**The store directory can fill in the details for you.** If a store
+directory has been imported (Settings → Reference Data), type the store's
+**full code** in Code — or its **full name** in Name — and leave the field.
+The Name, State and Zone are filled in for you and the form shows
+"Matched the store directory". A partial code does nothing: the match must
+be exact. Concept is never filled in, because it belongs to Opscore's own
+list and drives the daily contribution figures. Editing a store that already
+exists never overwrites your corrections.
+
 ### Monthly Setup
 
 Pick the store, month and year, then fill in:
 
 | Group | Fields |
 |---|---|
-| Sales Targets | Minimum RTM target, Level 1 base target, Level 2, 3 and 4 uplift. Use **Use HQ Defaults** to fill Minimum RTM (RM 200,000) and +10%, +20% and +30% uplifts. Sales same month last year, sales last month. |
+| Sales Targets | Minimum RTM target, Level 1 base target, Level 2, 3 and 4 uplift. Use **Use HQ Defaults** to fill Minimum RTM (RM 200,000) and +10%, +20% and +30% uplifts. Sales same month last year, sales last month, BD Target. |
 | Daily Sales | Target Transactions, Target BV, Target UPT, Public Holidays. If Target Transactions is blank, the form suggests Level 1 ÷ Target BV, rounded to a whole transaction. |
 | Manpower | Salary ratio target, budget headcount, opening headcount, turnover threshold, part-timer factor, payroll figures |
 | Stock | Stock loss target |
@@ -158,6 +167,18 @@ Pick the store, month and year, then fill in:
 Click **Save Setup**. Use **Copy From Last Month** to pre-fill the form and
 expense budgets from the previous month; review the values and click
 **Save Setup** to apply them.
+
+**Load History From Directory.** When a store directory has been imported,
+this button fills **Sales Last Month** and **Sales Last Year** from the
+imported monthly figures for the selected store and month. It only ever
+fills the form — nothing is saved until you click **Save Setup** — and a
+month the workbook left blank or zero fills the field blank, never RM 0.00.
+The button is disabled when the directory has no figures for that store and
+month.
+
+**BD Target** is a reference figure for your own records. It is displayed on
+the form and stored per store per month, but it does not change Level 1–4,
+the achievement percentages, the expense budgets or the daily targets.
 
 **Budget percentages.** Each category's budget is a percentage of the store's
 active sales target. The target starts at **Minimum RTM**; once cumulative
@@ -231,7 +252,15 @@ expenses for each day, including an entered RM0 expense.
 | Basket | **BV**, **UPT**, **ASP**, compared with the **State Average** |
 | Sales Trend | Chart of daily and cumulative sales against target levels |
 | Sales Calendar | The month at a glance, colour-coded by result |
+| Sales History (Imported) | Monthly sales from the imported store directory, as a **Timeline** or as **Year vs Year** (each year overlaid on one Jan–Dec axis) |
 | Daily Sales | Each day's **Contribution**, **Daily Target**, **Adjusted Target**, **Sales** and **Result** |
+
+**Sales History (Imported)** is separate from the daily records: it comes
+from the store directory, so a store with no daily entries yet still has a
+history. Months the source workbook left blank or zero appear as gaps, not
+as zero sales. Use the toggle at the top right of the card to switch between
+the two views. The card is hidden when the directory has no figures for the
+selected store.
 
 ### How daily targets work
 
@@ -469,6 +498,16 @@ replaces the previous key immediately.
   you upload yourself is never overwritten by the bundled data; a copy that
   came from the bundle is refreshed automatically when the bundled workbook
   changes on upgrade.
+- **Store Directory (Monthly Sales)**: upload a monthly-sales workbook — one
+  row per store, one column per month. It replaces the store directory used
+  to pre-fill New Store details, to fill Sales Last Month / Last Year in
+  Monthly Setup, and to draw the **Sales History** chart on Sales
+  Performance. It **never creates stores or daily records**: your store list
+  and every operational record stay exactly as they are. Concept and BD
+  Target are not imported (Concept belongs to Opscore's own list, and BD
+  Target is typed by hand in Monthly Setup). Months the workbook left blank
+  or zero stay blank. The import is all-or-nothing and can be re-run to
+  replace the directory.
 
 ### Backup and restore (Super Admin)
 

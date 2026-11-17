@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 SQLITE_BUSY_TIMEOUT_MS = 10_000
 
@@ -352,6 +352,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (13, _apply_v13),
             (14, _apply_v14),
             (15, _apply_v15),
+            (16, _apply_v16),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -822,3 +823,41 @@ def _apply_v15(conn: sqlite3.Connection) -> None:
         ((role,) for role in AUTH_ROLES),
     )
     conn.execute("INSERT OR IGNORE INTO schema_migrations (version) VALUES (15)")
+
+
+def _apply_v16(conn: sqlite3.Connection) -> None:
+    """BD Target input and the imported store directory.
+
+    ``bd_target_cents`` is an informational Monthly Setup field; it feeds no
+    KPI, target level or budget. ``store_directory`` / ``store_directory_history``
+    hold the monthly-sales workbook as reference data (like the DSC tables):
+    no stores are created from it. A new store's code/name looks the directory
+    up to pre-fill details, and Monthly Setup can copy Last Month / Last Year
+    from its history.
+    """
+    columns = {row[1] for row in conn.execute(
+        "PRAGMA table_info(monthly_configs)")}
+    if columns and "bd_target_cents" not in columns:
+        conn.execute(
+            "ALTER TABLE monthly_configs ADD COLUMN bd_target_cents INTEGER")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS store_directory ("
+        "code TEXT PRIMARY KEY,"
+        "name TEXT NOT NULL,"
+        "state TEXT,"
+        "zone TEXT,"
+        "display_area INTEGER)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS store_directory_history ("
+        "code TEXT NOT NULL REFERENCES store_directory(code) "
+        "ON DELETE CASCADE,"
+        "month TEXT NOT NULL,"
+        "sales_cents INTEGER NOT NULL,"
+        "PRIMARY KEY (code, month))")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS store_directory_info ("
+        "id INTEGER PRIMARY KEY CHECK (id = 1),"
+        "imported_at TEXT NOT NULL,"
+        "source_name TEXT)")
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (16)")

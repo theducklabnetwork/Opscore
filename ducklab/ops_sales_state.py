@@ -117,6 +117,15 @@ class SalesState(SharedOpsState):
     sp_cal_dark: go.Figure | None = None
     sp_cal_light: go.Figure | None = None
 
+    # Imported monthly sales history (store directory). Independent of the
+    # daily records: a store with no daily entries still has a history.
+    sp_hist_ready: bool = False
+    sp_hist_mode: str = "timeline"          # "timeline" | "yoy"
+    sp_hist_dark: go.Figure | None = None
+    sp_hist_light: go.Figure | None = None
+    sp_hist_sub: str = ""
+    sp_hist_years: list[str] = []
+
     # Plain private attribute (no annotation): intentionally not state.
     _chart_inputs = {}
 
@@ -141,6 +150,7 @@ class SalesState(SharedOpsState):
         if not src:
             return
         self._apply_pace_theme(dark)
+        self._apply_history_theme(dark)
         builders = (("dvt", ops_charts.daily_vs_target),
                     ("weekday", ops_charts.weekday_bars),
                     ("cal", ops_charts.sales_calendar))
@@ -171,6 +181,39 @@ class SalesState(SharedOpsState):
     def active_cal_fig(self) -> go.Figure:
         return ((self.sp_cal_dark if self.is_dark else self.sp_cal_light)
                 or go.Figure())
+
+    @rx.var
+    def active_hist_fig(self) -> go.Figure:
+        return ((self.sp_hist_dark if self.is_dark else self.sp_hist_light)
+                or go.Figure())
+
+    @rx.event
+    def select_history_mode(self, mode: str) -> None:
+        """Timeline / Year vs Year toggle; rebuilds from the cached source."""
+        if mode not in ("timeline", "yoy") or mode == self.sp_hist_mode:
+            return
+        self.sp_hist_mode = mode
+        self._apply_history_theme(self.is_dark)
+
+    def _apply_history_theme(self, dark: bool) -> None:
+        history = self._chart_source().get("history")
+        if not history:
+            return
+        fig = (ops_charts.history_timeline(*history, dark=dark)
+               if self.sp_hist_mode == "timeline"
+               else ops_charts.history_year_compare(
+                   *self._year_compare(history), dark=dark))
+        self.sp_hist_dark = fig if dark else None
+        self.sp_hist_light = None if dark else fig
+
+    @staticmethod
+    def _year_compare(history) -> tuple[list[int], list[list]]:
+        """(months, values) -> (years, one 12-slot list per year)."""
+        months, values = history
+        years = sorted({int(m[:4]) for m in months})
+        by_month = dict(zip(months, values))
+        return years, [[by_month.get(f"{y:04d}-{m:02d}")
+                        for m in range(1, 13)] for y in years]
 
     @rx.event
     def restyle_charts(self, dark: bool) -> None:
@@ -219,6 +262,11 @@ class SalesState(SharedOpsState):
         self.sp_chart_ready = False
         self.sp_fig_dark = None
         self.sp_fig_light = None
+        self.sp_hist_ready = False
+        self.sp_hist_dark = None
+        self.sp_hist_light = None
+        self.sp_hist_sub = ""
+        self.sp_hist_years = []
         self.sp_dvt_ready = self.sp_weekday_ready = self.sp_cal_ready = False
         for name in ("dvt", "weekday", "cal"):
             setattr(self, f"sp_{name}_dark", None)
@@ -289,6 +337,7 @@ class SalesState(SharedOpsState):
                 user, store_id, month)
             self.sp_finalized = bool(
                 app_service.list_report_versions(user, store_id, month))
+            history = app_service.store_directory_history(user, store_id)
         except (AuthorizationError, AuthenticationError) as exc:
             self.sp_error = (str(exc) if not isinstance(exc, AuthenticationError)
                              else "Your session has expired. Please sign in again.")
@@ -435,6 +484,15 @@ class SalesState(SharedOpsState):
         self._chart_inputs = {
             "days": days, "dim": dim, "targets": s.targets, "compare": n,
         }
+        if history:
+            months = sorted(history)
+            self.sp_hist_ready = True
+            self._chart_inputs["history"] = (
+                months, [history[m] for m in months])
+            self.sp_hist_sub = (
+                f"{len(months)} months imported · {months[0]} to {months[-1]}")
+            self.sp_hist_years = sorted({m[:4] for m in months})
+            self._apply_history_theme(self.is_dark)
         self._extra_charts(days, month, holidays, targets)
         self._apply_chart_theme(self.is_dark)
 

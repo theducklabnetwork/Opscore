@@ -195,7 +195,10 @@ application checks.
 | Table | Holds |
 |---|---|
 | `stores` | Code (unique), name, Concept, State, zone, zone PIC, branch manager, active flag |
-| `monthly_configs` | One row per store and month: targets, uplifts, comparisons, salary ratio target, headcount, stock loss target, BV/UPT targets, payroll figures |
+| `monthly_configs` | One row per store and month: targets, uplifts, comparisons, BD Target, salary ratio target, headcount, stock loss target, BV/UPT targets, payroll figures |
+| `store_directory` | Imported store directory: code (unique), name, State, zone, display area. Reference data only; no stores are created from it |
+| `store_directory_history` | Imported monthly sales per store code and month (integer cents). Feeds the Sales History chart and the Monthly Setup history button |
+| `store_directory_info` | Singleton: last directory import timestamp and source filename |
 | `public_holidays` | Holiday dates per store |
 | `daily_records` | One row per store and date: sales, transactions, units, staffing and leave counts |
 | `daily_stock_losses` | Stock loss amount per daily record and loss code |
@@ -382,6 +385,35 @@ also refreshed when the stored copy came from the bundle but no longer matches
 the bundled workbook; user-uploaded reference data is never replaced. The
 workbook is bundled into `.deb` and Windows builds. Default expense categories
 are seeded per store only when a store has no categories.
+
+#### Store directory (monthly sales workbook)
+
+`store_directory_import.py` reads a monthly-sales workbook (one row per store,
+one dated column per month) and replaces `store_directory` and
+`store_directory_history` in one transaction. It reuses the stdlib `.xlsx`
+reader from `dsc_import.py`; month headers arrive as Excel serial numbers and
+are converted to `YYYY-MM`. Only Code, Name, Display Area, State, Zone and the
+monthly sales are read — **Concept and BD Target are never imported**, because
+Concept is an Opscore dropdown tied to the DSC reference data and BD Target is
+a manual Monthly Setup input. Blank and zero months are skipped, so the
+directory never records a zero-sales month, and amounts are stored as integer
+cents rounded half-up. No stores, monthly configs or daily records are written
+by the import. The same function powers **Settings → Reference Data** and
+`scripts/import_store_directory.py`.
+
+Consumers:
+
+- **New Store** (`StoresState.autofill_from_directory`, on field blur) matches
+  an exact full code or full name (case-insensitive) and fills Name, State and
+  Zone. Editing an existing store never auto-fills, and Concept is left to the
+  user.
+- **Monthly Setup** (`SetupState.load_history_from_directory`, explicit button)
+  fills Sales Last Month / Last Year from the directory for the selected store
+  and month. Nothing is saved until Save Setup; missing months fill blank.
+- **Sales History (Imported)** (`ops_charts.history_timeline` /
+  `history_year_compare`) draws the imported months on the Sales page with a
+  Timeline / Year vs Year toggle, following the same gap rule as the daily
+  charts. It is independent of the daily records.
 
 ## 8. Backup and restore (`backup.py`)
 
@@ -634,6 +666,7 @@ there to stop Opscore.
 | `scripts/build_windows.ps1` | Build the self-contained Windows folder |
 | `scripts/import_demo.py` | Import the AB01 demo CSVs into a given database |
 | `scripts/import_dsc.py` | Import the Daily Sales Contribution workbook (requires `DUCKLAB_DB_PATH`) |
+| `scripts/import_store_directory.py` | Import the monthly-sales workbook into the store directory (requires `DUCKLAB_DB_PATH`; creates no stores) |
 | `scripts/import_workbook_dev.py` | Import a workbook into a dev database, with a `--verify` parity check |
 | `scripts/bootstrap_admin.py` | Create the first admin from the terminal |
 | `scripts/recover_admin_password.py` | Offline admin password recovery (backs up the DB, revokes sessions) |
