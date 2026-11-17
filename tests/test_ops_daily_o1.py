@@ -151,9 +151,9 @@ class PageWordingTests(unittest.TestCase):
         self.assertNotIn(("SPR", True), p._COLS)
         self.assertIn(("UPT", True), p._COLS)
         self.assertNotIn(("IPR", True), p._COLS)
-        self.assertEqual(p._COLS[5], ("UPT", True))
+        self.assertEqual(p._COLS[7], ("UPT", True))
         row = dict(date="1", weekday="", sales="s", transactions="t",
-                   units="u", spr="p", upt="UPT-VALUE", asp="a", staff="f",
+                   units="u", void="v", refund="r", spr="p", upt="UPT-VALUE", asp="a", staff="f",
                    sales_per_staff="x", loss_missing="0", loss="l",
                    expenses="e", iso="2026-10-01", status="Complete",
                    status_color="green")
@@ -165,11 +165,12 @@ class PageWordingTests(unittest.TestCase):
         for text in ("New Entry", "Sales", "Achievement", "Projected Sales",
                      "Projected Achievement", "Average Daily Sales",
                      "Transactions", "Units Sold", "Total Loss",
-                     "Sales per Staff"):
+                     "Void", "Refund", "Total Loss", "SPS"):
             self.assertIn(f'"{text}"', page, text)
         dialog = str(p._entry_dialog())
         for text in ("Sales", "Manpower", "Stock Loss", "Sales (RM)",
-                     "Units Sold", "Full-Time Staff", "Part-Time Staff",
+                     "Units Sold", "Void (RM)", "Refund (RM)",
+                     "Full-Time Staff", "Part-Time Staff",
                      "New Hires", "Resignations", "Annual Leave",
                      "Medical Leave", "Other Paid Leave (incl. RPL)",
                      "Emergency Leave", "Unpaid Leave",

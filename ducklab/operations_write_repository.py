@@ -512,9 +512,10 @@ class OperationsWriteRepository:
     # Daily records
     # ------------------------------------------------------------------
     _DAILY_FIELDS = (
-        "sales_cents", "transactions", "units", "resigned_ft", "new_hires_ft",
-        "ft_working", "pt_working", "leave_annual", "leave_mc",
-        "leave_other_paid", "leave_emergency", "leave_unpaid",
+        "sales_cents", "transactions", "units", "void_cents", "refund_cents",
+        "resigned_ft", "new_hires_ft", "ft_working", "pt_working",
+        "leave_annual", "leave_mc", "leave_other_paid", "leave_emergency",
+        "leave_unpaid",
     )
 
     def _validate_daily_fields(self, fields: dict) -> None:

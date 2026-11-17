@@ -428,7 +428,7 @@ class TestV12Migration(unittest.TestCase):
                     "manual",
                 )
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 18
+                    conn.execute("PRAGMA user_version").fetchone()[0], 19
                 )
             finally:
                 conn.close()
@@ -536,7 +536,7 @@ class TestV13Migration(unittest.TestCase):
             conn = store_ops_db.connect(db_path)
             try:
                 self.assertEqual(
-                    conn.execute("PRAGMA user_version").fetchone()[0], 18)
+                    conn.execute("PRAGMA user_version").fetchone()[0], 19)
                 self.assertEqual(conn.execute(
                     "SELECT COUNT(*) FROM shift_codes WHERE show_in_legend = 1"
                 ).fetchone()[0], len(store_ops_db.SHIFT_CODES))
@@ -588,7 +588,7 @@ class TestV15AuthenticationMigration(unittest.TestCase):
         store_ops_db.init_db(self.db_path, backup_before_migration=False)
         conn = store_ops_db.connect(self.db_path)
         try:
-            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 18)
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 19)
             self.assertEqual(conn.execute("SELECT email FROM auth_users").fetchone()[0],
                              "old@example.com")
             self.assertEqual(conn.execute("SELECT token_hash FROM auth_sessions").fetchone()[0],
@@ -650,7 +650,7 @@ class TestSchemaConsistency(unittest.TestCase):
         sqlite3.connect(empty).close()
         store_ops_db.init_db(empty)
         conn = sqlite3.connect(empty)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 18)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 19)
         conn.close()
 
 
@@ -709,6 +709,37 @@ class TestSQLiteWALAndLockWaiting(unittest.TestCase):
         self.assertEqual(reader.execute("SELECT COUNT(*) FROM stores").fetchone()[0], 1)
         writer.close()
         reader.close()
+
+
+class TestV19Migration(unittest.TestCase):
+    def test_v18_upgrade_preserves_daily_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "v18.db"
+            conn = store_ops_db.connect(db_path)
+            for version in range(1, 19):
+                getattr(store_ops_db, f"_apply_v{version}")(conn)
+                conn.execute(f"PRAGMA user_version = {version}")
+            store_id = conn.execute(
+                "INSERT INTO stores (code, name) VALUES ('S01', 'Store A')"
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO daily_records (store_id, date, sales_cents, "
+                "transactions, units) VALUES (?, '2026-11-01', 10000, 10, 20)",
+                (store_id,))
+            conn.commit()
+            conn.close()
+
+            store_ops_db.init_db(db_path, backup_before_migration=False)
+            conn = store_ops_db.connect(db_path)
+            try:
+                row = conn.execute(
+                    "SELECT sales_cents, transactions, units, void_cents, "
+                    "refund_cents FROM daily_records").fetchone()
+                self.assertEqual(tuple(row), (10000, 10, 20, None, None))
+                self.assertEqual(
+                    conn.execute("PRAGMA user_version").fetchone()[0], 19)
+            finally:
+                conn.close()
 
 
 class TestMigrationAtomicity(unittest.TestCase):
@@ -797,7 +828,7 @@ class TestMigrationSafety(unittest.TestCase):
     def test_existing_database_is_backed_up_before_migration(self):
         store_ops_db.init_db(self.db_path)
         copies = list((self.db_path.parent / "backups").glob(
-            "pre-migration-v1-to-v18-*.db"))
+            "pre-migration-v1-to-v19-*.db"))
         self.assertEqual(len(copies), 1)
         conn = sqlite3.connect(copies[0])
         self.assertEqual(conn.execute("SELECT value FROM marker").fetchone()[0],
@@ -837,7 +868,7 @@ class TestMigrationSafety(unittest.TestCase):
         store_ops_db.connect(empty).close()
         store_ops_db.init_db(empty)
         self.assertEqual(len(list((self.db_path.parent / "backups").glob(
-            "pre-migration-v0-to-v18-*.db"))), 1)
+            "pre-migration-v0-to-v19-*.db"))), 1)
 
     def test_backup_can_be_disabled_for_temporary_restore_copy(self):
         store_ops_db.init_db(self.db_path, backup_before_migration=False)

@@ -224,8 +224,24 @@ class TestDailyWrites(WriteFixture):
     def test_validation(self):
         with self.assertRaises(ValidationError):
             self.svc.record_daily(self.s1, date(2026, 9, 1), transactions=-1)
+        for field in ("void_cents", "refund_cents"):
+            with self.assertRaises(ValidationError):
+                self.svc.record_daily(self.s1, date(2026, 9, 1), **{field: -1})
         with self.assertRaises(ValidationError):
             self.svc.record_daily(self.s1, date(2026, 9, 1), bogus=1)
+
+    def test_informational_void_refund_do_not_change_sales_kpis(self):
+        self.svc.configure_month(self.s1, "2026-09", level1_base_cents=rm(10000),
+                                 level2_pct=0.1, level3_pct=0.2, level4_pct=0.3)
+        self.svc.record_daily(self.s1, date(2026, 9, 1), sales_cents=rm(1000),
+                              transactions=10, units=20)
+        before = assemble_month(self.r, self.s1, "2026-09").sales
+        self.svc.record_daily(self.s1, date(2026, 9, 1), void_cents=rm(100),
+                              refund_cents=rm(50))
+        day = self.r.get_daily_records(self.s1, "2026-09")[0]
+        self.assertEqual((day.void_cents, day.refund_cents), (rm(100), rm(50)))
+        after = assemble_month(self.r, self.s1, "2026-09").sales
+        self.assertEqual(after, before)
 
     def test_same_date_different_stores(self):
         self.svc.record_daily(self.s1, date(2026, 9, 1), sales_cents=rm(100))

@@ -169,7 +169,7 @@ def _leave_section() -> rx.Component:
 
 _STAFF_COLS = ["Date", ("FT", True), ("PT", True), ("Effective", True),
                ("Hires", True), ("Resignations", True), ("Leave", True),
-               ("Sales", True), ("Sales per Staff", True), "Status", ""]
+               ("Sales", True), ("SPS", True), "Status", ""]
 
 
 def _staff_row(row) -> rx.Component:
