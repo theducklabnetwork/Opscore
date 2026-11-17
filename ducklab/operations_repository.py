@@ -295,6 +295,8 @@ class OperationsRepository:
                 sales_cents=r["sales_cents"],
                 transactions=r["transactions"],
                 units=r["units"],
+                void_cents=r["void_cents"],
+                refund_cents=r["refund_cents"],
                 resigned_ft=r["resigned_ft"],
                 new_hires_ft=r["new_hires_ft"],
                 ft_working=r["ft_working"],

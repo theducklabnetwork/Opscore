@@ -7,10 +7,15 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **18**.
+Schema version: **19**.
 
 ### Added
 
+- **Daily Void and Refund totals.** Daily Entry and live Excel exports now
+  record optional informational Void and Refund amounts. They remain separate
+  from Sales and do not affect transaction/unit counts or any KPI. Daily
+  Records also shows the totals, and its Sales per Staff table column is now
+  labelled **SPS**.
 - **Imported BD Target.** The workbook's BD Target column is now imported as
   reference data for October 2026. Monthly Setup shows the imported figure as
   a note and the **Load History From Directory** history icon fills the BD

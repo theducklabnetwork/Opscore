@@ -168,8 +168,9 @@ def _source_record_sheets(workbook, report, repo):
     for day_number in range(1, days_in_month + 1):
         current = start.replace(day=day_number)
         day = by_date.get(current)
-        values = [None] * 12 if day is None else [
+        values = [None] * 14 if day is None else [
             _money(day.sales_cents), day.transactions, day.units,
+            _money(day.void_cents), _money(day.refund_cents),
             day.resigned_ft, day.new_hires_ft, day.ft_working, day.pt_working,
             day.leave_annual, day.leave_mc,
             kpi.other_paid_leave_days(day), day.leave_emergency, day.leave_unpaid,
@@ -179,12 +180,13 @@ def _source_record_sheets(workbook, report, repo):
         daily_rows.append([current, *values, loss])
     _sheet(
         workbook, "Daily Sales",
-        ["Date", "Sales", "Transactions", "Units", "Resigned FT", "New Hires FT",
-         "FT Working", "PT Working", "Annual Leave", "MC",
-         "Other Paid Leave (incl. MC/RPL)", "Emergency Leave", "Unpaid Leave",
-         "Total Loss"],
+        ["Date", "Sales", "Transactions", "Units", "Void", "Refund",
+         "Resigned FT", "New Hires FT", "FT Working", "PT Working",
+         "Annual Leave", "MC", "Other Paid Leave (incl. MC/RPL)",
+         "Emergency Leave", "Unpaid Leave", "Total Loss"],
         daily_rows,
-        formats={"A": DATE_FORMAT, "B": MONEY_FORMAT, "N": MONEY_FORMAT},
+        formats={"A": DATE_FORMAT, "B": MONEY_FORMAT, "E": MONEY_FORMAT,
+                 "F": MONEY_FORMAT, "P": MONEY_FORMAT},
         widths={"Date": 14, "Other Paid Leave (incl. MC/RPL)": 30},
     )
 

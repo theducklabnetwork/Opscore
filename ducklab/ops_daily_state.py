@@ -39,6 +39,8 @@ SALES_FIELDS = [
     ("f_sales", "sales_cents", "money", "Sales"),
     ("f_transactions", "transactions", "count", "Transactions"),
     ("f_units", "units", "count", "Units Sold"),
+    ("f_void", "void_cents", "money", "Void"),
+    ("f_refund", "refund_cents", "money", "Refund"),
 ]
 
 MANPOWER_FIELDS = [
@@ -89,6 +91,8 @@ class DailyState(SharedOpsState):
     f_sales: str = ""
     f_transactions: str = ""
     f_units: str = ""
+    f_void: str = ""
+    f_refund: str = ""
     f_ft_working: str = ""
     f_pt_working: str = ""
     f_new_hires: str = ""
@@ -410,7 +414,7 @@ class DailyState(SharedOpsState):
         if ds.day_status(rec) == ds.DAY_NOT_REPORTED:
             return {**base, "status": ds.DAY_NOT_REPORTED,
                     "status_color": ds.status_color(ds.DAY_NOT_REPORTED),
-                    "sales": "—",
+                    "sales": "—", "void": "—", "refund": "—",
                     "transactions": "—", "units": "—", "spr": "—",
                     "upt": "—", "asp": "—", "staff": "—",
                     "sales_per_staff": "—", "loss": "—", "loss_missing": "1"}
@@ -429,6 +433,8 @@ class DailyState(SharedOpsState):
             **base, "status": status,
             "status_color": ds.status_color(status),
             "sales": ds.fmt_rm(sales),
+            "void": ds.fmt_rm(rec.void_cents),
+            "refund": ds.fmt_rm(rec.refund_cents),
             "transactions": ds.fmt_num(rec.transactions),
             "units": ds.fmt_num(rec.units),
             "spr": (f"RM {spr / 100:,.2f}" if spr is not None else "—"),
@@ -536,6 +542,10 @@ class DailyState(SharedOpsState):
     def set_f_transactions(self, v: str): self.f_transactions = v
     @rx.event
     def set_f_units(self, v: str): self.f_units = v
+    @rx.event
+    def set_f_void(self, v: str): self.f_void = v
+    @rx.event
+    def set_f_refund(self, v: str): self.f_refund = v
     @rx.event
     def set_f_ft_working(self, v: str): self.f_ft_working = v
     @rx.event

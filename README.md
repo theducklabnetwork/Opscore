@@ -5,7 +5,7 @@ replaces the Excel *Store Operations Monitoring* workbook with one local app
 that tracks, per store and per month:
 
 - Sales against four target levels, with daily targets and shortfall carry-forward
-- Daily operations: sales, transactions, units, stock loss and staffing
+- Daily operations: sales, transactions, units, informational Void/Refund totals, stock loss and staffing
 - Expenses against category budgets
 - Manpower efficiency, payroll, and weekly staff schedules
 - Stock loss by code
@@ -119,7 +119,7 @@ Architecture document.
 ## Project status
 
 Current development release line: **v1.3** (see the [Changelog](CHANGELOG.md)).
-Database schema version: **15**.
+Database schema version: **19**.
 
 - Ubuntu/Debian desktop package: released and in use.
 - Windows desktop package and installer: released from v1.1 onward; see the

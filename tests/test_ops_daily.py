@@ -111,6 +111,22 @@ class TestDailyWrites(DailyFixture):
         self.assertEqual(d.sales_cents, 0)            # reported zero
         self.assertIsNone(d.transactions)             # still unreported
 
+    def test_void_refund_persist_clear_and_leave_sales_unchanged(self):
+        self.app.record_daily(self.admin, self.sa, date(2026, 9, 1),
+                              sales_cents=rm(100), void_cents=rm(20),
+                              refund_cents=rm(5))
+        before = self.app.preview_month(self.admin, self.sa, "2026-09").sales
+        d = self.app.get_daily_records(self.admin, self.sa, "2026-09")[0]
+        self.assertEqual((d.void_cents, d.refund_cents), (rm(20), rm(5)))
+        self.assertEqual(d.sales_cents, rm(100))
+        self.app.correct_daily(self.admin, self.sa, date(2026, 9, 1),
+                               void_cents=None, refund_cents=0)
+        d = self.app.get_daily_records(self.admin, self.sa, "2026-09")[0]
+        self.assertIsNone(d.void_cents)
+        self.assertEqual(d.refund_cents, 0)
+        self.assertEqual(
+            self.app.preview_month(self.admin, self.sa, "2026-09").sales, before)
+
     def test_explicit_clear(self):
         self.app.record_daily(self.admin, self.sa, date(2026, 9, 1),
                               sales_cents=rm(50))

@@ -200,7 +200,7 @@ application checks.
 | `store_directory_history` | Imported monthly sales per store code and month (integer cents). Feeds the Sales History chart and the Monthly Setup history button |
 | `store_directory_info` | Singleton: last directory import timestamp, source filename and `bundled` provenance flag (v17) |
 | `public_holidays` | Holiday dates per store |
-| `daily_records` | One row per store and date: sales, transactions, units, staffing and leave counts |
+| `daily_records` | One row per store and date: sales, transactions, units, informational Void/Refund totals, staffing and leave counts. Void/Refund never affect Sales or KPI calculations |
 | `daily_stock_losses` | Stock loss amount per daily record and loss code |
 | `stock_loss_codes` | The 13 codes and whether each adds to, reduces or doesn't affect Total Loss |
 | `expense_categories` | Store's expense categories |

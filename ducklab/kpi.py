@@ -161,6 +161,9 @@ class DailyInput:
     leave_unpaid: Optional[int] = None
     leave_emergency: Optional[int] = None
     stock_losses: dict[str, int] = field(default_factory=dict)  # code -> cents
+    # Informational daily totals; never included in Sales or KPI formulas.
+    void_cents: Optional[int] = None
+    refund_cents: Optional[int] = None
 
 
 @dataclass

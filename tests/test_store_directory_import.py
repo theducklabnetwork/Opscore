@@ -497,7 +497,7 @@ class MigrationTests(unittest.TestCase):
         conn = sqlite3.connect(db)
         try:
             self.assertEqual(conn.execute(
-                "PRAGMA user_version").fetchone()[0], 18)
+                "PRAGMA user_version").fetchone()[0], 19)
             self.assertEqual(conn.execute(
                 "SELECT sales_last_year_cents FROM monthly_configs"
             ).fetchone()[0], 12345)
@@ -511,7 +511,7 @@ class MigrationTests(unittest.TestCase):
             conn.close()
         # Pre-migration backup was taken
         self.assertTrue(list((tmp / "backups").glob(
-            "pre-migration-v15-to-v18-*.db")))
+            "pre-migration-v15-to-v19-*.db")))
 
 
 if __name__ == "__main__":

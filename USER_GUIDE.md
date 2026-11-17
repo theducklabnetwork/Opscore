@@ -238,6 +238,8 @@ Enter each day's figures here.
    separately. Total Leave counts every leave person-day once.
 5. Fill in what you have:
    - **Sales**, **Transactions**, **Units Sold**
+   - **Void** and **Refund** amounts in RM. These are information only and do
+     not change Sales, transaction/unit counts or any KPI totals.
    - **Stock Loss** by code
    - **Staff**: working full-time and part-time, **New Hires**,
      **Resignations**

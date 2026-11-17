@@ -70,10 +70,10 @@ def _kpi_summary() -> rx.Component:
 
 
 _COLS = ["Date", ("Sales", True), ("Transactions", True), ("Units", True),
+         ("Void", True), ("Refund", True),
          ("BV", True), ("UPT", True), ("ASP", True), ("Staff", True),
-         # Sales per Staff (also on Manpower) hides at 768-1535px so the
-         # table fits beside Expenses
-         ("Sales per Staff", True, True), ("Stock Loss", True),
+         # SPS (also on Manpower) hides at 768-1535px so the table fits
+         ("SPS", True, True), ("Stock Loss", True),
          ("Expenses", True), "Status", ""]
 
 
@@ -86,6 +86,8 @@ def _day_row(row) -> rx.Component:
         ui.td(row["sales"], numeric=True),
         ui.td(row["transactions"], numeric=True),
         ui.td(row["units"], numeric=True),
+        ui.td(row["void"], numeric=True),
+        ui.td(row["refund"], numeric=True),
         ui.td(row["spr"], numeric=True),
         ui.td(row["upt"], numeric=True),
         ui.td(row["asp"], numeric=True),
@@ -182,8 +184,14 @@ def _sales_section() -> rx.Component:
             _num_field("Transactions", "f_transactions",
                        "set_f_transactions", "f-transactions"),
             _num_field("Units Sold", "f_units", "set_f_units", "f-units"),
+            _num_field("Void (RM)", "f_void", "set_f_void", "f-void",
+                       mode="decimal"),
+            _num_field("Refund (RM)", "f_refund", "set_f_refund", "f-refund",
+                       mode="decimal"),
             columns="3",
         ),
+        rx.text("Void and Refund are information only; they do not change "
+                "Sales or KPI totals.", size="1", color=ds.TEXT_FAINT),
     )
 
 
