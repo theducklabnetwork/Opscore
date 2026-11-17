@@ -28,5 +28,11 @@ agent/
 skills-lock.json
 dist/
 
+# Local agent workspaces and generated codebase graphs
+.opencode/
+.hermes/
+graphify-out/
+graphify-*.png
+
 
 docs/screenshots/
