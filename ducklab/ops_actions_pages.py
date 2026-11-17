@@ -45,15 +45,19 @@ def _cards() -> rx.Component:
 
 def _filters() -> rx.Component:
     return rx.hstack(
-        rx.select(FILTER_STATUSES, value=A.f_status,
-                  on_change=A.set_f_status, size="2", id="f-status"),
-        rx.select(FILTER_PILLARS, value=A.f_pillar,
-                  on_change=A.set_f_pillar, size="2", id="f-pillar"),
-        rx.select(FILTER_PRIORITIES, value=A.f_priority,
-                  on_change=A.set_f_priority, size="2", id="f-priority"),
+        ui.labelled_select(FILTER_STATUSES, value=A.f_status,
+                           on_change=A.set_f_status, size="2", id="f-status",
+                           aria_label="Action status"),
+        ui.labelled_select(FILTER_PILLARS, value=A.f_pillar,
+                           on_change=A.set_f_pillar, size="2", id="f-pillar",
+                           aria_label="Action pillar"),
+        ui.labelled_select(FILTER_PRIORITIES, value=A.f_priority,
+                           on_change=A.set_f_priority, size="2", id="f-priority",
+                           aria_label="Action priority"),
         rx.hstack(
             rx.checkbox(checked=A.f_overdue_only,
-                        on_change=A.set_f_overdue_only, id="f-overdue"),
+                        on_change=A.set_f_overdue_only, id="f-overdue",
+                        aria_label="Show overdue actions only"),
             rx.text("Overdue Only", size="2"),
             spacing="2", align="center"),
         wrap="wrap", spacing="3", width="100%", align="center",
@@ -110,12 +114,21 @@ def _table() -> rx.Component:
             A.loaded & (A.rows.length() > 0),
             ui.data_table(_COLS, rx.foreach(A.filtered_rows, _row),
                           phone=_PHONE),
-            ui.empty_state("No Actions", icon="list-checks"),
+            rx.cond(
+                A.can_write_actions,
+                ui.empty_state(
+                    "No Actions", "No actions match the current filters.",
+                    icon="list-checks",
+                    action=rx.button("Add Action", size="2",
+                                     on_click=A.open_add, id="empty-add-action"),
+                ),
+                ui.empty_state(
+                    "No Actions", "No actions match the current filters.",
+                    icon="list-checks"),
+            ),
         ),
         rx.cond(A.notice != "",
-                rx.callout(A.notice, icon="circle-check",
-                           color_scheme="green", variant="soft",
-                           id="act-notice")),
+                ui.success_callout(A.notice, id="act-notice")),
         title="Actions",
         extra=rx.cond(
             A.can_write_actions,

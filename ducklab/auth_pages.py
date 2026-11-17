@@ -15,6 +15,7 @@ from datetime import date
 import reflex as rx
 
 from ducklab import auth_service
+from ducklab import design as ds
 from ducklab import ops_charts
 from ducklab import platform_utils
 from ducklab.app_service import AppService
@@ -37,7 +38,7 @@ class AuthState(rx.State):
     loading: bool = False
     error: str = ""
     display_name: str = ""
-    is_dark: bool = True   # theme, kept in sync from the client (charts)
+    is_dark: bool = False  # resolved browser theme, kept in sync for charts
 
     # first-launch bootstrap (Create Account); -1 = not yet checked
     bootstrap_name: str = ""
@@ -60,15 +61,26 @@ class AuthState(rx.State):
     recovery_confirm: str = ""
 
     @rx.event
-    async def toggle_is_dark(self) -> None:
-        """Toggle the server theme and restyle charts without reloading data."""
-        self.is_dark = not self.is_dark
+    def sync_browser_theme(self):
+        """Read the resolved theme after mount or Radix's local toggle."""
+        return rx.call_script(
+            "document.documentElement.classList.contains('dark') ? 'dark' : 'light'",
+            callback=AuthState.sync_is_dark,
+        )
+
+    @rx.event
+    async def sync_is_dark(self, resolved_theme: str) -> None:
+        """Match chart state to the browser's resolved Radix color theme."""
+        dark = resolved_theme == "dark"
+        if self.is_dark == dark:
+            return
+        self.is_dark = dark
         # Chart-capable states register themselves in ops_charts at import
         # time (registry, Phase 3.6); inactive pages have no source data and
-        # are no-ops.
+        # are no-ops. Restyling never reloads operational data.
         for cls in ops_charts.CHART_STATES:
             state = await self.get_state(cls)
-            state._apply_chart_theme(self.is_dark)
+            state._apply_chart_theme(dark)
 
     def _actor(self) -> auth_service.User:
         """Authenticated identity from trusted server-side context only.
@@ -482,8 +494,10 @@ def _brand() -> rx.Component:
 
 
 def _field(label: str, **input_props) -> rx.Component:
+    field_id = input_props.get("id")
     return rx.vstack(
-        rx.text(label, size="2", weight="medium", color=rx.color("slate", 12)),
+        rx.el.label(label, html_for=field_id, size="2", weight="medium",
+                    color=ds.TEXT),
         rx.input(size="3", width="100%", variant="surface", **input_props),
         spacing="1",
         align="start",
@@ -497,8 +511,8 @@ PASSWORD_RULES = ("At least 10 characters, with letters and digits.")
 def _password_input(label: str, value, setter, fid: str,
                     placeholder: str = "••••••••••") -> rx.Component:
     return rx.vstack(
-        rx.text(label, size="2", weight="medium",
-                color=rx.color("slate", 12)),
+        rx.el.label(label, html_for=fid, size="2", weight="medium",
+                    color=ds.TEXT),
         rx.box(
             rx.input(
                 placeholder=placeholder,
@@ -557,7 +571,7 @@ def _bootstrap_form() -> rx.Component:
             rx.text(
                 "Welcome to Opscore. Create the first account — "
                 "it becomes the Super Admin.",
-                size="2", color=rx.color("slate", 11),
+                size="2", color=ds.TEXT_MUTED,
             ),
             _field(
                 "Name",
@@ -586,7 +600,7 @@ def _bootstrap_form() -> rx.Component:
                             AuthState.set_bootstrap_confirm,
                             "bootstrap-confirm"),
             rx.text(PASSWORD_RULES, size="1",
-                    color=rx.color("slate", 10)),
+                    color=ds.TEXT_FAINT),
             _error_callout(),
             rx.button(
                 rx.cond(AuthState.loading, "Creating…", "Create Account"),
@@ -594,7 +608,7 @@ def _bootstrap_form() -> rx.Component:
                 size="3",
                 width="100%",
                 loading=AuthState.loading,
-                color_scheme="indigo",
+                color_scheme="blue",
                 id="bootstrap-submit",
             ),
             spacing="4",
@@ -607,7 +621,7 @@ def _bootstrap_form() -> rx.Component:
 def login_page() -> rx.Component:
     return rx.box(
         rx.box(
-            rx.color_mode.button(),
+            rx.color_mode.button(aria_label="Toggle color theme"),
             position="absolute",
             top="1em",
             right="1em",
@@ -632,7 +646,7 @@ def login_page() -> rx.Component:
                         "Private access. Accounts are provisioned by your "
                         "administrator.",
                         size="1",
-                        color=rx.color("slate", 10),
+                        color=ds.TEXT_FAINT,
                         text_align="center",
                     ),
                 ),
@@ -645,7 +659,7 @@ def login_page() -> rx.Component:
         ),
         min_height="100vh",
         width="100%",
-        background=rx.color("slate", 1),
+        background=ds.BG,
         padding="1em",
         ),
         position="relative",
@@ -658,7 +672,7 @@ def _recovery_kit_panel() -> rx.Component:
     (Back to sign in)."""
     return rx.vstack(
         rx.hstack(
-            rx.icon("key-round", size=20, color=rx.color("indigo", 9)),
+            rx.icon("key-round", size=20, color=ds.ACCENT),
             rx.heading("Save Your Recovery Key", size="5"),
             spacing="2",
         ),
@@ -666,7 +680,7 @@ def _recovery_kit_panel() -> rx.Component:
             "This key can reset your password if you forget it. It is "
             "single-use and shown only once. Save the kit file now and "
             "keep it private — Opscore cannot display it again.",
-            size="2", color=rx.color("slate", 11),
+            size="2", color=ds.TEXT_MUTED,
         ),
         rx.code(AuthState.recovery_key, size="2", width="100%",
                 style={"overflowWrap": "anywhere", "userSelect": "all"}),
@@ -677,17 +691,17 @@ def _recovery_kit_panel() -> rx.Component:
         rx.vstack(
             rx.button("Save Kit to Data Folder",
                       on_click=AuthState.save_recovery_kit,
-                      color_scheme="indigo", size="3", width="100%",
+                      color_scheme="blue", size="3", width="100%",
                       id="kit-save"),
             rx.button("Download Kit",
                       on_click=AuthState.download_recovery_kit,
-                      variant="soft", color_scheme="indigo", size="3",
+                      variant="soft", color_scheme="blue", size="3",
                       width="100%", id="kit-download"),
             rx.cond(
                 AuthState.recovery_kit_source == "bootstrap",
                 rx.button("Continue to Dashboard",
                           on_click=AuthState.finish_bootstrap,
-                          color_scheme="indigo", size="3", width="100%",
+                          color_scheme="blue", size="3", width="100%",
                           id="kit-done-bootstrap"),
                 rx.button("Back to Sign In",
                           on_click=AuthState.clear_recovery_kit,
@@ -715,8 +729,8 @@ def _sign_in_form() -> rx.Component:
                 id="login-email",
             ),
             rx.vstack(
-                rx.text("Password", size="2", weight="medium",
-                        color=rx.color("slate", 12)),
+                rx.el.label("Password", html_for="login-password", size="2",
+                            weight="medium", color=ds.TEXT),
                 rx.box(
                     rx.input(
                         placeholder="••••••••••",
@@ -760,13 +774,13 @@ def _sign_in_form() -> rx.Component:
                 size="3",
                 width="100%",
                 loading=AuthState.loading,
-                color_scheme="indigo",
+                color_scheme="blue",
                 id="login-submit",
             ),
             rx.link(
                 "Forgot password?",
                 size="2",
-                color=rx.color("indigo", 9),
+                color=ds.ACCENT,
                 on_click=AuthState.open_recovery,
                 id="forgot-password",
                 cursor="pointer",
@@ -792,7 +806,7 @@ def _recovery_dialog() -> rx.Component:
                         "Enter the recovery key from your recovery kit. "
                         "It is single-use: a successful recovery issues a "
                         "replacement key.",
-                        size="2", color=rx.color("slate", 11),
+                        size="2", color=ds.TEXT_MUTED,
                     ),
                     _field(
                         "Recovery Key",
@@ -807,7 +821,7 @@ def _recovery_dialog() -> rx.Component:
                         rx.button("Cancel", variant="soft",
                                   color_scheme="gray",
                                   on_click=AuthState.close_recovery),
-                        rx.button("Continue", color_scheme="indigo",
+                        rx.button("Continue", color_scheme="blue",
                                   on_click=AuthState.submit_recovery_key,
                                   id="recovery-key-submit"),
                         spacing="3", justify="end", width="100%",
@@ -820,7 +834,7 @@ def _recovery_dialog() -> rx.Component:
                             "Choose a new password. This immediately "
                             "consumes the recovery key and signs out all "
                             "sessions.",
-                            size="2", color=rx.color("slate", 11),
+                            size="2", color=ds.TEXT_MUTED,
                         ),
                         _field(
                             "New Password",
@@ -841,7 +855,7 @@ def _recovery_dialog() -> rx.Component:
                             id="recovery-confirm",
                         ),
                         rx.text(PASSWORD_RULES, size="1",
-                                color=rx.color("slate", 10)),
+                                color=ds.TEXT_FAINT),
                         _error_callout(),
                         rx.hstack(
                             rx.button("Cancel", variant="soft",
@@ -852,7 +866,7 @@ def _recovery_dialog() -> rx.Component:
                                         "Resetting…", "Reset Password"),
                                 type="submit",
                                 loading=AuthState.loading,
-                                color_scheme="indigo",
+                                color_scheme="blue",
                                 id="recovery-submit"),
                             spacing="3", justify="end", width="100%",
                         ),
@@ -875,7 +889,7 @@ def ops_landing_page() -> rx.Component:
             rx.vstack(
                 rx.hstack(
                     rx.icon("shield-check", size=24,
-                            color=rx.color("indigo", 9)),
+                            color=ds.ACCENT),
                     rx.heading("Opscore Operations", size="6"),
                     spacing="2",
                 ),
@@ -887,7 +901,7 @@ def ops_landing_page() -> rx.Component:
                 rx.text(
                     "The operations dashboard is under construction. "
                     "This protected area verifies authenticated access only.",
-                    size="2", color=rx.color("slate", 11),
+                    size="2", color=ds.TEXT_MUTED,
                 ),
                 rx.button(
                     rx.icon("log-out", size=16),
@@ -906,7 +920,7 @@ def ops_landing_page() -> rx.Component:
         ),
         min_height="100vh",
         width="100%",
-        background=rx.color("slate", 1),
+        background=ds.BG,
         padding="1em",
     )
 
@@ -918,5 +932,5 @@ def root_page() -> rx.Component:
         rx.spinner(size="3"),
         min_height="100vh",
         width="100%",
-        background=rx.color("slate", 1),
+        background=ds.BG,
     )

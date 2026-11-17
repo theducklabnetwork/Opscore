@@ -61,6 +61,9 @@ skills and no server required.
 5. **Works offline.** No internet connection is needed after installation.
 6. **No company names in code.** Store concept names are aliases (Outlet,
    Mall, Retail, and so on); the bundled reference data uses the same aliases.
+7. **Accessible everyday workflows.** Visible keyboard focus, touch-friendly
+   controls, plain-language metric explanations, chart summaries and reduced
+   motion support help users work across desktop and small-screen layouts.
 
 ## 5. Target users and roles
 
@@ -98,6 +101,7 @@ routed features are marked experimental or "coming soon".
 | **Store Management** | New Store, Edit, Activate/Deactivate (never delete), user-to-store assignment, and Monthly Setup (targets, holidays, manpower, stock, percentage expense budgets, month-end inputs) with HQ defaults and Copy From Last Month. |
 | **Monthly Report** | Live/Finalized modes, version selector, sectioned reporting, Finalize Month / Correct Month with non-blocking warnings, and Excel export with payroll gated by role. |
 | **Settings** | Account (password, single-use recovery key, tour replay), Reference Data (expense categories and DSC workbook import), Data (backup/restore, Super Admin only), and About (version, schema). |
+| **Shared accessibility** | Visible keyboard focus, labelled controls and dialogs, touch-sized coarse-pointer targets, metric definitions, exact-value access, chart names/summaries, live success feedback and actionable empty states. Status meanings do not depend on colour alone. |
 
 ## 7. Main operating workflow
 
@@ -164,6 +168,7 @@ Current development release line: **v1.3**. Database schema version: **15**.
 | Monthly Report finalization and corrections | Implemented |
 | Weekly scheduling, direct PDF and individual/MyESS CSV export | Implemented (v1.3) |
 | First-launch account creation and guided tours | Implemented |
+| Shared keyboard, touch and chart accessibility | Implemented (v1.3) |
 | Single-use recovery keys | Implemented (v1.2) |
 | Ubuntu/Debian desktop package | Released |
 | Windows desktop package and installer | Released; see the [Changelog](CHANGELOG.md) for the Windows validation-status note |

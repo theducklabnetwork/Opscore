@@ -211,7 +211,7 @@ def _holiday_chip(h) -> rx.Component:
                 rx.icon("x", size=12, cursor="pointer",
                         on_click=Setup.remove_holiday(h["iso"]),
                         id="setup-ph-remove-" + h["iso"])),
-        variant="soft", color_scheme="indigo", size="2",
+        variant="soft", color_scheme="blue", size="2",
         id="setup-ph-" + h["iso"],
     )
 
@@ -263,9 +263,7 @@ def _setup_section() -> rx.Component:
                 icon="lock", color_scheme="violet", variant="soft",
                 width="100%")),
         rx.cond(Setup.setup_notice != "",
-                rx.callout(Setup.setup_notice, icon="circle-check",
-                           color_scheme="green", variant="soft",
-                           width="100%")),
+                ui.success_callout(Setup.setup_notice)),
         rx.cond(Setup.setup_error != "", ds.error_callout(Setup.setup_error)),
         ui.form_stack(
             ui.form_section(
@@ -325,7 +323,7 @@ def _setup_section() -> rx.Component:
             rx.button(
                 rx.cond(Setup.setup_saving, rx.spinner(size="1"),
                         rx.icon("save", size=14)),
-                "Save Setup", color_scheme="indigo", on_click=Setup.save_setup,
+                "Save Setup", color_scheme="blue", on_click=Setup.save_setup,
                 disabled=Setup.setup_saving | ~Setup.can_edit_setup, id="setup-save"),
             rx.cond(~Setup.can_edit_setup,
                     ui.note("You have read-only access for this store.")),
@@ -348,10 +346,8 @@ def stores_page() -> rx.Component:
             rx.vstack(
                 rx.cond(
                     (Stores.stores_notice != "") | (Assign.stores_notice != ""),
-                    rx.callout(Stores.stores_notice + Assign.stores_notice,
-                               icon="circle-check",
-                               color_scheme="green", variant="soft",
-                               width="100%")),
+                    ui.success_callout(Stores.stores_notice
+                                       + Assign.stores_notice)),
                 rx.cond((Stores.stores_error != "") | (Assign.stores_error != ""),
                         ds.error_callout(Stores.stores_error
                                          + Assign.stores_error)),

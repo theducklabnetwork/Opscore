@@ -1,7 +1,7 @@
 """DuckLab design system: reusable tokens and primitives.
 
 Centralizes color/spacing decisions so components don't scatter hardcoded
-values. Built on Radix Themes semantic color scales (slate/indigo/violet/
+values. Built on Radix Themes semantic color scales (slate/blue/violet/
 green/amber/red), which automatically adapt to dark and light mode.
 """
 
@@ -22,8 +22,8 @@ BORDER = rx.color("slate", 6)
 TEXT = rx.color("slate", 12)
 TEXT_MUTED = rx.color("slate", 11)
 TEXT_FAINT = rx.color("slate", 10)
-ACCENT = rx.color("indigo", 9)
-ACCENT_TEXT = rx.color("indigo", 11)
+ACCENT = rx.color("blue", 9)
+ACCENT_TEXT = rx.color("blue", 11)
 SUCCESS = rx.color("green", 9)
 WARNING = rx.color("amber", 9)
 ERROR = rx.color("red", 9)
@@ -36,7 +36,7 @@ STATUS_COLOR = {
     "over budget": "red", "red": "red", "missed": "red", "high": "red",
     "overdue": "red", "blocked": "red",
     "no budget": "gray", "awaiting payroll": "gray",
-    "no target": "gray", "open": "indigo", "todo": "gray",
+    "no target": "gray", "open": "blue", "todo": "gray",
 }
 
 
@@ -157,7 +157,7 @@ def fmt_kl_datetime(utc_text, dash="—") -> str:
 
 # --- Primitives ------------------------------------------------------------
 def kpi_card(label: str, value, *, icon: str = "", sub=None,
-             accent: str = "indigo") -> rx.Component:
+             accent: str = "blue") -> rx.Component:
     content = [
         rx.text(label, size="2", color=TEXT_MUTED, weight="medium"),
         rx.heading(value, size="6", weight="bold", wrap="nowrap",

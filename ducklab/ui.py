@@ -3,7 +3,7 @@
 Style rules (one place, so pages stay consistent):
 - calm, spacious layout: soft 1px card borders, no card inside a card;
 - big numbers in the primary text colour, never the accent;
-- the accent (indigo) only for links, active items and chart lines;
+- the accent (cobalt blue) only for links, active items and chart lines;
 - colour otherwise only for statuses (ds.status_color);
 - headline numbers first, then charts, then detail tables;
 - money never wraps: exact on wide screens, compact ("RM 23.5k") where
@@ -22,7 +22,7 @@ from ducklab import design as ds
 CARD_BG = ds.SURFACE
 CARD_BORDER = rx.color("slate", 5)      # soft card / header rule
 ROW_BORDER = rx.color("slate", 4)       # even softer row separators
-RADIUS = "14px"
+RADIUS = "12px"
 CARD_PADDING = ["0.875em", "1.25em", "1.5em"]
 GAP = "5"                               # spacing between page sections
 
@@ -88,8 +88,61 @@ def early_tag(tag, tip="") -> rx.Component:
     """The engine's "Early estimate" tag (projection under 7 days)."""
     return _when(tag, rx.tooltip(
         rx.badge(tag, color_scheme="blue", variant="outline", size="1",
-                 radius="full", white_space="nowrap"),
+                 radius="full", white_space="nowrap", tab_index=0),
         content=tip))
+
+
+METRIC_HELP = {
+    "ASP": "Average Selling Price: sales divided by units sold.",
+    "BV": "Basket Value: average sales per transaction.",
+    "SSSG": "Same-Store Sales Growth compared with the reference period.",
+    "UPT": "Units Per Transaction: units sold divided by transactions.",
+}
+
+
+def metric_label(label, definition=None) -> rx.Component:
+    """Metric name with a hover-, keyboard-, and touch-accessible definition."""
+    definition = definition or METRIC_HELP.get(str(label), "")
+    if not definition:
+        return rx.text(label, size="2", color=ds.TEXT_MUTED, weight="medium")
+    trigger = rx.el.button(
+        label, type="button", class_name="metric-definition",
+        aria_label=f"{label}: {definition}",
+        style={"color": "var(--slate-11)", "fontSize": "var(--font-size-2)",
+               "fontWeight": "500", "cursor": "help", "padding": "0",
+               "textDecoration": "underline dotted",
+               "textUnderlineOffset": "3px"},
+    )
+    return rx.box(
+        rx.tooltip(trigger, content=definition),
+        rx.popover.root(
+            rx.popover.trigger(rx.el.button(
+                label, type="button", class_name="metric-definition-touch",
+                aria_label=f"Explain {label}",
+                style={"color": "var(--slate-11)",
+                       "fontSize": "var(--font-size-2)", "fontWeight": "500",
+                       "padding": "0", "textDecoration": "underline dotted",
+                       "textUnderlineOffset": "3px"})),
+            rx.popover.content(rx.text(definition, size="2"),
+                               width="min(320px, calc(100vw - 32px))",
+                               collision_padding=16),
+        ),
+        class_name="metric-definition-host", display="inline-block",
+    )
+
+
+def labelled_select(options, *, value=None, on_change=None, placeholder=None,
+                    id=None, aria_label, size=None, **props) -> rx.Component:
+    """Radix select with its accessible name on the focusable trigger."""
+    root_props = dict(value=value, on_change=on_change, size=size)
+    root_props.update(props)
+    return rx.select.root(
+        rx.select.trigger(id=id, aria_label=aria_label,
+                          placeholder=placeholder),
+        rx.select.content(rx.foreach(
+            options, lambda item: rx.select.item(item, value=item))),
+        **root_props,
+    )
 
 
 def status_legend(statuses=ds.DAY_STATUSES, note=None) -> rx.Component:
@@ -110,15 +163,21 @@ def _value(value, compact=None, exact=None, size_wide="7",
                         "letterSpacing": "-0.01em", "lineHeight": "1.15"})
     if compact is None:
         el = rx.text(value, size=rx.breakpoints(initial=size_narrow,
-                                                lg=size_wide), **style)
+                                                lg=size_wide), tab_index=0,
+                     aria_label=str(exact if exact is not None else value),
+                     **style)
     else:
         el = rx.box(
             rx.text(value, size=size_wide, display=_WIDE_ONLY, **style),
             rx.text(compact, size=size_narrow, display=_NARROW_ONLY, **style),
+            tab_index=0, aria_label=str(exact if exact is not None else value),
         )
     if exact is None and compact is None:
         return el
-    return rx.tooltip(el, content=exact if exact is not None else value)
+    # Focus the value itself so the exact figure works with keyboard and touch,
+    # not only mouse hover.
+    exact_value = str(exact if exact is not None else value)
+    return rx.tooltip(el, content=exact_value)
 
 
 def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
@@ -130,8 +189,8 @@ def stat(label, value, *, compact=None, exact=None, sub=None, chip=None,
     phone)."""
     # below 992px labels get room for two lines, so values in a row line
     # up and tiles keep one height even when a label wraps
-    items = [rx.text(label, size="2", color=ds.TEXT_MUTED, weight="medium",
-                     min_height=rx.breakpoints(initial="2.6em", md="0")),
+    items = [rx.box(metric_label(label),
+                    min_height=rx.breakpoints(initial="2.6em", md="0")),
              _value(value, compact, exact, size_wide=size,
                     size_narrow=size_narrow)]
     if chip is not None or tag is not None:
@@ -382,18 +441,26 @@ def day_rows(all_rows, reported_rows, n_hidden, label, expanded, on_toggle,
 
 
 # --- empty / chart states ----------------------------------------------------------
-def empty_state(title, detail=None, icon: str = "inbox") -> rx.Component:
+def empty_state(title, detail=None, icon: str = "inbox", action=None) -> rx.Component:
     return rx.center(
         rx.vstack(
-            rx.icon(icon, size=22, color=ds.TEXT_FAINT),
+            rx.icon(icon, size=22, color=ds.TEXT_FAINT, aria_hidden=True),
             rx.text(title, size="2", weight="medium", color=ds.TEXT_MUTED),
-            *([rx.text(detail, size="1", color=ds.TEXT_FAINT,
+            *([rx.text(detail, size="1", color=ds.TEXT_MUTED,
                        text_align="center", max_width="48ch")]
               if detail is not None else []),
-            spacing="1", align="center",
+            *([action] if action is not None else []),
+            spacing="2", align="center",
         ),
-        padding="2em 1em", width="100%",
+        padding="2em 1em", width="100%", role="status",
     )
+
+
+def success_callout(message, id=None) -> rx.Component:
+    """Announce successful mutations without unexpectedly moving focus."""
+    return rx.callout(message, icon="circle-check", color_scheme="green",
+                      variant="soft", width="100%", id=id, role="status",
+                      aria_live="polite")
 
 
 def not_enough_data(detail=None) -> rx.Component:
@@ -413,12 +480,19 @@ def not_enough_data(detail=None) -> rx.Component:
     )
 
 
+def chart_summary(summary) -> rx.Component:
+    """A compact, nonvisual explanation; detailed values stay in page tables."""
+    return rx.text(summary, size="1", color=ds.TEXT_MUTED, role="note")
+
+
 def chart_card(title, chart, *, ready, subtitle=None, detail=None,
-               id=None) -> rx.Component:
-    """Chart in a section card; ``ready`` False -> compact
-    "Not enough data yet" instead of a near-empty plot."""
-    return section_card(rx.cond(ready, chart, not_enough_data(detail)),
-                        title=title, subtitle=subtitle, id=id)
+               summary=None, id=None) -> rx.Component:
+    """Chart with an optional concise summary; no duplicate data table."""
+    return section_card(
+        rx.cond(ready, chart, not_enough_data(detail)),
+        *([rx.cond(ready, chart_summary(summary))] if summary is not None else []),
+        title=title, subtitle=subtitle, id=id,
+    )
 
 
 # --- entry dialogs and forms ---------------------------------------------------------
@@ -441,7 +515,12 @@ def form_field(label, control, hint=None, *, required=False,
             else rx.text(label, size="2", weight="medium", color=ds.TEXT)]
     if required:
         head.append(rx.text("*", size="2", color=ds.ERROR))
-    items = [rx.hstack(*head, spacing="1", align="baseline"), control]
+    # An implicit native label works for inputs and Radix select trigger
+    # buttons alike, without relying on optional page-specific ids.
+    items = [rx.el.label(
+        rx.hstack(*head, spacing="1", align="baseline"), control,
+        display="flex", flex_direction="column", gap="4px", width="100%",
+    )]
     if hint is not None:
         items.append(_when(hint, rx.text(hint, size="1",
                                          color=ds.TEXT_FAINT)))
@@ -507,7 +586,7 @@ def dialog_actions(*, save_label, on_save, saving, save_id, cancel_id,
     """Footer buttons: Cancel (closes) + the primary save action."""
     save = rx.button(
         rx.cond(saving, rx.spinner(size="1"), rx.icon("save", size=14)),
-        save_label, color_scheme="indigo", on_click=on_save,
+        save_label, color_scheme="blue", on_click=on_save,
         disabled=saving, id=save_id)
     return [
         rx.dialog.close(rx.button("Cancel", variant="soft",
@@ -521,15 +600,17 @@ def form_dialog(*body, open, on_open_change, title, subtitle=None,
                 width: str = "720px", **content_props) -> rx.Component:
     """Centered entry dialog (Radix, portaled to <body>) with a pinned
     header and footer; only the body scrolls."""
-    head_text = [rx.heading(title, size="4", weight="medium", color=ds.TEXT)]
+    head_text = [rx.dialog.title(title, size="4", weight="medium",
+                                 color=ds.TEXT)]
     if subtitle is not None:
-        head_text.append(rx.text(subtitle, size="2", color=ds.TEXT_MUTED))
+        head_text.append(rx.dialog.description(
+            subtitle, size="2", color=ds.TEXT_MUTED))
     header = rx.hstack(
         rx.vstack(*head_text, spacing="1", align="start", min_width="0"),
         rx.spacer(),
         rx.dialog.close(rx.icon_button(rx.icon("x", size=16),
                                        variant="ghost", color_scheme="gray",
-                                       id=close_id)),
+                                       aria_label="Close dialog", id=close_id)),
         width="100%", align="start", flex_shrink="0",
         padding=_DIALOG_PAD, border_bottom=_RULE,
     )
@@ -547,7 +628,7 @@ def form_dialog(*body, open, on_open_change, title, subtitle=None,
         *([status] if status is not None else []),
         rx.spacer(), *actions,
         spacing="3", width="100%", align="center", flex_shrink="0",
-        padding_x=_DIALOG_PAD, padding_y="0.85em", border_top=_RULE,
+        wrap="wrap", padding_x=_DIALOG_PAD, padding_y="0.85em", border_top=_RULE,
         background=CARD_BG,
     ))
     return rx.dialog.root(

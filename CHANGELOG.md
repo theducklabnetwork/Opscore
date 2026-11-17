@@ -94,6 +94,18 @@ Schema version: **15**.
   committed content and never replays stale sidecar files.
 - **Working-shift default colours.** M900–A121 default to white; existing
   custom colours, labels and times are preserved by the v12 migration.
+- **Cobalt-blue interface.** Links, active navigation, primary actions and
+  charts use one blue accent in light and dark modes. Dialogs use semantic
+  titles/descriptions, form fields have associated labels, and the current
+  navigation item is identified without relying on colour alone.
+- **Accessibility and usability refinements.** Keyboard focus is visible;
+  coarse-pointer controls receive 44px targets; reduced-motion preferences are
+  respected. Metric abbreviations have hover/focus explanations and tappable
+  definitions on touch devices. Compact values expose exact figures, charts
+  have accessible names and concise summaries with existing detail tables,
+  successful saves are announced politely, and empty Action/Staff states offer
+  appropriate next actions. Planner below-target days include text as well as
+  warning colour.
 
 ---
 

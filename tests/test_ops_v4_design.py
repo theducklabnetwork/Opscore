@@ -132,6 +132,22 @@ class DialogTests(unittest.TestCase):
             self.assertIn("form-section", out, build.__qualname__)
             for needle in ids:
                 self.assertIn(needle, out, f"{build.__qualname__}: {needle}")
+            self.assertIn("RadixThemesDialog.Title", out)
+            self.assertIn('"aria-label":"Close dialog"', out)
+
+    def test_form_fields_have_programmatic_labels(self):
+        import reflex as rx
+        from ducklab import auth_pages, ui
+
+        out = str(ui.form_field("Amount", rx.input(id="amount")))
+        self.assertIn('jsx("label"', out)
+        self.assertIn("RadixThemesTextField.Root", out)
+        out = str(auth_pages._field("Email", id="login-email"))
+        self.assertIn('htmlFor:"login-email"', out)
+        out = str(auth_pages._password_input(
+            "Password", auth_pages.AuthState.password,
+            auth_pages.AuthState.set_password, "login-password"))
+        self.assertIn('htmlFor:"login-password"', out)
 
     def test_setup_form_keeps_clear_and_fields(self):
         from ducklab import ops_stores_pages

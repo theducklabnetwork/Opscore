@@ -160,6 +160,8 @@ def _pace_chart() -> rx.Component:
         "Sales Trend",
         _themed(S.active_pace_fig),
         ready=S.sp_chart_ready,
+        summary="Cumulative actual sales compared with the selected target. "
+                "Exact daily values and results are in Daily Sales below.",
         id="pace-section",
     )
 
@@ -175,14 +177,20 @@ def _sales_by_day() -> rx.Component:
     return ui.chart_card(
         "Sales by Day",
         _themed(S.active_weekday_fig, "280px"),
-        ready=S.sp_weekday_ready, id="weekday-section")
+        ready=S.sp_weekday_ready,
+        summary="Average reported sales for each weekday; blank bars mean no "
+                "reported days.",
+        id="weekday-section")
 
 
 def _sales_calendar() -> rx.Component:
     return ui.chart_card(
         "Sales Calendar",
         _themed(S.active_cal_fig, "300px"),
-        ready=S.sp_cal_ready, id="calendar-section")
+        ready=S.sp_cal_ready,
+        summary="Darker cells indicate higher reported sales. Exact values "
+                "are listed by date in Daily Sales below.",
+        id="calendar-section")
 
 
 def _day_charts() -> rx.Component:

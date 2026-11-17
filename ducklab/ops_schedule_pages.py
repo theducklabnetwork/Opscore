@@ -12,15 +12,19 @@ M = ScheduleState
 
 
 def _schedule_cell(staff_id, cell) -> rx.Component:
-    return ui.td(rx.select(
-        M.schedule_code_values,
+    return ui.td(rx.select.root(
+        rx.select.trigger(
+            aria_label="Shift for " + cell["date"], width="100%",
+            style={"backgroundColor": cell["color"]}),
+        rx.select.content(rx.foreach(
+            M.schedule_code_values,
+            lambda code: rx.select.item(code, value=code))),
         value=cell["code"],
         on_change=lambda value: M.set_schedule_cell(staff_id, cell["date"], value),
         disabled=~M.can_write_schedule | (cell["date"] == ""),
         size="1",
-        width="100%",
-        style={"backgroundColor": cell["color"], "width": "100%"},
-    ), style={"border": "1px solid #d4d4d8", "padding": "6px", "height": "58px"})
+    ), style={"border": f"1px solid {ui.ROW_BORDER}", "padding": "6px",
+              "height": "58px"})
 
 
 def _builder_row(row) -> rx.Component:
@@ -28,23 +32,31 @@ def _builder_row(row) -> rx.Component:
         ui.td(rx.vstack(rx.text(row["name"], weight="medium"),
                         rx.text(row["detail"],
                                 size="1", color=ds.TEXT_MUTED), spacing="0"),
-              style={"border": "1px solid #d4d4d8", "padding": "10px"}),
+              style={"border": f"1px solid {ui.ROW_BORDER}", "padding": "10px"}),
         rx.foreach(row["cells"], lambda cell: _schedule_cell(row["id"], cell)),
-        style={"borderBottom": "1px solid #e4e4e7"},
+        style={"borderBottom": f"1px solid {ui.ROW_BORDER}"},
     )
 
 
 def _summary_row() -> rx.Component:
     return rx.el.tr(
         ui.td(rx.text("Headcount", weight="bold"),
-              style={"padding": "10px", "border": "1px solid #d4d4d8"}),
+              style={"padding": "10px",
+                     "border": f"1px solid {ui.ROW_BORDER}"}),
         rx.foreach(
             M.schedule_day_summaries,
             lambda day: ui.td(
-                rx.text(day["headcount"], weight="bold"),
+                rx.vstack(
+                    rx.text(day["headcount"], weight="bold"),
+                    rx.cond(day["below_target"] == "1",
+                            rx.text("Below target", size="1",
+                                    color=ds.ERROR)),
+                    spacing="0", align="center",
+                ),
                 style={"backgroundColor": rx.cond(day["below_target"] == "1",
-                                                   "#fee2e2", "transparent"),
-                       "border": "1px solid #d4d4d8", "padding": "10px",
+                                                   rx.color("red", 3),
+                                                   "transparent"),
+                       "border": f"1px solid {ui.ROW_BORDER}", "padding": "10px",
                        "textAlign": "center"},
             )),
     )
@@ -80,7 +92,7 @@ def _builder() -> rx.Component:
                                  id="export-myess-batch-csv",
                                  aria_label="Export MyESS batch CSV"),
                        content="Export one MyESS CSV for all scheduled staff"),
-            width="100%", align="end", flex_wrap="nowrap",
+            width="100%", align="end", flex_wrap="wrap",
         ),
         rx.cond(
             M.schedule_staff.length() > 0,
@@ -89,7 +101,8 @@ def _builder() -> rx.Component:
                     ui.th("Staff"),
                     rx.foreach(M.schedule_day_headers, lambda day: rx.el.th(
                         day["label"], style={"backgroundColor": rx.cond(
-                            day["holiday"] == "1", "#ddd6fe", "transparent")})),
+                            day["holiday"] == "1", rx.color("violet", 3),
+                            "transparent")})),
                 )),
                 rx.el.tbody(
                     rx.foreach(M.schedule_grid_rows, _builder_row),
@@ -102,7 +115,7 @@ def _builder() -> rx.Component:
         rx.flex(rx.foreach(M.schedule_legend, _generated_legend_item),
                 gap="12px", wrap="wrap", width="100%"),
         title="Weekly Schedule",
-        subtitle="Red days are below target manpower.",
+        subtitle="Below-target days show both a warning colour and text.",
         id="schedule-builder",
     )
 
@@ -110,7 +123,7 @@ def _builder() -> rx.Component:
 def _generated_legend_item(code) -> rx.Component:
     return rx.hstack(
         rx.box(width="14px", height="14px", background=code["color"],
-               border="1px solid #999"),
+               border=f"1px solid {ds.BORDER}"),
         rx.text(code["code"] + ": " + code["detail"], size="1",
                 white_space="nowrap"),
         spacing="1", align="center",
@@ -197,7 +210,19 @@ def _staff_tab() -> rx.Component:
         rx.cond(M.schedule_staff.length() > 0,
                 ui.data_table(["Name", "Staff ID", "Position", "Employment Type", ""],
                               rx.foreach(M.schedule_staff, _staff_row)),
-                ui.empty_state("No Staff", icon="users")),
+                rx.cond(
+                    M.can_write_schedule,
+                    ui.empty_state(
+                        "No Staff", "Add staff before building a schedule.",
+                        icon="users",
+                        action=rx.button("Add Staff",
+                                         on_click=M.open_schedule_staff(""),
+                                         id="empty-add-staff"),
+                    ),
+                    ui.empty_state(
+                        "No Staff", "Ask an administrator to add staff.",
+                        icon="users"),
+                )),
         title="Staff",
         extra=rx.cond(M.can_write_schedule,
                       rx.button(rx.icon("plus", size=14), "Add Staff",
@@ -278,8 +303,7 @@ def _schedule_dialog() -> rx.Component:
             rx.cond(M.schedule_form_error != "",
                     ds.error_callout(M.schedule_form_error)),
             rx.cond(M.schedule_staff_confirmation != "",
-                    rx.callout(M.schedule_staff_confirmation, icon="circle-check",
-                               color_scheme="green", variant="soft")),
+                    ui.success_callout(M.schedule_staff_confirmation)),
         ],
         actions=[
             rx.dialog.close(rx.button("Cancel", variant="soft",
@@ -292,7 +316,7 @@ def _schedule_dialog() -> rx.Component:
             rx.cond(M.can_write_schedule,
                     rx.button(rx.cond(M.schedule_saving, rx.spinner(size="1"),
                                       rx.icon("save", size=14)), "Save",
-                              color_scheme="indigo",
+                              color_scheme="blue",
                               on_click=lambda: M.save_schedule_form(False),
                               disabled=M.schedule_saving, id="schedule-form-save")),
         ],
@@ -301,8 +325,8 @@ def _schedule_dialog() -> rx.Component:
 
 def schedule_tab() -> rx.Component:
     return rx.vstack(
-        rx.cond(M.schedule_notice != "", rx.callout(M.schedule_notice,
-                icon="circle-check", color_scheme="green", variant="soft")),
+        rx.cond(M.schedule_notice != "",
+                ui.success_callout(M.schedule_notice)),
         rx.cond(M.schedule_error != "", ds.error_callout(M.schedule_error)),
         rx.tabs.root(
             rx.tabs.list(

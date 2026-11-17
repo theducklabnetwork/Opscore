@@ -103,6 +103,19 @@ class TestOpsCharts(unittest.TestCase):
                       fig.to_plotly_json()["data"][0]["customdata"][0])
 
     # 6 ------------------------------------------------------------------
+    def test_cobalt_palette_matches_radix_blue_in_both_themes(self):
+        for dark, accent in ((False, "#0090FF"), (True, "#52A9FF")):
+            with self.subTest(dark=dark):
+                pal = ops_charts._pal(dark)
+                self.assertEqual(pal["accent"], accent)
+                self.assertEqual(pal["info"], accent)
+                self.assertEqual(pal["seq"][1], accent)
+                fig = ops_charts.daily_line(
+                    ["01 Oct"], [10.0], dark=dark).to_plotly_json()
+                self.assertEqual(fig["data"][0]["line"]["color"], accent)
+                self.assertEqual(fig["data"][0]["fillcolor"],
+                                 pal["accent_fill"])
+
     def test_dark_and_light_differ_only_in_styling(self):
         labels = ["01 Oct", "02 Oct"]
         vals = [10.0, None]

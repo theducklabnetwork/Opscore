@@ -11,6 +11,8 @@ that tracks, per store and per month:
 - Stock loss by code
 - Corrective actions with follow-up
 - Versioned, finalized monthly reports with Excel export
+- Keyboard and touch accessibility, visible focus, chart summaries and
+  reduced-motion support
 
 Each installation keeps its own database on its own machine. There is no
 shared server and no cloud component; the app works fully offline after
