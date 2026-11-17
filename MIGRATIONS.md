@@ -69,7 +69,7 @@ backup, migration or restore. A version-zero database initializes normally.
 2. If an existing database has pending migrations, saves a consistent
    pre-migration copy before the first transaction. Backup failure aborts
    migration without changing the live database.
-3. Iterates a static, ordered list `(1, _apply_v1) … (17, _apply_v17)`.
+3. Iterates a static, ordered list `(1, _apply_v1) … (18, _apply_v18)`.
 4. Skips versions `<= current`.
 5. For each pending version, runs `BEGIN → apply → PRAGMA user_version = N →
    COMMIT`, rolling back the whole step on any error.
@@ -120,7 +120,7 @@ use the in-memory limiter backend.
 
 ## 6. Schema history
 
-The complete v1–v17 history, from the migration functions in
+The complete v1–v18 history, from the migration functions in
 `ducklab/store_ops_db.py`:
 
 | Version | Change | Type |
@@ -142,6 +142,7 @@ The complete v1–v17 history, from the migration functions in
 | **v15** | Versioned authentication baseline: all auth tables/indexes, five roles, additive `tour_done`, and persistent `auth_login_failures`. Existing auth records are preserved. | Additive baseline |
 | **v16** | `monthly_configs.bd_target_cents` (informational Monthly Setup input; no KPI uses it). New reference tables `store_directory` (code, name, state, zone, display_area), `store_directory_history` (code, month, sales_cents) and `store_directory_info` (last import). The directory holds the monthly-sales workbook; no stores or daily records are created from it. | Additive |
 | **v17** | `store_directory_info.bundled` records whether the current store directory came from the shipped workbook. Mirrors `reference_data_info.bundled` from v10, so the startup bootstrap can refresh a stale bundled copy without ever replacing a directory the user uploaded. | Additive |
+| **v18** | `store_directory.bd_target_cents` holds the workbook's BD Target figure for October 2026. Reference data only: it feeds no KPI, target level, budget or achievement number, and `monthly_configs.bd_target_cents` (v16) remains the per-store, per-month value the user types in Monthly Setup. | Additive |
 
 ## 7. Migration execution process
 

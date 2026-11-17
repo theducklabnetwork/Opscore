@@ -130,6 +130,10 @@ POST_MIGRATION_COLUMNS = {
     "daily_records": ("leave_emergency",),
     "schedule_entries": ("assignment_source",),
     "shift_codes": ("show_in_legend",),
+    # v17: store-directory provenance
+    "store_directory_info": ("bundled",),
+    # v18: the workbook's BD Target figure
+    "store_directory": ("bd_target_cents",),
 }
 
 

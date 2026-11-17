@@ -162,7 +162,7 @@ class BundledDirectoryTests(unittest.TestCase):
             self.db, workbook=self.xlsx))
         self.assertEqual(self.counts(), (1, 2))
         conn = sqlite3.connect(self.db)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 17)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 18)
         conn.close()
 
     def test_shipped_workbook_is_present_and_parseable(self):
@@ -179,7 +179,7 @@ class BundledDirectoryTests(unittest.TestCase):
         conn = sqlite3.connect(self.db)
         self.assertIn("bundled", [r[1] for r in conn.execute(
             "PRAGMA table_info(store_directory_info)")])
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 17)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 18)
         conn.close()
 
 

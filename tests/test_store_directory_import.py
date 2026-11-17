@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from datetime import date, datetime
 from pathlib import Path
+from unittest import mock
 
 import openpyxl
 
@@ -16,7 +17,8 @@ from ducklab import ops_charts, store_ops_db
 from ducklab import store_directory_import as sdi
 from ducklab.app_service import AppService
 from ducklab.auth_service import AuthService
-from ducklab.operations_repository import OperationsRepository
+from ducklab.operations_repository import (ConfigNotFoundError,
+                                           OperationsRepository)
 from ducklab.operations_write_service import OperationsWriteService
 
 PASSWORD = "test-password-123"
@@ -64,10 +66,12 @@ class ParseTests(DirectoryBase):
                          ["B001", "B002", "Z012"])
         self.assertEqual(stores[0], {"code": "B001", "name": "CHP",
                                      "state": "WP", "zone": "KV-6",
-                                     "display_area": 10388})
-        # Concept and BD Target are never imported
+                                     "display_area": 10388,
+                                     "bd_target_cents": None})
+        # Concept is never imported; BD Target is reference data only
         self.assertNotIn("concept", stores[0])
-        self.assertNotIn("bd_target", stores[0])
+        # A numeric BD Target is imported as cents
+        self.assertEqual(stores[1]["bd_target_cents"], 14800000)
         # A numeric 0 in State/Zone is blank, not the text "0.0"
         self.assertIsNone(stores[2]["state"])
         self.assertIsNone(stores[2]["zone"])
@@ -143,6 +147,79 @@ class ParseTests(DirectoryBase):
                                     None, 1, 2, 3]])
         with self.assertRaises(sdi.DirectoryImportError):
             sdi.parse_workbook(sdi.dsc_import.read_sheet(self.xlsx, "2025-2026"))
+
+
+class ImportedBdTargetTests(DirectoryBase):
+    """The workbook's BD Target column: imported as reference data only."""
+
+    def bd_of(self, code):
+        stores, _, _ = sdi.parse_workbook(
+            sdi.dsc_import.read_sheet(self.xlsx, "2025-2026"))
+        return next(s["bd_target_cents"] for s in stores if s["code"] == code)
+
+    def test_numeric_target_is_imported_as_cents(self):
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    355000, 100, 200, 300]])
+        self.assertEqual(self.bd_of("B001"), 35500000)
+
+    def test_nil_text_means_no_target_not_zero(self):
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    "NIL", 100, 200, 300]])
+        self.assertIsNone(self.bd_of("B001"))
+
+    def test_mixed_case_nil_is_treated_as_no_target(self):
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    "NIl", 100, 200, 300]])
+        self.assertIsNone(self.bd_of("B001"))
+
+    def test_blank_target_means_no_target(self):
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    None, 100, 200, 300]])
+        self.assertIsNone(self.bd_of("B001"))
+
+    def test_numeric_zero_means_no_target_not_rm_zero(self):
+        """The workbook's numeric 0 is its "not applicable" marker."""
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    0, 100, 200, 300]])
+        self.assertIsNone(self.bd_of("B001"))
+
+    def test_non_numeric_target_warns_and_is_ignored(self):
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    "abc", 100, 200, 300]])
+        stores, _, warnings = sdi.parse_workbook(
+            sdi.dsc_import.read_sheet(self.xlsx, "2025-2026"))
+        self.assertIsNone(stores[0]["bd_target_cents"])
+        self.assertTrue(any("BD Target" in w for w in warnings))
+
+    def test_target_is_persisted_and_readable(self):
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    355000, 100, 200, 300]])
+        sdi.import_workbook(self.xlsx, self.db)
+        self.assertEqual(sdi.bd_target_for(self.db, "B001"), 35500000)
+        self.assertIsNone(sdi.bd_target_for(self.db, "ZZZZ"))
+
+    def test_bd_target_does_not_touch_monthly_configs(self):
+        """The imported figure is reference data; the user's own Monthly
+        Setup value is a separate column and stays untouched."""
+        write_workbook(self.xlsx, [["B001", "CHP", 1, "Mall", "WP", "KV-1",
+                                    355000, 100, 200, 300]])
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "INSERT INTO stores (code, name) VALUES ('B001', 'CHP')")
+        conn.execute(
+            "INSERT INTO monthly_configs (store_id, month, "
+            "bd_target_cents) VALUES (1, '2026-10', 12345)")
+        conn.commit()
+        conn.close()
+        sdi.import_workbook(self.xlsx, self.db)
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(conn.execute(
+            "SELECT bd_target_cents FROM monthly_configs "
+            "WHERE store_id = 1 AND month = '2026-10'").fetchone()[0], 12345)
+        conn.close()
+
+    def test_target_month_is_october_2026(self):
+        self.assertEqual(sdi.BD_TARGET_MONTH, "2026-10")
 
 
 class ImportTests(DirectoryBase):
@@ -269,6 +346,78 @@ class AppServiceTests(DirectoryBase):
         self.assertEqual(result["stores"], 3)
         self.assertEqual(self.app.store_directory_info(self.admin)["stores"], 3)
 
+    def test_bd_target_is_store_scoped(self):
+        # B002 carries the numeric BD Target in the fixture; B001 is "NIL"
+        target_store = OperationsWriteService(self.db).register_store(
+            "B002", "KLM", concept="Outlet", state="WP", zone="KV-4")
+        self.assertEqual(
+            self.app.store_directory_bd_target(self.admin, target_store),
+            14800000)
+        self.assertIsNone(
+            self.app.store_directory_bd_target(self.admin, self.store_id))
+        viewer = self.app.create_user(self.admin, "v@example.com", "V", PASSWORD)
+        from ducklab.auth_service import AuthorizationError
+        with self.assertRaises(AuthorizationError):
+            self.app.store_directory_bd_target(viewer, target_store)
+
+
+class SetupHistoryButtonTests(DirectoryBase):
+    """The Monthly Setup 'Load History From Directory' button."""
+
+    def setUp(self):
+        super().setUp()
+        write_workbook(self.xlsx, self.rows())
+        sdi.import_workbook(self.xlsx, self.db)
+        self.app = AppService(self.db)
+        self.admin = AuthService(self.db).bootstrap_first_admin(
+            "admin@example.com", "Admin", PASSWORD)
+        self.store_id = OperationsWriteService(self.db).register_store(
+            "B002", "KLM", concept="Outlet", state="WP", zone="KV-4")
+
+    def state(self):
+        from ducklab.ops_setup_state import SetupState
+        state = SetupState()
+        state.setup_original = {}
+        return state
+
+    def bound(self, module, cls, fn, month="2026-01"):
+        sid, admin = self.store_id, self.admin
+        with mock.patch.object(module, "app_service", self.app), \
+                mock.patch.object(cls, "_actor", lambda self_: admin), \
+                mock.patch.object(cls, "_selected_store_id",
+                                  lambda self_: sid), \
+                mock.patch.object(cls, "_selected_month",
+                                  lambda self_: month):
+            return fn()
+
+    def test_button_fills_history_and_bd_target_without_saving(self):
+        import ducklab.ops_setup_state as mod
+        from ducklab.ops_setup_state import SetupState
+        state = self.state()
+        self.bound(mod, SetupState, state.load_setup_data, month="2026-01")
+        self.assertTrue(state.s_history_available)
+        self.assertEqual(state.s_bd_target_reference, "148000.00")
+        self.bound(mod, SetupState, state.load_history_from_directory,
+                   month="2026-01")
+        # B002 reported 0 for Feb-2025, so December-2025 is blank, not RM 0
+        self.assertEqual(state.s_last_month, "")
+        self.assertEqual(state.s_last_year, "425862.52")
+        self.assertEqual(state.s_bd_target, "148000.00")
+        self.assertIn("loaded from the store directory", state.setup_notice)
+        # Nothing is written until Save Setup
+        with self.assertRaises(ConfigNotFoundError):
+            self.app.get_month_config(self.admin, self.store_id, "2026-01")
+
+    def test_reference_is_shown_without_a_history_month(self):
+        """A store with a BD Target but no figures for the month still
+        shows the imported figure."""
+        import ducklab.ops_setup_state as mod
+        from ducklab.ops_setup_state import SetupState
+        state = self.state()
+        self.bound(mod, SetupState, state.load_setup_data, month="2026-06")
+        self.assertFalse(state.s_history_available)
+        self.assertEqual(state.s_bd_target_reference, "148000.00")
+
 
 class BdTargetTests(DirectoryBase):
     def test_bd_target_round_trip_and_clear(self):
@@ -348,7 +497,7 @@ class MigrationTests(unittest.TestCase):
         conn = sqlite3.connect(db)
         try:
             self.assertEqual(conn.execute(
-                "PRAGMA user_version").fetchone()[0], 17)
+                "PRAGMA user_version").fetchone()[0], 18)
             self.assertEqual(conn.execute(
                 "SELECT sales_last_year_cents FROM monthly_configs"
             ).fetchone()[0], 12345)
@@ -362,7 +511,7 @@ class MigrationTests(unittest.TestCase):
             conn.close()
         # Pre-migration backup was taken
         self.assertTrue(list((tmp / "backups").glob(
-            "pre-migration-v15-to-v17-*.db")))
+            "pre-migration-v15-to-v18-*.db")))
 
 
 if __name__ == "__main__":

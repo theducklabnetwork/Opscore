@@ -196,7 +196,7 @@ application checks.
 |---|---|
 | `stores` | Code (unique), name, Concept, State, zone, zone PIC, branch manager, active flag |
 | `monthly_configs` | One row per store and month: targets, uplifts, comparisons, BD Target, salary ratio target, headcount, stock loss target, BV/UPT targets, payroll figures |
-| `store_directory` | Imported store directory: code (unique), name, State, zone, display area. Reference data only; no stores are created from it |
+| `store_directory` | Imported store directory: code (unique), name, State, zone, display area, BD Target (October 2026). Reference data only; no stores are created from it |
 | `store_directory_history` | Imported monthly sales per store code and month (integer cents). Feeds the Sales History chart and the Monthly Setup history button |
 | `store_directory_info` | Singleton: last directory import timestamp, source filename and `bundled` provenance flag (v17) |
 | `public_holidays` | Holiday dates per store |
@@ -393,13 +393,21 @@ one dated column per month) and replaces `store_directory` and
 `store_directory_history` in one transaction. It reuses the stdlib `.xlsx`
 reader from `dsc_import.py`; month headers arrive as Excel serial numbers and
 are converted to `YYYY-MM`. Only Code, Name, Display Area, State, Zone and the
-monthly sales are read — **Concept and BD Target are never imported**, because
-Concept is an Opscore dropdown tied to the DSC reference data and BD Target is
-a manual Monthly Setup input. Blank and zero months are skipped, so the
-directory never records a zero-sales month, and amounts are stored as integer
-cents rounded half-up. No stores, monthly configs or daily records are written
-by the import. The same function powers **Settings → Reference Data** and
-`scripts/import_store_directory.py`.
+monthly sales are read — **Concept is never imported**, because Concept is an
+Opscore dropdown tied to the DSC reference data. Blank and zero months are
+skipped, so the directory never records a zero-sales month, and amounts are
+stored as integer cents rounded half-up. No stores, monthly configs or daily
+records are written by the import. The same function powers **Settings →
+Reference Data** and `scripts/import_store_directory.py`.
+
+The workbook's **BD Target** column is imported as reference data into
+`store_directory.bd_target_cents` (v18). The file does not say which month it
+covers, so the month is declared in code as `BD_TARGET_MONTH = "2026-10"`
+(October 2026) on the business's instruction. A blank cell, the workbook's
+"NIL" text and a numeric 0 all mean "no target" and import as None, never as
+RM 0. The figure feeds no KPI, target level, budget or achievement number:
+`monthly_configs.bd_target_cents` (v16) remains the per-store, per-month value
+the user types in Monthly Setup.
 
 The Git-tracked workbook `ducklab/data/store_directory_2025_2026.xlsx` is
 loaded by `reference_bootstrap.load_bundled_store_directory` at startup when
@@ -417,7 +425,8 @@ Consumers:
   user.
 - **Monthly Setup** (`SetupState.load_history_from_directory`, explicit button)
   fills Sales Last Month / Last Year from the directory for the selected store
-  and month. Nothing is saved until Save Setup; missing months fill blank.
+  and month, plus the imported BD Target. Nothing is saved until Save Setup;
+  missing months fill blank.
 - **Sales History (Imported)** (`ops_charts.history_timeline` /
   `history_year_compare`) draws the imported months on the Sales page with a
   Timeline / Year vs Year toggle, following the same gap rule as the daily

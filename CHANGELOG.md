@@ -7,10 +7,15 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **17**.
+Schema version: **18**.
 
 ### Added
 
+- **Imported BD Target.** The workbook's BD Target column is now imported as
+  reference data for October 2026. Monthly Setup shows the imported figure as
+  a note and **Load History From Directory** fills the BD Target field with
+  it. It is reference data only: it feeds no KPI, target level, budget or
+  achievement number, and the field stays editable.
 - **Bundled store directory.** The monthly-sales workbook is now bundled into
   the desktop builds and seeded automatically on startup: an empty directory
   is imported on first launch, a stale bundled copy is refreshed on upgrade,
@@ -27,13 +32,13 @@ Schema version: **17**.
   input never matches, editing an existing store never auto-fills, and Concept
   stays a manual choice so the daily contribution figures keep working.
 - **Monthly Setup history button.** **Load History From Directory** fills Sales
-  Last Month and Sales Last Year from the imported figures for the selected
-  store and month. It only fills the form; nothing is saved until Save Setup,
-  and months the workbook left blank or zero stay blank.
+  Last Month, Sales Last Year and the imported BD Target from the directory
+  figures for the selected store and month. It only fills the form; nothing is
+  saved until Save Setup, and months the workbook left blank or zero stay
+  blank.
 - **BD Target field.** Monthly Setup gains an optional BD Target (RM), stored
   per store per month. It is a reference figure only: it does not affect Level
-  1–4, achievement percentages, expense budgets or daily targets, and it is not
-  imported from the workbook.
+  1–4, achievement percentages, expense budgets or daily targets.
 - **Sales History chart.** Sales Performance gains a Sales History (Imported)
   card with a **Timeline / Year vs Year** toggle, drawn from the directory. It
   works for stores with no daily entries yet, and unreported months are gaps

@@ -175,16 +175,19 @@ expense budgets from the previous month; review the values and click
 **Save Setup** to apply them.
 
 **Load History From Directory.** When a store directory has been imported,
-this button fills **Sales Last Month** and **Sales Last Year** from the
-imported monthly figures for the selected store and month. It only ever
-fills the form — nothing is saved until you click **Save Setup** — and a
-month the workbook left blank or zero fills the field blank, never RM 0.00.
-The button is disabled when the directory has no figures for that store and
-month.
+this button fills **Sales Last Month**, **Sales Last Year** and the imported
+**BD Target** from the imported monthly figures for the selected store and
+month. It only ever fills the form — nothing is saved until you click **Save
+Setup** — and a month the workbook left blank or zero fills the field blank,
+never RM 0.00. The button is disabled when the directory has no figures for
+that store and month.
 
 **BD Target** is a reference figure for your own records. It is displayed on
 the form and stored per store per month, but it does not change Level 1–4,
-the achievement percentages, the expense budgets or the daily targets.
+the achievement percentages, the expense budgets or the daily targets. When
+the imported directory carries a BD Target for the store, Monthly Setup shows
+it as a note (the imported figure is for October 2026) and
+**Load History From Directory** fills the field with it.
 
 **Budget percentages.** Each category's budget is a percentage of the store's
 active sales target. The target starts at **Minimum RTM**; once cumulative
@@ -510,10 +513,13 @@ replaces the previous key immediately.
   upload a monthly-sales workbook here — one row per store, one column per
   month — to replace the store directory. It **never creates stores or daily
   records**: your store list and every operational record stay exactly as they
-  are. Concept and BD Target are not imported (Concept belongs to Opscore's own
-  list, and BD Target is typed by hand in Monthly Setup). Months the workbook
-  left blank or zero stay blank. The import is all-or-nothing and can be
-  re-run to replace the directory. A workbook you upload yourself is never
+  are. Concept is not imported (it belongs to Opscore's own list). The
+  workbook's **BD Target** column is imported for October 2026 as a reference
+  figure: Monthly Setup shows it as a note, and **Load History From
+  Directory** fills the BD Target field with it. It never changes Level 1–4,
+  achievement, budgets or daily targets. Months the workbook left blank or
+  zero stay blank. The import is all-or-nothing and can be re-run to replace
+  the directory. A workbook you upload yourself is never
   overwritten by the bundled data; a copy that came from the bundle is
   refreshed automatically when the bundled workbook changes on upgrade.
 

@@ -305,9 +305,9 @@ def _bundled_directory_differs(workbook: Path, db_path: Path) -> bool:
     conn = store_ops_db.connect(db_path)
     try:
         stored_stores = {
-            r[0]: (r[1], r[2], r[3], r[4]) for r in conn.execute(
-                "SELECT code, name, state, zone, display_area "
-                "FROM store_directory")}
+            r[0]: (r[1], r[2], r[3], r[4], r[5]) for r in conn.execute(
+                "SELECT code, name, state, zone, display_area, "
+                "bd_target_cents FROM store_directory")}
         stored_history = {
             (r[0], r[1]): r[2] for r in conn.execute(
                 "SELECT code, month, sales_cents FROM store_directory_history")}
@@ -320,7 +320,8 @@ def _bundled_directory_differs(workbook: Path, db_path: Path) -> bool:
         if key not in stored_stores:
             return True
         if stored_stores[key] != (store["name"], store["state"],
-                                  store["zone"], store["display_area"]):
+                                  store["zone"], store["display_area"],
+                                  store["bd_target_cents"]):
             return True
     for row in history:
         key = (row["code"], row["month"])

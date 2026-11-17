@@ -311,6 +311,10 @@ def _setup_section() -> rx.Component:
                                     "this store and month."),
                             ui.note("No imported history for this store and "
                                     "month.")),
+                    rx.cond(Setup.s_bd_target_reference != "",
+                            ui.note("Imported BD Target (Oct 2026): RM "
+                                    + Setup.s_bd_target_reference
+                                    + " — reference only.")),
                     spacing="3", align="center", wrap="wrap"),
                 hint="Set Levels 2–4 when Level 1 has a target. HQ Defaults "
                      "set Minimum RTM to RM 200,000 and add 10%, 20% and 30%. "

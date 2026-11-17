@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 SQLITE_BUSY_TIMEOUT_MS = 10_000
 
@@ -354,6 +354,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (15, _apply_v15),
             (16, _apply_v16),
             (17, _apply_v17),
+            (18, _apply_v18),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -877,3 +878,22 @@ def _apply_v17(conn: sqlite3.Connection) -> None:
             "INTEGER NOT NULL DEFAULT 0 CHECK (bundled IN (0, 1))")
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (17)")
+
+
+def _apply_v18(conn: sqlite3.Connection) -> None:
+    """The workbook's BD Target column.
+
+    ``store_directory.bd_target_cents`` holds the target set the workbook
+    carries for the month stated by the business (October 2026). It is
+    reference data like the sales figures: it feeds no KPI, target level,
+    budget or achievement number. ``monthly_configs.bd_target_cents``
+    (v16) remains the per-store, per-month value the user types in Monthly
+    Setup; the directory column is only the imported source figure.
+    """
+    columns = {row[1] for row in conn.execute(
+        "PRAGMA table_info(store_directory)")}
+    if columns and "bd_target_cents" not in columns:
+        conn.execute(
+            "ALTER TABLE store_directory ADD COLUMN bd_target_cents INTEGER")
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (18)")

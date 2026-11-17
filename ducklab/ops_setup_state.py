@@ -133,6 +133,7 @@ class SetupState(SharedOpsState):
     s_last_month: str = ""
     s_bd_target: str = ""
     s_history_available: bool = False  # directory has figures for this month
+    s_bd_target_reference: str = ""   # imported BD Target (display only)
     s_salary_ratio: str = ""
     s_budget_hc: str = ""
     s_turnover: str = ""
@@ -165,6 +166,7 @@ class SetupState(SharedOpsState):
         self.s_holidays_original = []
         self.s_holiday_min = self.s_holiday_max = ""
         self.s_history_available = False
+        self.s_bd_target_reference = ""
         for attr, _, _, _ in SETUP_ALL:
             setattr(self, attr, "")
 
@@ -220,6 +222,8 @@ class SetupState(SharedOpsState):
                 user, store_id, month)
             self.s_history_available = any(
                 v is not None for v in figures.values())
+            bd_reference = app_service.store_directory_bd_target(user, store_id)
+            self.s_bd_target_reference = _money_str(bd_reference)
         except (AuthenticationError, AuthorizationError,
                 StoreNotFoundError) as exc:
             # never show blank setup fields for an auth failure
@@ -500,7 +504,8 @@ class SetupState(SharedOpsState):
 
     @rx.event
     def load_history_from_directory(self) -> None:
-        """Fill Sales Last Month / Last Year from the imported directory.
+        """Fill Sales Last Month / Last Year (and BD Target) from the
+        imported directory.
 
         Explicit button only: nothing is written to the database, and the
         figures stay editable until Save Setup. A month the workbook left
@@ -516,6 +521,7 @@ class SetupState(SharedOpsState):
                 raise ValidationError("Select a store and month first.")
             figures = app_service.store_directory_comparison(
                 user, store_id, month)
+            bd_reference = app_service.store_directory_bd_target(user, store_id)
         except (AuthenticationError, AuthorizationError,
                 StoreNotFoundError) as exc:
             self.setup_error = auth_message(exc)
@@ -523,12 +529,15 @@ class SetupState(SharedOpsState):
         except ValidationError as exc:
             self.setup_error = str(exc)
             return
-        if all(v is None for v in figures.values()):
+        if all(v is None for v in figures.values()) and bd_reference is None:
             self.setup_notice = (
                 "No imported history for this store and month.")
             return
-        self.s_last_month = _money_str(figures["sales_last_month_cents"])
-        self.s_last_year = _money_str(figures["sales_last_year_cents"])
+        if any(v is not None for v in figures.values()):
+            self.s_last_month = _money_str(figures["sales_last_month_cents"])
+            self.s_last_year = _money_str(figures["sales_last_year_cents"])
+        if bd_reference is not None:
+            self.s_bd_target = _money_str(bd_reference)
         self.setup_notice = (
             "History loaded from the store directory. Save Setup to apply.")
 

@@ -35,9 +35,18 @@ from ducklab import dsc_import, store_ops_db
 
 HEADER_ROW = 1
 COL_CODE, COL_NAME, COL_AREA = 2, 3, 4          # B C D
+COL_BD_TARGET = 8                               # H
 COL_STATE, COL_ZONE = 6, 7                      # F G
 FIRST_MONTH_COL = 9                             # I onwards
 MAX_MONTH_COL = 200                             # safety bound, not a limit
+
+# The workbook carries one BD Target column. The business states that it
+# covers October 2026; the file itself does not say, so the month is
+# declared here rather than inferred from the sales columns.
+BD_TARGET_MONTH = "2026-10"
+
+# Text used in the workbook where a store has no BD Target.
+BD_TARGET_NO_VALUE = {"NIL", "N/A", "-", "--"}
 
 # Excel's 1900 date system serial for 1899-12-30 (the usual epoch, with the
 # historical leap-year bug already accounted for by this offset).
@@ -102,10 +111,39 @@ def _cents(value) -> int:
     return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def _bd_target(value, code: str, warnings: list[str]) -> int | None:
+    """The workbook's BD Target cell -> integer cents, or None.
+
+    A blank cell, the workbook's "NIL" text, or a numeric 0 means the store
+    has no BD Target: the result is None, never RM 0. A numeric 0 is the
+    workbook's own "not applicable" marker, the same convention its State and
+    Zone columns use for the event counters. A value that is not a number is
+    reported as a warning and ignored, so one bad cell never fails the
+    whole import.
+    """
+    if value is None:
+        return None
+    label = _label(value)
+    if not label or label.upper() in BD_TARGET_NO_VALUE:
+        return None
+    try:
+        cents = _cents(value)
+    except ValueError:
+        warnings.append(
+            f"{code}: BD Target {label!r} is not a number; ignored")
+        return None
+    if cents < 0:
+        warnings.append(f"{code}: BD Target cannot be negative; ignored")
+        return None
+    if cents == 0:
+        return None                   # 0 = not applicable, not a target
+    return cents
+
+
 def parse_workbook(cells) -> tuple[list[dict], list[dict], list[str]]:
     """Cells -> (stores, history rows, warnings). Raises on any error.
 
-    stores:   {code, name, state, zone, display_area}
+    stores:   {code, name, state, zone, display_area, bd_target_cents}
     history:  {code, month, sales_cents}   (zero/blank months omitted)
     """
     max_row = max((r for r, _ in cells), default=0)
@@ -165,7 +203,9 @@ def parse_workbook(cells) -> tuple[list[dict], list[dict], list[str]]:
             warnings.append(f"{code}: Display Area is not a number; ignored")
         stores.append({"code": code, "name": name,
                        "state": state or None, "zone": zone or None,
-                       "display_area": area_value})
+                       "display_area": area_value,
+                       "bd_target_cents": _bd_target(row.get(COL_BD_TARGET),
+                                                    code, warnings)})
         for col, month in sorted(month_cols.items()):
             value = row.get(col)
             if value is None or not _label(value):
@@ -231,13 +271,26 @@ def import_workbook(xlsx: Path, db_path: Path, *, sheet: str | None = None,
                  "ON CONFLICT (id) DO UPDATE SET imported_at = "
                  "datetime('now'), source_name = excluded.source_name",
                  (Path(xlsx).name,)))
+            # bd_target_cents arrived in v18; a v16/v17 database still
+            # imports, without the BD Target column.
+            store_columns = {row[1] for row in conn.execute(
+                "PRAGMA table_info(store_directory)")}
+            with_bd = "bd_target_cents" in store_columns
+            store_sql = (
+                "INSERT INTO store_directory (code, name, state, zone, "
+                "display_area, bd_target_cents) VALUES (:code, :name, "
+                ":state, :zone, :display_area, :bd_target_cents)"
+                if with_bd else
+                "INSERT INTO store_directory (code, name, state, zone, "
+                "display_area) VALUES (:code, :name, :state, :zone, "
+                ":display_area)")
+            rows = stores if with_bd else [
+                {k: v for k, v in s.items() if k != "bd_target_cents"}
+                for s in stores]
             with conn:
                 conn.execute("DELETE FROM store_directory_history")
                 conn.execute("DELETE FROM store_directory")
-                conn.executemany(
-                    "INSERT INTO store_directory (code, name, state, zone, "
-                    "display_area) VALUES (:code, :name, :state, :zone, "
-                    ":display_area)", stores)
+                conn.executemany(store_sql, rows)
                 conn.executemany(
                     "INSERT INTO store_directory_history (code, month, "
                     "sales_cents) VALUES (:code, :month, :sales_cents)",
@@ -328,6 +381,28 @@ def history_for(db_path: Path, code: str) -> dict[str, int]:
     finally:
         conn.close()
     return {r[0]: r[1] for r in rows}
+
+
+def bd_target_for(db_path: Path, code: str) -> int | None:
+    """The imported BD Target (cents) for one store code, or None.
+
+    The figure belongs to BD_TARGET_MONTH (October 2026). It is reference
+    data only: it feeds no KPI, target level, budget or achievement
+    number. ``monthly_configs.bd_target_cents`` holds the per-store,
+    per-month value the user types in Monthly Setup.
+    """
+    conn = store_ops_db.connect(db_path)
+    try:
+        columns = {r[1] for r in conn.execute(
+            "PRAGMA table_info(store_directory)")}
+        if "bd_target_cents" not in columns:
+            return None
+        row = conn.execute(
+            "SELECT bd_target_cents FROM store_directory WHERE code = ?",
+            (code,)).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
 
 
 def comparison_figures(db_path: Path, code: str, month: str) -> dict:

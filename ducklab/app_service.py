@@ -433,6 +433,19 @@ class AppService:
         return store_directory_import.comparison_figures(
             self._directory_path(), store.code, month)
 
+    def store_directory_bd_target(self, user: User,
+                                  store_id: int) -> Optional[int]:
+        """The imported BD Target (cents) for a store, or None.
+
+        Reference data for BD_TARGET_MONTH (October 2026). It feeds no KPI;
+        Monthly Setup's own BD Target field stays the user's to type.
+        Store-scoped read."""
+        authz.require_store_access(user, store_id)
+        store = self.read_repo.get_store(store_id)
+        from ducklab import store_directory_import
+        return store_directory_import.bd_target_for(
+            self._directory_path(), store.code)
+
     def store_directory_history(self, user: User, store_id: int) -> dict:
         """{'YYYY-MM': cents} for the sales-history charts. Store-scoped."""
         authz.require_store_access(user, store_id)
