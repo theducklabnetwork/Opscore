@@ -198,7 +198,7 @@ application checks.
 | `monthly_configs` | One row per store and month: targets, uplifts, comparisons, BD Target, salary ratio target, headcount, stock loss target, BV/UPT targets, payroll figures |
 | `store_directory` | Imported store directory: code (unique), name, State, zone, display area. Reference data only; no stores are created from it |
 | `store_directory_history` | Imported monthly sales per store code and month (integer cents). Feeds the Sales History chart and the Monthly Setup history button |
-| `store_directory_info` | Singleton: last directory import timestamp and source filename |
+| `store_directory_info` | Singleton: last directory import timestamp, source filename and `bundled` provenance flag (v17) |
 | `public_holidays` | Holiday dates per store |
 | `daily_records` | One row per store and date: sales, transactions, units, staffing and leave counts |
 | `daily_stock_losses` | Stock loss amount per daily record and loss code |
@@ -400,6 +400,14 @@ directory never records a zero-sales month, and amounts are stored as integer
 cents rounded half-up. No stores, monthly configs or daily records are written
 by the import. The same function powers **Settings → Reference Data** and
 `scripts/import_store_directory.py`.
+
+The Git-tracked workbook `ducklab/data/store_directory_2025_2026.xlsx` is
+loaded by `reference_bootstrap.load_bundled_store_directory` at startup when
+the directory is empty, and refreshed when the stored copy came from the
+bundle but no longer matches the bundled workbook (an upgrade). A directory
+the user uploaded is never replaced: `store_directory_info.bundled` (v17)
+records the provenance. The workbook is bundled into `.deb` and Windows
+builds alongside the DSC workbook. Seeding failures are logged and non-fatal.
 
 Consumers:
 
@@ -735,6 +743,7 @@ ducklab/
   dsc_import.py               Daily Sales Contribution import
   reference_bootstrap.py      Bundled reference data and expense-category seeds
   data/DSCSPR_alias_2027.xlsx Git-tracked default reference workbook
+  data/store_directory_2025_2026.xlsx Git-tracked bundled store directory
   backup.py                   Backup and restore
   report_export.py            Excel export
   ops_*_pages.py / _state.py  Pages and their state
@@ -750,7 +759,7 @@ assets/                       Logo, icons, favicon
 | Path | Responsibility |
 |---|---|
 | `ducklab/` | Application: app object, pages, states, services, repositories, KPI engine, DB layer |
-| `ducklab/data/` | Git-tracked bundled DSC/SPR reference workbook |
+| `ducklab/data/` | Git-tracked bundled DSC/SPR and store-directory reference workbooks |
 | `packaging/` | Launchers, Linux package config, Windows Inno/PyInstaller specs |
 | `scripts/` | Build, import, bootstrap, recovery, development and QA utilities |
 | `tests/` | Disposable-database unit, integration, migration, security and workflow tests |

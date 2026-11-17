@@ -78,6 +78,7 @@ function Get-RequiredPackageFiles {
         "python\python.exe",
         "python\pythonw.exe",
         "ducklab\data\DSCSPR_alias_2027.xlsx",
+        "ducklab\data\store_directory_2025_2026.xlsx",
         "packaging\opscore_desktop.py",
         "packaging\opscore_backend.py",
         "packaging\opscore_tray.py",

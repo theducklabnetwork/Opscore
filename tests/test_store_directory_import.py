@@ -341,14 +341,14 @@ class MigrationTests(unittest.TestCase):
         conn.execute("INSERT INTO monthly_configs (store_id, month, "
                      "sales_last_year_cents) VALUES (1, '2026-10', 12345)")
         conn.execute("PRAGMA user_version = 15")
-        conn.execute("DELETE FROM schema_migrations WHERE version = 16")
+        conn.execute("DELETE FROM schema_migrations WHERE version > 15")
         conn.commit()
         conn.close()
         store_ops_db.init_db(db)
         conn = sqlite3.connect(db)
         try:
             self.assertEqual(conn.execute(
-                "PRAGMA user_version").fetchone()[0], 16)
+                "PRAGMA user_version").fetchone()[0], 17)
             self.assertEqual(conn.execute(
                 "SELECT sales_last_year_cents FROM monthly_configs"
             ).fetchone()[0], 12345)
@@ -362,7 +362,7 @@ class MigrationTests(unittest.TestCase):
             conn.close()
         # Pre-migration backup was taken
         self.assertTrue(list((tmp / "backups").glob(
-            "pre-migration-v15-to-v16-*.db")))
+            "pre-migration-v15-to-v17-*.db")))
 
 
 if __name__ == "__main__":

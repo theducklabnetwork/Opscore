@@ -89,6 +89,7 @@ for source in "$ROOT/ducklab"/*.py; do
     cp "$source" "$APP/ducklab/"
 done
 cp "$ROOT/ducklab/data/DSCSPR_alias_2027.xlsx" "$APP/ducklab/data/"
+cp "$ROOT/ducklab/data/store_directory_2025_2026.xlsx" "$APP/ducklab/data/"
 for source in "$ROOT/assets"/*; do
     [[ -f $source ]] && cp "$source" "$APP/assets/"
 done

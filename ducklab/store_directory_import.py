@@ -193,11 +193,14 @@ def parse_workbook(cells) -> tuple[list[dict], list[dict], list[str]]:
     return stores, history, warnings
 
 
-def import_workbook(xlsx: Path, db_path: Path, *, sheet: str | None = None) -> dict:
+def import_workbook(xlsx: Path, db_path: Path, *, sheet: str | None = None,
+                    bundled: bool = False) -> dict:
     """Replace the store directory from the workbook, all-or-nothing.
 
     Returns counts and warnings. Existing stores, monthly configs and daily
-    records are never touched.
+    records are never touched. ``bundled`` records whether this is the
+    shipped workbook, so startup may refresh it later without ever replacing
+    a directory the user uploaded.
     """
     if not db_path.is_file():
         raise DirectoryImportError(f"Database not found: {db_path}")
@@ -213,6 +216,21 @@ def import_workbook(xlsx: Path, db_path: Path, *, sheet: str | None = None) -> d
                 raise DirectoryImportError(
                     f"Database schema is v{version}; start this release once "
                     "so it migrates to v16, then import")
+            columns = {row[1] for row in conn.execute(
+                "PRAGMA table_info(store_directory_info)")}
+            info_sql, info_params = (
+                ("INSERT INTO store_directory_info (id, imported_at, "
+                 "source_name, bundled) VALUES (1, datetime('now'), ?, ?) "
+                 "ON CONFLICT (id) DO UPDATE SET imported_at = "
+                 "datetime('now'), source_name = excluded.source_name, "
+                 "bundled = excluded.bundled",
+                 (Path(xlsx).name, int(bundled)))
+                if "bundled" in columns else
+                ("INSERT INTO store_directory_info (id, imported_at, "
+                 "source_name) VALUES (1, datetime('now'), ?) "
+                 "ON CONFLICT (id) DO UPDATE SET imported_at = "
+                 "datetime('now'), source_name = excluded.source_name",
+                 (Path(xlsx).name,)))
             with conn:
                 conn.execute("DELETE FROM store_directory_history")
                 conn.execute("DELETE FROM store_directory")
@@ -224,12 +242,7 @@ def import_workbook(xlsx: Path, db_path: Path, *, sheet: str | None = None) -> d
                     "INSERT INTO store_directory_history (code, month, "
                     "sales_cents) VALUES (:code, :month, :sales_cents)",
                     history)
-                conn.execute(
-                    "INSERT INTO store_directory_info (id, imported_at, "
-                    "source_name) VALUES (1, datetime('now'), ?) "
-                    "ON CONFLICT (id) DO UPDATE SET imported_at = "
-                    "datetime('now'), source_name = excluded.source_name",
-                    (Path(xlsx).name,))
+                conn.execute(info_sql, info_params)
         finally:
             conn.close()
     except sqlite3.DatabaseError as exc:
@@ -266,12 +279,18 @@ def directory_info(db_path: Path) -> dict:
         row = conn.execute(
             "SELECT imported_at, source_name FROM store_directory_info "
             "WHERE id = 1").fetchone()
+        columns = {r[1] for r in conn.execute(
+            "PRAGMA table_info(store_directory_info)")}
+        bundled = bool(conn.execute(
+            "SELECT bundled FROM store_directory_info WHERE id = 1"
+        ).fetchone()[0]) if row and "bundled" in columns else False
     finally:
         conn.close()
     return {"stores": stores, "history": history[0],
             "first_month": history[1], "last_month": history[2],
             "imported_at": row[0] if row else None,
-            "source_name": row[1] if row else None}
+            "source_name": row[1] if row else None,
+            "bundled": bundled}
 
 
 def lookup(db_path: Path, code: str = "", name: str = "") -> dict | None:

@@ -31,7 +31,7 @@ class ScheduleTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_schema_seeds_codes_but_no_staff(self):
-        self.assertEqual(store_ops_db.SCHEMA_VERSION, 16)
+        self.assertEqual(store_ops_db.SCHEMA_VERSION, 17)
         data = self.app.get_schedule(self.admin, self.store,
                                      date(2026, 10, 1), date(2026, 10, 31))
         self.assertEqual(data["staff"], [])

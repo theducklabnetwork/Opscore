@@ -184,31 +184,42 @@ class BundledArtifactTests(unittest.TestCase):
         build = (root / "scripts" / "build_deb.sh").read_text()
         self.assertIn('"$APP/ducklab/data"', build)
         self.assertIn('"$ROOT/ducklab/data/DSCSPR_alias_2027.xlsx"', build)
+        directory = root / "ducklab" / "data" / "store_directory_2025_2026.xlsx"
+        self.assertTrue(directory.is_file())
+        self.assertIn('"$ROOT/ducklab/data/store_directory_2025_2026.xlsx"', build)
 
     def test_workbook_is_unignored_and_tracked(self):
         root = Path(__file__).resolve().parent.parent
         if not (root / ".git").exists():
             self.skipTest("Git metadata is not shipped in release copies")
-        workbook = "ducklab/data/DSCSPR_alias_2027.xlsx"
-        check_ignore = subprocess.run(
-            ["git", "check-ignore", "--no-index", workbook], cwd=root,
-            capture_output=True, text=True, check=False)
-        self.assertEqual(check_ignore.returncode, 1, check_ignore.stderr)
-        tracked = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", workbook], cwd=root,
-            capture_output=True, text=True, check=False)
-        self.assertEqual(tracked.returncode, 0, tracked.stderr)
-        self.assertEqual(tracked.stdout.strip(), workbook)
+        for workbook in ("ducklab/data/DSCSPR_alias_2027.xlsx",
+                         "ducklab/data/store_directory_2025_2026.xlsx"):
+            with self.subTest(workbook=workbook):
+                check_ignore = subprocess.run(
+                    ["git", "check-ignore", "--no-index", workbook], cwd=root,
+                    capture_output=True, text=True, check=False)
+                self.assertEqual(check_ignore.returncode, 1, check_ignore.stderr)
+                tracked = subprocess.run(
+                    ["git", "ls-files", "--error-unmatch", workbook], cwd=root,
+                    capture_output=True, text=True, check=False)
+                self.assertEqual(tracked.returncode, 0, tracked.stderr)
+                self.assertEqual(tracked.stdout.strip(), workbook)
 
     def test_windows_builds_include_workbook(self):
         root = Path(__file__).resolve().parent.parent
         spec = (root / "packaging" / "windows" / "opscore.spec").read_text()
         self.assertIn('ROOT / "ducklab" / "data" / "DSCSPR_alias_2027.xlsx"',
                       spec)
+        self.assertIn(
+            'ROOT / "ducklab" / "data" / "store_directory_2025_2026.xlsx"',
+            spec)
         self.assertIn('"ducklab/data"', spec)
         build = (root / "scripts" / "build_windows.ps1").read_text()
         self.assertIn('Join-Path $Root "ducklab\\data\\DSCSPR_alias_2027.xlsx"',
                       build)
+        self.assertIn(
+            'Join-Path $Root "ducklab\\data\\store_directory_2025_2026.xlsx"',
+            build)
         self.assertIn('Join-Path $App "ducklab\\data"', build)
 
 

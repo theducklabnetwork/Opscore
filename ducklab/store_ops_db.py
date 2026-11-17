@@ -19,7 +19,7 @@ from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "store_ops.db"
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 SQLITE_BUSY_TIMEOUT_MS = 10_000
 
@@ -353,6 +353,7 @@ def init_db(db_path: Path | str = DB_PATH, *,
             (14, _apply_v14),
             (15, _apply_v15),
             (16, _apply_v16),
+            (17, _apply_v17),
         )
         for version, apply_migration in migrations:
             if current >= version:
@@ -861,3 +862,18 @@ def _apply_v16(conn: sqlite3.Connection) -> None:
         "source_name TEXT)")
     conn.execute(
         "INSERT OR IGNORE INTO schema_migrations (version) VALUES (16)")
+
+
+def _apply_v17(conn: sqlite3.Connection) -> None:
+    """Store-directory provenance: ``bundled`` records whether the loaded
+    directory came from the shipped workbook, so the startup bootstrap can
+    refresh a stale bundled copy without ever replacing a user upload.
+    Mirrors reference_data_info.bundled from v10."""
+    columns = {row[1] for row in conn.execute(
+        "PRAGMA table_info(store_directory_info)")}
+    if columns and "bundled" not in columns:
+        conn.execute(
+            "ALTER TABLE store_directory_info ADD COLUMN bundled "
+            "INTEGER NOT NULL DEFAULT 0 CHECK (bundled IN (0, 1))")
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_migrations (version) VALUES (17)")

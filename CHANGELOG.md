@@ -7,10 +7,16 @@ tags and published releases; see the provenance note at the end.
 
 ## v1.3 — in development
 
-Schema version: **16**.
+Schema version: **17**.
 
 ### Added
 
+- **Bundled store directory.** The monthly-sales workbook is now bundled into
+  the desktop builds and seeded automatically on startup: an empty directory
+  is imported on first launch, a stale bundled copy is refreshed on upgrade,
+  and a directory you uploaded yourself is never replaced. No manual import
+  step is needed to get Sales History, New Store auto-fill or the Monthly
+  Setup history button.
 - **Store directory import.** A monthly-sales workbook (one row per store, one
   column per month) can be imported from Settings → Reference Data, or with
   `scripts/import_store_directory.py`. It fills a store directory without

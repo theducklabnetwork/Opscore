@@ -25,6 +25,7 @@ REQUIRED_PACKAGE_FILES = (
     r"python\python.exe",
     r"python\pythonw.exe",
     r"ducklab\data\DSCSPR_alias_2027.xlsx",
+    r"ducklab\data\store_directory_2025_2026.xlsx",
     r"packaging\opscore_desktop.py",
     r"packaging\opscore_backend.py",
     r"packaging\opscore_tray.py",

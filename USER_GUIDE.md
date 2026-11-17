@@ -85,7 +85,13 @@ question appears on the first launch after installing or upgrading.
    bundle but no longer matches the bundled workbook (your own uploads are
    never replaced). Go to **Settings → Reference Data** to review it or
    upload a replacement. This gives each day its target.
-5. **Add your stores.** Go to **Store Management** (see section 4).
+5. **Store directory.** Opscore also loads the bundled monthly-sales workbook
+   automatically when the store directory is empty, and refreshes it on
+   upgrade when the stored copy still came from the bundle (your own uploads
+   are never replaced). This gives you the Sales History chart, New Store
+   auto-fill and the Monthly Setup history button without any import step.
+   See section 9 to review or replace it.
+6. **Add your stores.** Go to **Store Management** (see section 4).
 
 ## 3. Getting around
 
@@ -498,16 +504,18 @@ replaces the previous key immediately.
   you upload yourself is never overwritten by the bundled data; a copy that
   came from the bundle is refreshed automatically when the bundled workbook
   changes on upgrade.
-- **Store Directory (Monthly Sales)**: upload a monthly-sales workbook — one
-  row per store, one column per month. It replaces the store directory used
-  to pre-fill New Store details, to fill Sales Last Month / Last Year in
-  Monthly Setup, and to draw the **Sales History** chart on Sales
-  Performance. It **never creates stores or daily records**: your store list
-  and every operational record stay exactly as they are. Concept and BD
-  Target are not imported (Concept belongs to Opscore's own list, and BD
-  Target is typed by hand in Monthly Setup). Months the workbook left blank
-  or zero stay blank. The import is all-or-nothing and can be re-run to
-  replace the directory.
+- **Store Directory (Monthly Sales)**: Opscore loads the bundled monthly-sales
+  workbook automatically on first launch, so the Sales History chart, New Store
+  auto-fill and the Monthly Setup history button work straight away. You can
+  upload a monthly-sales workbook here — one row per store, one column per
+  month — to replace the store directory. It **never creates stores or daily
+  records**: your store list and every operational record stay exactly as they
+  are. Concept and BD Target are not imported (Concept belongs to Opscore's own
+  list, and BD Target is typed by hand in Monthly Setup). Months the workbook
+  left blank or zero stay blank. The import is all-or-nothing and can be
+  re-run to replace the directory. A workbook you upload yourself is never
+  overwritten by the bundled data; a copy that came from the bundle is
+  refreshed automatically when the bundled workbook changes on upgrade.
 
 ### Backup and restore (Super Admin)
 
